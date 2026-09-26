@@ -46,6 +46,45 @@ Mind Monitor, and any other copy of these scripts before connecting.
 
 ---
 
+## Start here: the station
+
+```powershell
+python muse_station.py              # a window that holds the connection open
+python muse_station.py --synthetic  # same, fake data, no headband
+```
+
+Every script below opens its own Bluetooth session and hands it back when it
+exits. That is fine once and tiresome all day: you reconnect before each thing
+you do, BLE needs ~5 s between a release and the next connect, and an unheld
+Muse powers itself off after a few minutes.
+
+The station connects **once** and holds it. Leave the window open, seat the band
+using the live fit bars, and press **Calibrate** and **Listen** as often as you
+like — all on the same connection. Nothing disconnects until you press
+**Disconnect**. If the link drops by itself (you walked out of range, the band
+slipped) it reconnects on its own, because a drop is not you asking to stop.
+
+| Control | What it does |
+|---|---|
+| **Connect** / **Disconnect** | The only two things that change whether the headband is held. Board choice and device name are frozen while connected. |
+| **Electrode fit** | Per-channel spread in µV, refreshed twice a second, with the same `FLAT?` / `NOISY?` verdicts `check_connection.py` gives. Watch these while seating the band. |
+| **Calibrate** | The guided rest / clench / blink calibration, with **Ready** buttons instead of pressing Enter. Saves to the selected profile. |
+| **Listen** | The live detector: meters, and CLENCH / LONG_CLENCH / BLINK / DOUBLE_BLINK as they fire. |
+| **Stop** | Ends whatever is running. Keeps the connection. |
+
+Because only one program may hold a Muse, **the scripts below cannot run while
+the station is connected.** Press Disconnect first, or just do the thing in the
+station. The station is not a replacement for them yet — recording, band powers,
+the plots and the games are still terminal scripts.
+
+Self-test, no headband needed:
+
+```powershell
+python test_station.py    # ~90 s, drives the window end to end on synthetic data
+```
+
+---
+
 ## Run order
 
 ```powershell
@@ -93,6 +132,12 @@ Script-specific: `--seconds`, `--label` (record), `--window`, `--interval`
 ---
 
 ## What each script does
+
+**`muse_station.py`** — the window described above. Owns one `BoardShim` and runs
+calibration and detection on it in a worker thread, so a session survives across
+many activities. Three threads, one rule: only the Tk thread touches a widget;
+the link and work threads post messages onto a queue. `test_station.py` drives it
+end to end on the synthetic board.
 
 **`config.py`** — shared setup. `get_board(args)` returns a `BoardShim` for either
 the Muse or the synthetic board; `available_presets()`, `enable_ppg()` and
