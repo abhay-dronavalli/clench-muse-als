@@ -305,7 +305,27 @@ def calibrate(board, rows, fs, window_samples, args):
     emg_trials, blink_trials = [], []
     separation = None
 
-    if not args.no_clench_cal:
+    # --blink-only: keep the clench numbers from the saved profile and redo just
+    # the blink phase. Only valid while the band has not moved since that run --
+    # the clench thresholds were measured against that exact electrode placement.
+    reuse = None
+    if getattr(args, "blink_only", False):
+        reuse = load_calibration(board, getattr(args, "profile", "default"))
+        if not reuse or reuse.get("emg_peak") is None:
+            print("")
+            print("   !! --blink-only needs an existing profile with clench data.")
+            print("      Run a full calibration first.")
+            return None
+        emg_rest = reuse["emg_rest"]
+        emg_sigma = reuse["emg_sigma"]
+        emg_peak = reuse["emg_peak"]
+        emg_threshold = reuse["emg_threshold"]
+        emg_trials = reuse.get("emg_trials", [])
+        print("")
+        print(f"2) CLENCH: skipped, reusing {reuse['saved_at']} "
+              f"(peak {emg_peak:.0f} uV, fires at {emg_threshold:.1f} uV)")
+
+    if not args.no_clench_cal and reuse is None:
         # ---------------- clench ----------------
         print("")
         print("2) CLENCH: clench your jaw HARD for the whole 2 seconds, three times.")
@@ -328,6 +348,8 @@ def calibrate(board, rows, fs, window_samples, args):
                 print("      Redo this: clench HARD the instant the countdown starts,")
                 print("      and hold it for the whole 2 seconds. Check the ear-tips too.")
 
+
+    if not args.no_clench_cal:
         # ---------------- blink ----------------
         print("")
         print("3) BLINK: blink hard and deliberately, once a second, for 6 seconds.")
@@ -609,6 +631,10 @@ def main():
                         help="reuse calibration.json instead of recalibrating")
     parser.add_argument("--no-clench-cal", action="store_true",
                         help="skip the active clench/blink phase, use rest + k*sigma only")
+    parser.add_argument("--blink-only", action="store_true",
+                        help="redo only the rest + blink phases, keeping the clench "
+                             "numbers from the saved profile. Only valid if the band "
+                             "has not moved since that calibration.")
     parser.add_argument("--baseline-seconds", type=float, default=10.0,
                         help="length of the resting measurement (default 10)")
     parser.add_argument("--k", type=float, default=6.0,
@@ -637,14 +663,21 @@ def main():
         board.start_stream()
         time.sleep(WINDOW_SECONDS + 0.3)  # let the window fill before we measure
 
-        if args.load and CALIBRATION_FILE.exists():
-            calibration = json.loads(CALIBRATION_FILE.read_text())
-            print(f"\nLoaded calibration from {calibration['saved_at']}.")
+        # --blink-only always recalibrates; it reuses the clench numbers inside
+        # calibrate() rather than loading the whole profile.
+        calibration = (load_calibration(board, args.profile)
+                       if args.load and not args.blink_only else None)
+        if calibration:
+            print("")
+            print(f"Loaded calibration from {calibration['saved_at']}.")
             print("  (Re-run without --load if you took the band off since then.)")
         else:
-            if args.load:
-                print("\nNo calibration.json yet -- calibrating now.")
+            if args.load and not args.blink_only:
+                print("")
+                print("No usable saved calibration -- calibrating now.")
             calibration = calibrate(board, rows, fs, window_samples, args)
+        if calibration is None:
+            return 1
 
         describe(calibration)
         detect_loop(board, rows, fs, window_samples, calibration, args)
