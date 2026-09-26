@@ -35,7 +35,9 @@ and texting services reach the internet.
 - `tests/`: pytest tests for `core/` and `sensor/`.
 
 Key files so far: `core/main.py` (FastAPI app, WebSocket routes), `core/session.py` (state machine,
-owns the highlight, help countdown), `core/pointer/` (Pointer interface, ScanPointer), `core/menu.py`
+owns the highlight, SCREEN `seq`, clench look-back, help countdown), `core/pointer/` (Pointer interface;
+`scan.py`, `webcam.py` follows POINT, `auto.py` webcam while a face is seen, scan after 3 s without,
+`headtilt.py` scans until the sensor chunk), `core/menu.py`
 (loads `data/menu.yaml` + `data/contacts.yaml`), `core/profile.py` (`data/profile.yaml`),
 `core/actions/` (action registry: speak, send_message via Telegram, place_call via Twilio Voice,
 room_control mock), `core/suggest/` (AI layer: `provider.py` LLMProvider protocol and validated
@@ -48,8 +50,13 @@ optional TypeSafe Jev prior), `core/metrics.py` (clenches and scan steps per mes
 circuit breaker, prewarm, browser-speech fallback), `core/db.py` (SQLite events, phrases, audio_cache), `core/config.py` (.env loading),
 `core/hub.py` (broadcast to boards/consoles), `core/clock.py` (injectable timers for tests),
 `web/src/board/` (patient board, audio player and browser speech in `speech.ts`, toasts, help countdown,
-suggestion / "Other..." / loading tiles in `views.tsx`), `web/src/dev/DevPanel.tsx`
-(keyboard stand-in, shows the settings the Core reports, Day 1 toggle, METRICS line),
+suggestion / "Other..." / loading tiles in `views.tsx`), `web/src/facetrack/` (webcam pointing:
+`tracker.ts` camera + MediaPipe Face Landmarker, `pose.ts` head angles to a screen point, `tiles.ts`
+sticky tile choice, `calibrate.ts` + `CalibrationOverlay.tsx` head range, `useHeadPointing.ts` sends
+POINT / FACE_OK, `indicators.tsx` camera light, cursor dot, Scanning badge; `*.test.ts` vitest),
+`web/scripts/mediapipe-assets.mjs` (puts the MediaPipe wasm and model in `web/public/mediapipe/`),
+`web/src/dev/DevPanel.tsx` (keyboard stand-in, shows the settings the Core reports, pointing mode,
+camera preview in `CameraPreview.tsx`, Day 1 toggle, METRICS line),
 `web/src/lib/useSocket.ts` (auto-reconnect), `scripts/seed_demo.py` + `data/seed_demo_week.json`
 (the simulated demo week).
 
@@ -91,11 +98,13 @@ All commands are PowerShell, from the repo root. Python uses [uv](https://docs.a
 # One-time setup
 uv sync                              # creates .venv with Python deps (incl. dev: pytest)
 Copy-Item .env.example .env          # then fill in keys; .env is git-ignored (runs fine left empty)
-npm --prefix web install
+npm --prefix web ci                  # also copies the MediaPipe wasm and downloads the face model (~4 MB)
+                                     # (npm 10.9's `npm --prefix web install` fails with ENOENT; ci or cd web works)
 
 # Tests and checks
 uv run pytest                        # Python tests
 uv run python -c "import core.contracts"
+npm --prefix web test                # vitest: the web's pure functions (head pose, sticky tiles, calibration)
 npm --prefix web run build           # type-check + production build of the web app
 npm --prefix web run lint
 
@@ -103,7 +112,7 @@ npm --prefix web run lint
 uv run uvicorn core.main:app --reload --port 8000
 
 # Terminal 2: web app, board at http://localhost:5173/ and console at http://localhost:5173/console
-# (/ws/* is proxied to the core on 127.0.0.1:8000)
+# (/ws/*, /api/* and /audio/* are proxied to the core on 127.0.0.1:8000)
 npm --prefix web run dev
 
 # Sensor service: not built yet (planned: uv run python -m sensor.main)
@@ -242,8 +251,10 @@ uv run python scripts/seed_demo.py --load              # 7 days of habits ending
 uv run python scripts/seed_demo.py --reset --load --yes --focus-hour 15   # for a demo at 15:xx
 ```
 
-`--load` prints what it wrote and the top 3 Suggested phrases at the focus hour. The running core
-uses the new history from its next screen (no restart). The seed is in Spanish, like Luis's board.
+`--load` prints what it wrote and, per language, the top 3 Suggested phrases at the focus hour. The
+running core uses the new history from its next screen (no restart). Every simulated use is written in
+both Spanish and English (`--lang es` or `--lang en` for one), so either board shows the learned
+sentences; the ranking scales each score part across the candidates, so the order is the same.
 Demo: toggle Day 1 mode on, text María (People › María › Mensaje › fixed phrase › confirm: 5
 clenches with a Gemini key), toggle it off, then Sugerencias › confirm: 2 clenches.
 
@@ -259,6 +270,65 @@ Restart the core: it logs `ranking: learning on, Jev via TypeSafe API` and `/hea
 and `jev`. Jev never blocks the scan: its answer (1.5 s timeout, 10 min cache) re-ranks the screen
 quietly only if the person has not moved yet; after a bad key or 3 failures it is off for 5 minutes.
 
+### Webcam pointing (Auto, Webcam, Head tilt)
+
+Pointing mode (PRD D2) is a setting, switchable live from the dev panel (Auto / Scan / Webcam / Head
+tilt) or SETTINGS: the clench always picks; only where the highlight comes from changes.
+
+- Scan: the highlight moves by itself (scan speed). No camera.
+- Webcam: turn the head slightly toward a tile; the highlight follows. No timer.
+- Auto (the default): scans at first, switches to the head once the webcam sees a face and the head
+  points at a tile, and back to scanning after 3 s without a face. While Auto is scanning the board
+  shows a blue "Scanning" / "Escaneando" badge (top right).
+- Head tilt: not built yet (it needs the headband's motion data from the sensor chunk). It scans, the
+  core logs `pointing mode headtilt is not built yet ...` and the badge says so.
+
+How it works: the board runs MediaPipe Face Landmarker in the browser (GPU, CPU if the GPU fails,
+about 25 frames a second), smooths the head's yaw and pitch, maps them to a point on the screen with
+the calibrated head range, and highlights the tile under that point (or the nearest one). A new tile
+is taken only once the point is 15% inside it, so borders do not flicker. The board sends POINT (tile
+and the SCREEN `seq` it belongs to) only when the tile changes, and FACE_OK when the face is seen or
+lost for 300 ms; the core ignores a POINT for an older screen. Clenching can nudge the head, so in
+webcam mode a clench picks the tile that was highlighted 250 ms before it (`clench_lookback_ms` in
+`data/profile.yaml`, 0 turns it off). `/health` shows `pointing_mode`, `pointer` and `face_ok`.
+
+Privacy (PRD section 11): video never leaves the browser and is never saved; only POINT and FACE_OK
+are sent. The camera is on only in Auto or Webcam mode, and a red "Camera on" / "Cámara encendida"
+light shows on the board whenever it is. Switching to Scan or Head tilt turns it off at once.
+
+Offline: the model (`face_landmarker.task`, 3.8 MB) and the wasm are served from `web/public/mediapipe/`
+(git-ignored), never a CDN. `npm --prefix web ci` puts them there, and `npm run dev` / `build`
+check again (instant when present). Without internet at install time, run
+`npm --prefix web run assets` later; until then the board says face tracking could not start and
+Auto scans.
+
+Head-range calibration (do it once per person and seat; before it the board uses defaults for a
+laptop camera above the screen): open the dev panel, click "Calibrate head range" (needs Auto or
+Webcam with the camera on). A big dot appears at the center, then the left, right, top and bottom
+edges, 1.5 s each: the person turns the head comfortably toward it. The board saves the range to the
+core (`PUT /api/head-range`, the database profile's `head_range_json`), so it survives reloads and
+restarts; the dev panel then says "calibrated". If a step did not see the face or the person barely
+turned, the overlay says so and nothing is saved. Esc cancels.
+
+Dev panel extras: the pointing mode selector, a small mirrored camera preview with the live yaw and
+pitch (and "face" / "no face", GPU or CPU), "Calibrate head range", and a Cursor dot toggle (a
+subtle dot where the head points, remembered in this browser).
+
+Camera troubleshooting (Windows):
+
+- "Camera blocked": Chrome / Edge asked and it was refused. Click the camera icon at the right of
+  the address bar (or the lock icon > Site settings) and Allow, then reload. If it is still blocked,
+  Windows Settings > Privacy & security > Camera: turn on "Camera access", "Let apps access your
+  camera" and "Let desktop apps access your camera".
+- "The camera is in use by another app": Windows gives the camera to one app at a time. Close Teams,
+  Zoom, OBS or the Camera app (and other browser tabs using it), then click "retry" in the dev panel.
+- "No camera found": plug in a webcam, check the laptop's camera privacy switch or F-key, and look
+  for it under Device Manager > Cameras.
+- The highlight moves the wrong way or will not reach the edges: calibrate. The dev panel's yaw
+  and pitch numbers show whether the camera sees the head move.
+- Use http://localhost:5173 (not the laptop's IP address): browsers only allow the camera on
+  localhost or https.
+
 ### Keyboard stand-in (dev panel on the board page)
 
 | Key | Event |
@@ -268,10 +338,12 @@ quietly only if the person has not moved yet; after a bad key or 3 failures it i
 | B | DOUBLE_BLINK: go back one level / cancel the confirm screen / cancel the help countdown |
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
-The expanded panel also has buttons for the same events, a scan speed slider, an EN/ES toggle, a
-Speak picks on/off toggle, a Day 1 mode on/off toggle (all showing the values the Core reports in
-SETTINGS), a line showing where the last thing said came from ("ElevenLabs (cached)", "ElevenLabs" or
-"Browser") and the last METRICS ("Took 2 clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
+The expanded panel also has buttons for the same events, the pointing mode selector (Auto / Scan /
+Webcam / Head tilt) with the camera preview, "Calibrate head range" and the Cursor dot toggle (see
+"Webcam pointing"), a scan speed slider, an EN/ES toggle, a Speak picks on/off toggle, a Day 1 mode
+on/off toggle (all showing the values the Core reports in SETTINGS), a line showing where the last
+thing said came from ("ElevenLabs (cached)", "ElevenLabs" or "Browser") and the last METRICS ("Took 2
+clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
 
 ### Milestone manual test (press Space, pick, confirm, hear it)
 
@@ -279,7 +351,9 @@ SETTINGS), a line showing where the last thing said came from ("ElevenLabs (cach
    order. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
    green, and the home board shows six Spanish tiles (Sugerencias, Necesito, Personas, Cómo me
-   siento, Cuarto and the dashed "Otro...") with the highlight moving about once a second.
+   siento, Cuarto and the dashed "Otro...") with the highlight moving about once a second. The
+   browser asks for the camera (Auto mode): for steps 3 to 10 press backtick and click Scan, so the
+   highlight keeps scanning whoever sits in front of the laptop.
 3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
 4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. Each tile's
    label is said softly as you pick it ("I need", "Pain", ...). The breadcrumb reads Home › I need ›
@@ -307,6 +381,14 @@ SETTINGS), a line showing where the last thing said came from ("ElevenLabs (cach
     screen shows "Mija, estoy bien, llámame a las seis." at once; confirm: "Took 2 clenches, 0 s
     waiting (Day 1: 5 clenches, 6 s)". Pick Suggested again and press B on the confirm screen: the
     full Suggested list opens, the María text first.
+11. Webcam: in the dev panel click Auto and allow the camera. The red "Cámara encendida" light shows,
+    the preview shows your face with yaw and pitch, and the blue "Escaneando" badge shows until the
+    camera sees you; then the badge goes away and the highlight follows your head. Click "Calibrate
+    head range" and follow the dot (center, left, right, top, bottom); the panel then says
+    "calibrated". Turn toward a tile and press Space: that tile is picked. Cover the camera for 3 s:
+    the badge comes back and the highlight scans; uncover it and turn your head: it follows again.
+    Click Head tilt: scanning with "Inclinar la cabeza aún no está listo" and the camera light off.
+    Click Scan: no camera, no badge.
 
 ## CHUNK REPORT format
 
