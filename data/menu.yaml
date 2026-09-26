@@ -1,0 +1,358 @@
+# Clench menu tree (PRD section 8), English and Spanish.
+#
+# Every node has: id (lowercase, unique among its siblings), label_en, label_es.
+# A node is either
+#   - a branch: `children` (1 to 6 nodes, PRD D8), or `from_contacts: true` (children are built
+#     from data/contacts.yaml: one branch per contact with Call / Text / Say out loud), or
+#   - a leaf: phrase_en, phrase_es and action (speak | send_text | place_call | room_control).
+# Nothing is spoken or sent until the person confirms the phrase (PRD D5).
+# The AI reorders each level in a later chunk; the tree itself stays hand-written (PRD D6).
+
+home:
+  - id: suggested
+    label_en: Suggested
+    label_es: Sugerencias
+    # Fixed for now; becomes the AI's top guesses for right now in chunk 5.
+    children:
+      - id: hungry
+        label_en: I'm hungry
+        label_es: Tengo hambre
+        phrase_en: "I'm hungry. What's for lunch?"
+        phrase_es: "Tengo hambre. ¿Qué hay de almuerzo?"
+        action: speak
+      - id: water
+        label_en: Water, please
+        label_es: Agua, por favor
+        phrase_en: "I'd like some water, please."
+        phrase_es: "Quiero agua, por favor."
+        action: speak
+      - id: turn_over
+        label_en: Turn me over
+        label_es: Voltéame
+        phrase_en: "Can you help me turn over?"
+        phrase_es: "¿Me ayudas a voltearme?"
+        action: speak
+
+  - id: need
+    label_en: I need
+    label_es: Necesito
+    children:
+      - id: water
+        label_en: Water
+        label_es: Agua
+        phrase_en: "I'd like some water, please."
+        phrase_es: "Quiero agua, por favor."
+        action: speak
+      - id: food
+        label_en: Food
+        label_es: Comida
+        phrase_en: "I'm hungry. Can I have something to eat?"
+        phrase_es: "Tengo hambre. ¿Me das algo de comer?"
+        action: speak
+      - id: bathroom
+        label_en: Bathroom
+        label_es: Baño
+        phrase_en: "I need to use the bathroom."
+        phrase_es: "Necesito ir al baño."
+        action: speak
+      - id: pain
+        label_en: Pain
+        label_es: Dolor
+        children:
+          - id: head
+            label_en: Head
+            label_es: Cabeza
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My head hurts a little."
+                phrase_es: "Me duele un poco la cabeza."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My head hurts a lot. I need medicine."
+                phrase_es: "Me duele mucho la cabeza. Necesito medicina."
+                action: speak
+          - id: back
+            label_en: Back
+            label_es: Espalda
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My back hurts a little."
+                phrase_es: "Me duele un poco la espalda."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My back hurts a lot. Can you help me turn over?"
+                phrase_es: "Me duele mucho la espalda. ¿Me ayudas a voltearme?"
+                action: speak
+          - id: stomach
+            label_en: Stomach
+            label_es: Estómago
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My stomach hurts a little."
+                phrase_es: "Me duele un poco el estómago."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My stomach hurts a lot. Please check on me."
+                phrase_es: "Me duele mucho el estómago. Por favor, revísame."
+                action: speak
+          - id: chest
+            label_en: Chest
+            label_es: Pecho
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My chest hurts a little."
+                phrase_es: "Me duele un poco el pecho."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My chest hurts a lot. Please get help now."
+                phrase_es: "Me duele mucho el pecho. Por favor, busca ayuda ya."
+                action: speak
+          - id: legs
+            label_en: Legs
+            label_es: Piernas
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My legs hurt a little."
+                phrase_es: "Me duelen un poco las piernas."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My legs hurt a lot. Can you move them for me?"
+                phrase_es: "Me duelen mucho las piernas. ¿Me las puedes mover?"
+                action: speak
+          - id: arms
+            label_en: Arms
+            label_es: Brazos
+            children:
+              - id: a_little
+                label_en: A little
+                label_es: Un poco
+                phrase_en: "My arms hurt a little."
+                phrase_es: "Me duelen un poco los brazos."
+                action: speak
+              - id: a_lot
+                label_en: A lot
+                label_es: Mucho
+                phrase_en: "My arms hurt a lot. Can you move them for me?"
+                phrase_es: "Me duelen mucho los brazos. ¿Me los puedes mover?"
+                action: speak
+      - id: move
+        label_en: Move me
+        label_es: Muéveme
+        children:
+          - id: turn_over
+            label_en: Turn me over
+            label_es: Voltéame
+            phrase_en: "Please turn me over."
+            phrase_es: "Por favor, voltéame."
+            action: speak
+          - id: sit_up
+            label_en: Sit me up
+            label_es: Siéntame
+            phrase_en: "Please sit me up."
+            phrase_es: "Por favor, siéntame."
+            action: speak
+          - id: lie_down
+            label_en: Lie me down
+            label_es: Acuéstame
+            phrase_en: "Please help me lie down."
+            phrase_es: "Por favor, ayúdame a acostarme."
+            action: speak
+          - id: pillow
+            label_en: Fix my pillow
+            label_es: La almohada
+            phrase_en: "Please fix my pillow."
+            phrase_es: "Por favor, arréglame la almohada."
+            action: speak
+      - id: temperature
+        label_en: Too hot or cold
+        label_es: Calor o frío
+        children:
+          - id: too_hot
+            label_en: Too hot
+            label_es: Mucho calor
+            phrase_en: "I'm too hot. Can you cool the room?"
+            phrase_es: "Tengo mucho calor. ¿Puedes refrescar el cuarto?"
+            action: speak
+          - id: too_cold
+            label_en: Too cold
+            label_es: Mucho frío
+            phrase_en: "I'm cold. Can I have a blanket?"
+            phrase_es: "Tengo frío. ¿Me das una cobija?"
+            action: speak
+
+  - id: people
+    label_en: People
+    label_es: Personas
+    from_contacts: true
+
+  - id: feel
+    label_en: How I feel
+    label_es: Cómo me siento
+    children:
+      - id: good
+        label_en: Good
+        label_es: Bien
+        phrase_en: "I feel good today."
+        phrase_es: "Me siento bien hoy."
+        action: speak
+      - id: tired
+        label_en: Tired
+        label_es: Cansancio
+        phrase_en: "I'm tired. I'd like to rest."
+        phrase_es: "Tengo sueño. Quiero descansar."
+        action: speak
+      - id: sad
+        label_en: Sad
+        label_es: Triste
+        phrase_en: "I feel sad."
+        phrase_es: "Me siento triste."
+        action: speak
+      - id: scared
+        label_en: Scared
+        label_es: Miedo
+        phrase_en: "I'm scared. Please stay with me."
+        phrase_es: "Tengo miedo. Quédate conmigo, por favor."
+        action: speak
+      - id: frustrated
+        label_en: Frustrated
+        label_es: Frustración
+        phrase_en: "I'm frustrated. Give me a minute."
+        phrase_es: "Esto me frustra. Dame un minuto."
+        action: speak
+      - id: happy
+        label_en: Happy
+        label_es: Feliz
+        phrase_en: "I'm happy. Thank you."
+        phrase_es: "Me siento feliz. Gracias."
+        action: speak
+
+  - id: say
+    label_en: Say something
+    label_es: Decir algo
+    # AI phrases from context and "Spell it" come in later chunks.
+    children:
+      - id: thank_you
+        label_en: Thank you, I love you
+        label_es: Gracias, te quiero
+        phrase_en: "Thank you for today. I love you."
+        phrase_es: "Gracias por todo hoy. Te quiero."
+        action: speak
+      - id: "yes"
+        label_en: "Yes"
+        label_es: Sí
+        phrase_en: "Yes."
+        phrase_es: "Sí."
+        action: speak
+      - id: "no"
+        label_en: "No"
+        label_es: "No"
+        phrase_en: "No."
+        phrase_es: "No."
+        action: speak
+      - id: good_morning
+        label_en: Good morning
+        label_es: Buenos días
+        phrase_en: "Good morning!"
+        phrase_es: "¡Buenos días!"
+        action: speak
+      - id: wait
+        label_en: Wait a moment
+        label_es: Un momento
+        phrase_en: "Please wait a moment."
+        phrase_es: "Espera un momento, por favor."
+        action: speak
+      - id: how_are_you
+        label_en: How are you?
+        label_es: ¿Cómo estás?
+        phrase_en: "How are you?"
+        phrase_es: "¿Cómo estás?"
+        action: speak
+
+  - id: room
+    label_en: Room
+    label_es: Cuarto
+    children:
+      - id: tv
+        label_en: TV
+        label_es: Televisión
+        children:
+          - id: "on"
+            label_en: "On"
+            label_es: Prender
+            phrase_en: "Please turn on the TV."
+            phrase_es: "Por favor, prende la televisión."
+            action: room_control
+          - id: "off"
+            label_en: "Off"
+            label_es: Apagar
+            phrase_en: "Please turn off the TV."
+            phrase_es: "Por favor, apaga la televisión."
+            action: room_control
+      - id: lights
+        label_en: Lights
+        label_es: Luces
+        children:
+          - id: "on"
+            label_en: "On"
+            label_es: Prender
+            phrase_en: "Please turn on the lights."
+            phrase_es: "Por favor, prende la luz."
+            action: room_control
+          - id: "off"
+            label_en: "Off"
+            label_es: Apagar
+            phrase_en: "Please turn off the lights."
+            phrase_es: "Por favor, apaga la luz."
+            action: room_control
+      - id: music
+        label_en: Music
+        label_es: Música
+        children:
+          - id: play
+            label_en: Play
+            label_es: Poner
+            phrase_en: "Please play some music."
+            phrase_es: "Por favor, pon música."
+            action: room_control
+          - id: stop
+            label_en: Stop
+            label_es: Quitar
+            phrase_en: "Please stop the music."
+            phrase_es: "Por favor, quita la música."
+            action: room_control
+      - id: blinds
+        label_en: Blinds
+        label_es: Persianas
+        children:
+          - id: open
+            label_en: Open
+            label_es: Abrir
+            phrase_en: "Please open the blinds."
+            phrase_es: "Por favor, abre las persianas."
+            action: room_control
+          - id: close
+            label_en: Close
+            label_es: Cerrar
+            phrase_en: "Please close the blinds."
+            phrase_es: "Por favor, cierra las persianas."
+            action: room_control

@@ -1,0 +1,54 @@
+# Contacts for the "People" menu (PRD sections 5 and 8). Each becomes a branch with
+# Call / Text / Say out loud. Phrases are what is spoken (and, for text, sent) after confirming.
+#
+# Phone numbers are NOT stored here (no personal data in git). Real numbers are wired up with the
+# Twilio actions in chunk 4.
+
+contacts:
+  - id: maria
+    label_en: Maria
+    label_es: María
+    relation: daughter
+    language: es
+    phrases:
+      call:
+        en: "I'm calling Maria."
+        es: "Estoy llamando a María."
+      text:
+        en: "Honey, I'm okay, call me at six."
+        es: "Mija, estoy bien, llámame a las seis."
+      say:
+        en: "Honey, can you come here for a moment, please?"
+        es: "Mija, ¿puedes venir un momento, por favor?"
+
+  - id: carlos
+    label_en: Carlos
+    label_es: Carlos
+    relation: son
+    language: es
+    phrases:
+      call:
+        en: "I'm calling Carlos."
+        es: "Estoy llamando a Carlos."
+      text:
+        en: "Carlos, I'm fine. Come visit me when you can."
+        es: "Carlos, estoy bien. Ven a verme cuando puedas."
+      say:
+        en: "Carlos, come here, please."
+        es: "Carlos, ven acá, por favor."
+
+  - id: nurse
+    label_en: Nurse
+    label_es: Enfermera
+    relation: nurse
+    language: en
+    phrases:
+      call:
+        en: "I'm calling the nurse."
+        es: "Estoy llamando a la enfermera."
+      text:
+        en: "Please come when you can. I need help."
+        es: "Por favor, venga cuando pueda. Necesito ayuda."
+      say:
+        en: "Nurse, I need help, please."
+        es: "Enfermera, necesito ayuda, por favor."
