@@ -67,6 +67,7 @@ from core.contracts import (
     Lang,
     LongClench,
     Message,
+    Metrics,
     Point,
     PointingMode,
     Screen,
@@ -78,6 +79,7 @@ from core.contracts import (
 from core.contracts import ActionResult as ActionResultMsg
 from core.db import Db
 from core.menu import MAX_ITEMS, Menu, MenuNode
+from core.metrics import Tracker, day1_cost
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
 from core.profile import Profile
 from core.rank import Entry, Ranker
@@ -283,6 +285,7 @@ class Session:
         # The Suggested tile when CONFIRMING came from the one-clench shortcut: a double blink then
         # opens the Suggested list instead of going home.
         self._shortcut_from: Item | None = None
+        self._effort = Tracker()  # clenches and scan steps since home (METRICS)
         self._loading_timer: TimerHandle | None = None
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms)
 
@@ -374,6 +377,7 @@ class Session:
             return
         self._last_clench = now
         if self.state is SessionState.SCANNING:
+            self._effort.select()
             self._pick()
         elif self.state is SessionState.CONFIRMING:
             self._confirm_pending()
@@ -472,9 +476,29 @@ class Session:
         ctx = self._context(text, item.contact)
         self._record(item, confirmed=True, text=text)
         self._use_phrase(text)
+        self._effort.select()
+        self._emit(self._metrics(item, text))
         self._speak_phrase(text)  # always said aloud in the room
         if item.action != "speak":
             self._run_action(item.action, ctx)  # and sent, at the same time
+
+    def _metrics(self, item: Item, text: str) -> Metrics:
+        """What this message took, and what it would have taken in Day 1 mode."""
+        done = self._effort.effort
+        day1 = day1_cost(
+            self._menu, event_id=item.event_id, item_id=item.id, text=text, lang=self.lang, ai_on=self.suggester.available
+        ) or done
+        log.info(
+            "took %d clenches, %d scan steps (Day 1: %d clenches, %d scan steps): %r",
+            done.selections, done.scan_steps, day1.selections, day1.scan_steps, text,
+        )
+        return Metrics(
+            text=text,
+            selections=max(done.selections, 1),
+            scan_steps=done.scan_steps,
+            day1_selections=max(day1.selections, 1),
+            day1_scan_steps=day1.scan_steps,
+        )
 
     def _speak_phrase(self, text: str) -> None:
         """Say the confirmed sentence; back to home on its AUDIO_DONE or after SPEAK_TIMEOUT_S."""
@@ -499,6 +523,7 @@ class Session:
 
     def _go_home(self) -> None:
         self._stack = [self._home()]
+        self._effort.reset()  # metrics count from home
         self._enter_frame()
 
     def _menu_item(self, node: MenuNode, prefix: str) -> Item:
@@ -735,6 +760,19 @@ class Session:
             confidence, need, how = self.ranker.history_confidence(top, scored) * keep, SHORTCUT_HISTORY_SHARE, "history"
         log.info("shortcut check: %s confidence %.2f for %s (needs %.1f)", how, confidence, top, need)
         return next(i for i in pool if i.id == top) if confidence >= need else None
+
+    def suggested_preview(self) -> tuple[list[str], str | None]:
+        """The home Suggested phrases as they rank right now (history and fixed phrases, no AI
+        sentences), and the phrase the one-clench shortcut would confirm (None = no shortcut).
+        For scripts/seed_demo.py and, later, the caregiver console."""
+        branch = self._suggested_branch()
+        if branch is None or branch.node is None:
+            return [], None
+        pool = self._suggested_pool(branch, None)
+        frame = Frame(kind="menu", level=branch.node, prefix=branch.id, items=pool, pool=pool, rank="full")
+        self._rank(frame)
+        top = self._shortcut(branch)
+        return [i.phrase(self.lang) for i in frame.items], top.phrase(self.lang) if top is not None else None
 
     def _prefetch_shortcut(self) -> None:
         """At home, ask Jev about the Suggested phrases now, so the shortcut can use its answer."""
@@ -1001,6 +1039,7 @@ class Session:
 
     def _on_highlight(self, index: int) -> None:
         if self.state is SessionState.SCANNING:
+            self._effort.step()
             self._emit(self._screen())
 
     # --- messages -------------------------------------------------------------

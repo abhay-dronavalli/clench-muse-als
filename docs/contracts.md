@@ -21,8 +21,8 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
 | `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
-| `/ws/console` | Caregiver console | SETTINGS | SETTINGS and the same Core -> Board messages (mirror) |
-| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS |
+| `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS and the same Core -> Board messages (mirror) |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS, METRICS |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
 
@@ -43,6 +43,7 @@ Every client gets the current SETTINGS the moment it connects, and again after e
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
+| METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 
 ## Sensor Service -> Core
 
@@ -343,4 +344,24 @@ board shows it as a toast for 4 s.
 
 ```json
 {"type": "ACTION_RESULT", "action": "send_message", "ok": true, "detail": "sent", "contact": "María"}
+```
+
+## Core -> Console and web dev panel
+
+### METRICS
+
+Sent right after every confirm clench (to `/ws/console` and `/ws/input`, not to the board), so the
+demo can show that learning turns into speed (PRD D7, section 12): "Took 2 clenches, 0 s waiting
+(Day 1: 5 clenches, 6 s)". Seconds are `scan_steps * scan_ms / 1000`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `text` | string | the confirmed sentence |
+| `selections` | int | clenches since home, >= 1: every pick (going back does not undo one) plus 1 for the confirm |
+| `scan_steps` | int | highlight moves the person waited through before those picks, >= 0 |
+| `day1_selections` | int | the same message in Day 1 mode: menu.yaml order, no shortcut, the fixed phrase after the AI's sentences when the AI is on |
+| `day1_scan_steps` | int | the same, in scan steps. When the message cannot be reached in Day 1 mode (an AI sentence on Suggested, an AI option from "Other..."), both Day 1 fields repeat the real numbers |
+
+```json
+{"type": "METRICS", "text": "Mija, estoy bien, llámame a las seis.", "selections": 2, "scan_steps": 0, "day1_selections": 5, "day1_scan_steps": 6}
 ```

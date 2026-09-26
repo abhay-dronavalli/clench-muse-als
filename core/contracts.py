@@ -193,6 +193,21 @@ class ActionResult(_Msg):
     contact: str | None  # contact's display name in the current language; None when there is none
 
 
+# --- Core -> Console and web dev panel ------------------------------------------
+
+
+class Metrics(_Msg):
+    """What one confirmed message cost (PRD section 12, D7), and what it would have cost in Day 1
+    mode (menu.yaml order, no shortcut). Sent after every confirm, to consoles and input clients."""
+
+    type: Literal["METRICS"] = "METRICS"
+    text: str  # the confirmed sentence
+    selections: int = Field(ge=1)  # clenches since home, the confirm clench included
+    scan_steps: int = Field(ge=0)  # highlight moves waited through before the picks
+    day1_selections: int = Field(ge=1)
+    day1_scan_steps: int = Field(ge=0)
+
+
 # --- Union and helpers --------------------------------------------------------
 
 Message = Annotated[
@@ -212,6 +227,7 @@ Message = Annotated[
         Speak,
         PlayAudio,
         ActionResult,
+        Metrics,
     ],
     Field(discriminator="type"),
 ]

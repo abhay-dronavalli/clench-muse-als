@@ -187,6 +187,24 @@ export interface ActionResult {
   contact: string | null
 }
 
+// --- Core -> Console and web dev panel ---
+
+/**
+ * What one confirmed message cost (PRD section 12, D7), and what it would have cost in Day 1 mode
+ * (menu.yaml order, no shortcut). Sent after every confirm, to consoles and input clients.
+ */
+export interface Metrics {
+  type: 'METRICS'
+  /** the confirmed sentence */
+  text: string
+  /** clenches since home, the confirm clench included; >= 1 */
+  selections: number
+  /** highlight moves waited through before the picks; >= 0 */
+  scan_steps: number
+  day1_selections: number
+  day1_scan_steps: number
+}
+
 // --- Union ---
 
 export type Message =
@@ -205,5 +223,6 @@ export type Message =
   | Speak
   | PlayAudio
   | ActionResult
+  | Metrics
 
 export type MessageType = Message['type']

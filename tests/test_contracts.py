@@ -92,6 +92,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
     ),
+    "METRICS": (
+        contracts.Metrics,
+        {"type": "METRICS", "text": "Mija, estoy bien.", "selections": 2, "scan_steps": 0, "day1_selections": 5, "day1_scan_steps": 6},
+    ),
 }
 
 MESSAGE_CLASSES = get_args(get_args(Message)[0])
@@ -135,6 +139,8 @@ def test_round_trip(name):
         {"type": "READY", "board": 1},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "learning": "day1"},
+        {"type": "METRICS", "text": "x", "selections": 0, "scan_steps": 0, "day1_selections": 1, "day1_scan_steps": 0},
+        {"type": "METRICS", "text": "x", "selections": 2, "scan_steps": 0, "day1_selections": 5},
         {
             "type": "SCREEN",
             "screen": "menu",
