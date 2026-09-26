@@ -81,10 +81,12 @@ from core.contracts import (
     Message,
     Metrics,
     Point,
+    JevStatus,
     PointingMode,
     Reset,
     Screen,
     Settings,
+    ShortcutDebug,
     State,
     Tile,
     TileKind,
@@ -98,7 +100,7 @@ from core.profile import Profile
 from core.rank import Entry, Ranker
 from core.rank.history import Sentence, leaf_path
 from core.rank.jev import JevAnswer, JevRanker
-from core.rank.ranker import SHORTCUT_HISTORY_SHARE
+from core.rank.ranker import SHORTCUT_HISTORY_SHARE, SHORTCUT_JEV_CONFIDENCE, SHORTCUT_JEV_HISTORY_SHARE
 from core.suggest.provider import MAX_SENTENCES, Option, drop_known, text_key
 from core.suggest.service import Pending, Suggester
 from core.voice import Voice
@@ -110,7 +112,6 @@ SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
 HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
 OTHER_PAGES = 3  # "Other..." pages in a row before the next pick loops back to the level's own options
-JEV_SHORTCUT = 0.8  # Jev confidence needed for the one-clench shortcut
 TRAIL_S = 2.0  # how much highlight history the clench look-back keeps
 
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
@@ -212,6 +213,19 @@ class Frame:
     rank: Literal["none", "menu", "full"] = "none"
     pinned: int = 0  # leading pool items that never move (home Suggested)
     priors: dict[str, float] = field(default_factory=dict)  # Jev probabilities by tile id
+
+
+@dataclass(frozen=True)
+class ShortcutCheck:
+    """The one-clench shortcut decision for home Suggested, with what it was based on."""
+
+    top: Item | None  # the history's top phrase
+    history: float  # its history share (after recent cancels)
+    jev: JevStatus
+    jev_pick: Item | None
+    jev_confidence: float | None
+    ok: bool
+    reason: str
 
 
 def _unique(items: list[Item], lang: Lang) -> list[Item]:
@@ -814,38 +828,76 @@ class Session:
         return next((i for i in self._stack[0].items if i.node is not None and i.node.ai_now), None)
 
     def _shortcut(self, branch: Item) -> Item | None:
-        """The phrase to confirm straight away when Suggested is picked, or None. Only with learning on,
-        and only when the top phrase (history and fixed phrases, ranked) is a confident guess:
-          - Jev off (or no answer yet): the history share >= 0.6 (Ranker.history_confidence);
-          - Jev on: Jev must pick that same phrase, and then Jev's confidence >= 0.8 or the history
-            share >= 0.6 is enough (Jev's calibrated confidence stays near 0.5 even for a daily habit,
-            so it confirms the guess rather than being the only way in; decisions.md "Learning").
-        A cancel of it in the last 24 h lowers the confidence as it lowers the score. The confirm
-        clench is still required (PRD D5)."""
+        """The phrase to confirm straight away when Suggested is picked, or None."""
+        check = self._shortcut_check(branch)
+        log.info("shortcut %s: %s", "on" if check.ok else "off", check.reason)
+        return check.top if check.ok else None
+
+    def _shortcut_check(self, branch: Item) -> ShortcutCheck:
+        """Is the history's top Suggested phrase (history and fixed phrases, no AI sentences, so the
+        guess is the patient's own habit) a confident guess? Only with learning on, and when
+          - its history share is >= 0.6 (Ranker.history_confidence), or
+          - its history share is >= 0.4 and Jev picks the same phrase with confidence >= 0.45.
+        Jev only helps: it never blocks a shortcut the history alone qualifies for (decisions.md
+        "Shortcut"). A cancel of the phrase in the last 24 h lowers both numbers as it lowers the
+        score. The confirm clench is still required (PRD D5)."""
         if not self.learning:
-            return None
-        pool = self._suggested_pool(branch, None)  # no AI sentences: the learned habits only
+            return ShortcutCheck(None, 0.0, "off", None, None, False, "learning off (Day 1 mode)")
+        pool = self._suggested_pool(branch, None)
         if not pool:
-            return None
+            return ShortcutCheck(None, 0.0, "off", None, None, False, "no Suggested phrases")
         entries = [self._entry(i, by_text=True) for i in pool]
-        answer = self.jev.cached(self._jev_key(pool)) if self.jev is not None and self._jev_on() else None
-        scored = self.ranker.score(
-            entries, self.lang, priors=answer.probabilities if answer else None, state_level=self.state_level
-        )
-        top = self.ranker.order_full(entries, scored)[0]
-        keep = 1.0 - scored[top].reject
-        history = self.ranker.history_confidence(top, scored) * keep
-        if answer is None:
-            ok = history >= SHORTCUT_HISTORY_SHARE
-            log.info("shortcut check for %s: history %.2f (needs %.1f)", top, history, SHORTCUT_HISTORY_SHARE)
-        else:
-            jev = answer.confidence * keep if answer.choice == top else 0.0
-            ok = answer.choice == top and (jev >= JEV_SHORTCUT or history >= SHORTCUT_HISTORY_SHARE)
-            log.info(
-                "shortcut check for %s: Jev picks %s (confidence %.2f, needs %.1f), history %.2f (needs %.1f)",
-                top, answer.choice, jev, JEV_SHORTCUT, history, SHORTCUT_HISTORY_SHARE,
+        scored = self.ranker.score(entries, self.lang, state_level=self.state_level)  # history only
+        top_id = self.ranker.order_full(entries, scored)[0]
+        top = next(i for i in pool if i.id == top_id)
+        keep = 1.0 - scored[top_id].reject
+        history = self.ranker.history_confidence(top_id, scored) * keep
+        jev: JevStatus = "off"
+        answer: JevAnswer | None = None
+        if self._jev_on():
+            assert self.jev is not None
+            answer = self.jev.cached(self._jev_key(pool))
+            jev = "answered" if answer is not None else "waiting"
+        pick = next((i for i in pool if answer is not None and i.id == answer.choice), None)
+        confidence = answer.confidence if answer is not None else None
+        agrees = answer is not None and answer.choice == top_id
+        share = f"history share {history:.2f}"
+        if history >= SHORTCUT_HISTORY_SHARE:
+            ok, reason = True, f"{share} >= {SHORTCUT_HISTORY_SHARE}"
+        elif history < SHORTCUT_JEV_HISTORY_SHARE:
+            ok, reason = False, f"{share} < {SHORTCUT_JEV_HISTORY_SHARE}"
+        elif answer is None:
+            ok = False
+            reason = f"{share} < {SHORTCUT_HISTORY_SHARE} and " + ("Jev is off" if jev == "off" else "no Jev answer yet")
+        elif not agrees:
+            ok, reason = False, f"{share} < {SHORTCUT_HISTORY_SHARE} and Jev picks another phrase"
+        elif answer.confidence * keep >= SHORTCUT_JEV_CONFIDENCE:
+            ok = True
+            reason = (
+                f"{share} >= {SHORTCUT_JEV_HISTORY_SHARE} and Jev agrees "
+                f"({answer.confidence * keep:.2f} >= {SHORTCUT_JEV_CONFIDENCE})"
             )
-        return next(i for i in pool if i.id == top) if ok else None
+        else:
+            ok = False
+            reason = f"{share} < {SHORTCUT_HISTORY_SHARE} and Jev is unsure ({answer.confidence * keep:.2f} < {SHORTCUT_JEV_CONFIDENCE})"
+        return ShortcutCheck(top, history, jev, pick, confidence, ok, reason)
+
+    def _shortcut_debug(self) -> ShortcutDebug:
+        """The SHORTCUT_DEBUG line for consoles and the dev panel: the shortcut as it stands now."""
+        branch = self._suggested_branch()
+        if branch is None:
+            check = ShortcutCheck(None, 0.0, "off", None, None, False, "no Suggested tile")
+        else:
+            check = self._shortcut_check(branch)
+        return ShortcutDebug(
+            top=check.top.phrase(self.lang) if check.top is not None else None,
+            history_share=round(min(max(check.history, 0.0), 1.0), 3),
+            jev=check.jev,
+            jev_pick=check.jev_pick.phrase(self.lang) if check.jev_pick is not None else None,
+            jev_confidence=round(min(max(check.jev_confidence, 0.0), 1.0), 3) if check.jev_confidence is not None else None,
+            shortcut=check.ok,
+            reason=check.reason,
+        )
 
     def suggested_preview(self) -> tuple[list[str], str | None]:
         """The home Suggested phrases as they rank right now (history and fixed phrases, no AI
@@ -860,14 +912,26 @@ class Session:
         top = self._shortcut(branch)
         return [i.phrase(self.lang) for i in frame.items], top.phrase(self.lang) if top is not None else None
 
-    def _prefetch_shortcut(self) -> None:
+    def _prefetch_shortcut(self) -> Pending[JevAnswer] | None:
         """At home, ask Jev about the Suggested phrases now, so the shortcut can use its answer."""
         branch = self._suggested_branch()
         if branch is None or not self._jev_on():
-            return
+            return None
         pool = self._suggested_pool(branch, None)
-        if len(pool) >= 2:
-            self._jev_request(pool, [branch.label(self.lang)])
+        return self._jev_request(pool, [branch.label(self.lang)]) if len(pool) >= 2 else None
+
+    def _announce_shortcut(self, pending: Pending[JevAnswer] | None) -> None:
+        """After a Home render: the SHORTCUT_DEBUG line, and again when Jev answers if home is still
+        showing."""
+        self._emit(self._shortcut_debug())
+        if pending is not None and not pending.done:
+            home = self._stack[0]
+
+            def arrived(answer: JevAnswer | None) -> None:
+                if answer is not None and self._stack == [home] and self.state is SessionState.SCANNING:
+                    self._emit(self._shortcut_debug())
+
+            pending.on_done(arrived)
 
     def _open_suggested_list(self, branch: Item) -> None:
         """The whole Suggested list: with the AI's sentences for right now (waiting for them at most
@@ -917,14 +981,16 @@ class Session:
         (RESET) puts every pointer on tile 0."""
         self.state = SessionState.SCANNING
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
-        if len(self._stack) == 1:
-            self._prefetch_shortcut()
+        home = len(self._stack) == 1
+        shortcut_jev = self._prefetch_shortcut() if home else None
         count = len(self.frame.items) + 1
         self.pointer.on_tiles_changed(count)
         if first_tile:
             self.pointer.place(count, 0)
         self.pointer.start()  # the scan timer restarts from 0
         self._emit(self._screen())
+        if home:
+            self._announce_shortcut(shortcut_jev)
         self._prefetch()
 
     def _resume(self) -> None:

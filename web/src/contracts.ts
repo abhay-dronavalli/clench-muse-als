@@ -254,6 +254,30 @@ export interface Metrics {
   day1_scan_steps: number
 }
 
+export type JevStatus = 'off' | 'waiting' | 'answered'
+
+/**
+ * Why the one-clench Suggested shortcut is on or off right now. Sent after every Home render (and
+ * again when Jev's answer arrives while Home shows), to consoles and input clients only.
+ */
+export interface ShortcutDebug {
+  type: 'SHORTCUT_DEBUG'
+  /** the history's top Suggested phrase; null in Day 1 mode or with no phrases */
+  top: string | null
+  /** its share of what was said around this hour, 0..1 */
+  history_share: number
+  /** off = not configured, paused or Day 1 mode; waiting = no answer yet */
+  jev: JevStatus
+  /** the phrase Jev picked (null unless jev is 'answered') */
+  jev_pick: string | null
+  /** Jev's confidence in its pick, 0..1 */
+  jev_confidence: number | null
+  /** picking Suggested goes straight to the confirm screen with `top` */
+  shortcut: boolean
+  /** e.g. "history share 0.72 >= 0.6" */
+  reason: string
+}
+
 // --- Union ---
 
 export type Message =
@@ -275,5 +299,6 @@ export type Message =
   | Click
   | ActionResult
   | Metrics
+  | ShortcutDebug
 
 export type MessageType = Message['type']

@@ -232,6 +232,23 @@ class Metrics(_Msg):
     day1_scan_steps: int = Field(ge=0)
 
 
+JevStatus = Literal["off", "waiting", "answered"]
+
+
+class ShortcutDebug(_Msg):
+    """Why the one-clench Suggested shortcut is on or off right now. Sent after every Home render (and
+    again when Jev's answer arrives while Home shows), to consoles and input clients only."""
+
+    type: Literal["SHORTCUT_DEBUG"] = "SHORTCUT_DEBUG"
+    top: str | None  # the history's top Suggested phrase; None in Day 1 mode or with no phrases
+    history_share: float = Field(ge=0.0, le=1.0)  # its share of what was said around this hour
+    jev: JevStatus  # off = not configured, paused or Day 1 mode; waiting = no answer yet
+    jev_pick: str | None  # the phrase Jev picked (None unless jev = "answered")
+    jev_confidence: float | None = Field(ge=0.0, le=1.0)  # Jev's confidence in its pick
+    shortcut: bool  # picking Suggested goes straight to the confirm screen with `top`
+    reason: str  # e.g. "history share 0.72 >= 0.6"
+
+
 # --- Board <-> Core over REST (not a WebSocket message) ---------------------------
 
 MIN_HEAD_SPAN_DEG = 2.0  # a calibrated side closer than this to the center is a failed calibration
@@ -283,6 +300,7 @@ Message = Annotated[
         Click,
         ActionResult,
         Metrics,
+        ShortcutDebug,
     ],
     Field(discriminator="type"),
 ]

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react'
-import { POINTING_MODES, type HeadRange, type Lang, type Message, type Metrics, type PointingMode } from '../contracts'
+import {
+  POINTING_MODES,
+  type HeadRange,
+  type Lang,
+  type Message,
+  type Metrics,
+  type PointingMode,
+  type ShortcutDebug,
+} from '../contracts'
 import type { VoiceSource } from '../board/speech'
 import { showCursor } from '../facetrack/stores'
 import { tracker } from '../facetrack/tracker'
@@ -64,6 +72,19 @@ function seconds(steps: number, scanMs: number): string {
   return `${Number.isInteger(s) ? s : s.toFixed(1)} s`
 }
 
+/** SHORTCUT_DEBUG as one line: top phrase, history share, Jev, and the decision with its reason. */
+function shortcutLine(d: ShortcutDebug): string {
+  const quote = (t: string) => `"${t.length > 40 ? `${t.slice(0, 39)}…` : t}"`
+  const jev =
+    d.jev === 'off'
+      ? 'Jev off'
+      : d.jev === 'waiting' || d.jev_pick === null
+        ? 'Jev: no answer yet'
+        : `Jev: ${quote(d.jev_pick)} ${(d.jev_confidence ?? 0).toFixed(2)}`
+  const top = d.top === null ? 'no top phrase' : `${quote(d.top)} (history ${d.history_share.toFixed(2)})`
+  return `${top} · ${jev} · shortcut: ${d.shortcut ? 'yes' : 'no'} (${d.reason})`
+}
+
 function clenches(n: number): string {
   return `${n} clench${n === 1 ? '' : 'es'}`
 }
@@ -88,6 +109,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [learning, setLearning] = useState<boolean | null>(null)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [shortcut, setShortcut] = useState<ShortcutDebug | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
   const scanTimer = useRef<number | undefined>(undefined)
@@ -96,6 +118,10 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
     onMessage: (msg) => {
       if (msg.type === 'METRICS') {
         setMetrics(msg)
+        return
+      }
+      if (msg.type === 'SHORTCUT_DEBUG') {
+        setShortcut(msg)
         return
       }
       if (msg.type !== 'SETTINGS') return
@@ -381,6 +407,13 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       <p className="mb-3 text-xs text-zinc-400">
         Last message:{' '}
         <span className="text-zinc-200">{took ?? 'nothing sent yet'}</span>
+      </p>
+
+      <p className="mb-3 text-xs text-zinc-400" title="SHORTCUT_DEBUG: sent after every Home render">
+        Shortcut:{' '}
+        <span className={shortcut?.shortcut ? 'text-emerald-300' : 'text-zinc-200'}>
+          {shortcut ? shortcutLine(shortcut) : 'waiting for Home'}
+        </span>
       </p>
 
       <ol className="space-y-0.5 font-mono text-xs">

@@ -8,7 +8,8 @@ import httpx
 import pytest
 
 from core.clock import ManualScheduler
-from core.contracts import Clench, Confirm, DoubleBlink, Screen, Settings, Speak
+from core.actions import build_registry
+from core.contracts import ActionResult, AudioDone, Clench, Confirm, DoubleBlink, Metrics, Screen, Settings, ShortcutDebug, Speak
 from core.db import Db
 from core.menu import load_menu
 from core.profile import load_profile
@@ -18,6 +19,7 @@ from core.rank.score import DAY_S
 from core.session import CLENCH_DEBOUNCE_S, Session, SessionState
 from core.suggest.fake import FakeProvider
 from core.suggest.service import Suggester
+from core.voice import Voice
 
 NOW = datetime(2026, 9, 26, 18, 30).timestamp()
 SCAN_S = 1.0
@@ -213,10 +215,10 @@ def with_jev(menu, profile, db, loop, choice, confidence):
     return s, sent
 
 
-def test_confident_jev_is_enough_even_with_little_history(menu, profile, db, loop):
+def test_confident_jev_alone_is_not_enough(menu, profile, db, loop):
     confirm_many(db, "people.maria.text", MARIA, [NOW - 600], action="send_message", contact="maria")
     s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.85)
-    assert sent[-1] == Confirm(text=MARIA, action="send_message")
+    assert s.state is SessionState.SCANNING  # one use is not a habit, whatever Jev says
 
 
 def test_jev_agreeing_with_a_confident_history_is_enough(menu, profile, db, loop):
@@ -225,10 +227,122 @@ def test_jev_agreeing_with_a_confident_history_is_enough(menu, profile, db, loop
     assert sent[-1] == Confirm(text=MARIA, action="send_message")
 
 
-def test_jev_disagreeing_means_no_shortcut(menu, profile, db, loop):
-    maria_every_evening(db)  # the history alone would be confident
-    s, sent = with_jev(menu, profile, db, loop, "suggested.water", 0.5)
-    assert s.state is SessionState.SCANNING and last_screen(sent).path == ["Suggested"]
+def test_jev_disagreeing_never_blocks_a_confident_history(menu, profile, db, loop):
+    maria_every_evening(db)  # the history alone is confident
+    for confidence in (0.5, 0.95):
+        s, sent = with_jev(menu, profile, db, loop, "suggested.water", confidence)
+        assert sent[-1] == Confirm(text=MARIA, action="send_message")
+
+
+def middling_history(db):
+    """María's text is the top phrase at this hour with a share of 0.5: between 0.4 and 0.6."""
+    maria_every_evening(db, per_day=3)
+    confirm_many(db, "need.water", WATER, DAYS * 2)
+    confirm_many(db, "room.tv.on", "Please turn on the TV.", DAYS, action="room_control")
+
+
+def test_middling_history_alone_is_not_enough(menu, profile, db, loop):
+    middling_history(db)
+    s, sent = make(menu, profile, db, loop)
+    assert debug(sent).top == MARIA
+    assert 0.4 <= debug(sent).history_share < 0.6
+    pick(s, sent, "Suggested")
+    assert s.state is SessionState.SCANNING
+
+
+def test_middling_history_and_jev_agreeing_opens_the_shortcut(menu, profile, db, loop):
+    middling_history(db)
+    s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.45)
+    assert sent[-1] == Confirm(text=MARIA, action="send_message")
+
+
+def test_middling_history_and_unsure_jev_means_no_shortcut(menu, profile, db, loop):
+    middling_history(db)
+    s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.44)
+    assert s.state is SessionState.SCANNING
+
+
+def test_middling_history_and_jev_disagreeing_means_no_shortcut(menu, profile, db, loop):
+    middling_history(db)
+    s, sent = with_jev(menu, profile, db, loop, "suggested.water", 0.9)
+    assert s.state is SessionState.SCANNING
+
+
+# --- SHORTCUT_DEBUG ---------------------------------------------------------------------------
+
+
+def debug(sent) -> ShortcutDebug:
+    return next(m for m in reversed(sent) if isinstance(m, ShortcutDebug))
+
+
+def test_debug_line_after_every_home_render(menu, profile, db, loop):
+    maria_every_evening(db)
+    s, sent = make(menu, profile, db, loop)
+    first = sent.index(debug(sent))
+    assert isinstance(sent[first - 1], Screen) and sent[first - 1].path == []  # right after the home SCREEN
+    d = debug(sent)
+    assert (d.top, d.jev, d.jev_pick, d.jev_confidence, d.shortcut) == (MARIA, "off", None, None, True)
+    assert d.history_share >= 0.6
+    assert d.reason.startswith("history share ") and d.reason.endswith(">= 0.6")
+    pick(s, sent, "I need")
+    count = sum(isinstance(m, ShortcutDebug) for m in sent)
+    s.handle(DoubleBlink(t=0.0))  # home again: a new line
+    assert sum(isinstance(m, ShortcutDebug) for m in sent) == count + 1
+
+
+def test_debug_line_says_no_answer_yet_then_updates_when_jev_answers(menu, profile, db, loop):
+    middling_history(db)
+    jev = JevRanker(TypeSafeAccess("k"), spawn=loop.spawn, transport=httpx.MockTransport(jev_for("people.maria.text", 0.5)))
+    s, sent = make(menu, profile, db, loop, jev=jev)
+    d = debug(sent)
+    assert (d.jev, d.shortcut) == ("waiting", False)
+    assert d.reason.endswith("no Jev answer yet")
+    loop.run()
+    d = debug(sent)
+    assert (d.jev, d.jev_pick, d.jev_confidence, d.shortcut) == ("answered", MARIA, 0.5, True)
+    assert "Jev agrees" in d.reason
+
+
+def test_debug_line_in_day1_mode(menu, profile, db, loop):
+    maria_every_evening(db)
+    s, sent = make(menu, profile, db, loop, learning=False)
+    d = debug(sent)
+    assert (d.top, d.shortcut, d.jev) == (None, False, "off")
+    assert d.reason == "learning off (Day 1 mode)"
+
+
+def test_shortcut_is_the_same_with_and_without_dry_run(menu, profile, loop):
+    """ACTIONS_DRY_RUN only changes whether the message really leaves: the shortcut, the history it
+    writes and the next shortcut are the same."""
+    outcomes = []
+    for dry_run in (True, False):
+        d = Db(":memory:")
+        d.sync_profile("Luis", "en", [])
+        maria_every_evening(d)
+        telegram = httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True, "result": {"message_id": 7}}))
+        env = {"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_CHAT_ID_MARIA": "42"}
+        sent: list = []
+        s = Session(
+            menu, sent.append, ManualScheduler(start=100.0), profile=profile, spawn=asyncio.run, lang="en", db=d,
+            ranker=Ranker(d, clock=lambda: NOW), actions=build_registry(Voice(sent.append), env, dry_run=dry_run, transport=telegram),
+        )
+        s.start()
+        runs = []
+        for _ in range(2):
+            pick(s, sent, "Suggested")
+            runs.append((sent[-1], debug(sent).shortcut))
+            confirm(s)
+            s.handle(AudioDone(id=next(m.id for m in reversed(sent) if isinstance(m, Speak) and m.kind == "phrase")))
+        result = next(m for m in sent if isinstance(m, ActionResult))
+        assert result.ok and (result.detail == "dry run") == dry_run
+        metrics = [m for m in sent if isinstance(m, Metrics)]
+        events = [(r["node_id"], r["confirmed"], r["rejected"], r["text"]) for r in d.events()]
+        outcomes.append((runs, metrics, events))
+        d.close()
+    assert outcomes[0] == outcomes[1]
+    runs, metrics, _ = outcomes[0]
+    assert runs[0] == (Confirm(text=MARIA, action="send_message"), True)
+    assert [m.selections for m in metrics] == [2, 2]
 
 
 def test_unsure_jev_and_little_history_means_no_shortcut(menu, profile, db, loop):

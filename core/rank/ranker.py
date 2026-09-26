@@ -29,7 +29,9 @@ from core.rank.score import (
 
 log = logging.getLogger("clench.rank")
 
-SHORTCUT_HISTORY_SHARE = 0.6  # history confidence needed for the one-clench shortcut (no Jev)
+SHORTCUT_HISTORY_SHARE = 0.6  # history share that opens the one-clench shortcut on its own
+SHORTCUT_JEV_HISTORY_SHARE = 0.4  # ...or this share, when Jev picks the same phrase
+SHORTCUT_JEV_CONFIDENCE = 0.45  # ...with at least this confidence
 SHORTCUT_MIN_USES = 3.0  # ... and at least this many recency-weighted uses of the phrase
 JEV_RECENT = 5
 JEV_TOP = 10

@@ -23,8 +23,8 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
 | `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
-| `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS and the same Core -> Board messages (mirror) |
-| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS |
+| `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
 
@@ -56,6 +56,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | CLICK | Core | Board, Console | Play the short soft click for a picked "Other..." (in order with the echoes) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
+| SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
 
 ## Sensor Service -> Core
 
@@ -446,4 +447,27 @@ demo can show that learning turns into speed (PRD D7, section 12): "Took 2 clenc
 
 ```json
 {"type": "METRICS", "text": "Mija, estoy bien, llámame a las seis.", "selections": 2, "scan_steps": 0, "day1_selections": 5, "day1_scan_steps": 6}
+```
+
+### SHORTCUT_DEBUG
+
+Sent after every Home render (right after its SCREEN), and again when Jev's answer arrives while
+Home is still showing, to `/ws/console` and `/ws/input` only. It says whether picking Suggested would
+go straight to the confirm screen, and why. The shortcut fires when learning is on and EITHER the
+history share of the top phrase is at least 0.6, OR the history share is at least 0.4 AND Jev picks
+the same phrase with confidence at least 0.45. Jev never blocks a shortcut the history alone
+qualifies for. A cancel of the phrase in the last 24 h scales both numbers down.
+
+| Field | Type | Notes |
+|---|---|---|
+| `top` | string \| null | the history's top Suggested phrase (history and fixed phrases, no AI sentences); null in Day 1 mode or with no phrases |
+| `history_share` | float | 0 to 1: its share of everything confirmed around this hour (+/- 1 h, recency-weighted); 0 with fewer than 3 recency-weighted uses |
+| `jev` | `"off"` \| `"waiting"` \| `"answered"` | off = no Jev key, paused, or Day 1 mode; waiting = no answer yet |
+| `jev_pick` | string \| null | the phrase Jev picked; null unless `jev` is `"answered"` |
+| `jev_confidence` | float \| null | 0 to 1, Jev's confidence in its pick |
+| `shortcut` | bool | picking Suggested opens the confirm screen with `top` |
+| `reason` | string | e.g. `"history share 0.72 >= 0.6"`, `"history share 0.50 >= 0.4 and Jev agrees (0.52 >= 0.45)"`, `"history share 0.50 < 0.6 and no Jev answer yet"`, `"learning off (Day 1 mode)"` |
+
+```json
+{"type": "SHORTCUT_DEBUG", "top": "Mija, estoy bien, llámame a las seis.", "history_share": 0.72, "jev": "answered", "jev_pick": "Mija, estoy bien, llámame a las seis.", "jev_confidence": 0.52, "shortcut": true, "reason": "history share 0.72 >= 0.6"}
 ```

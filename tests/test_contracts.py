@@ -96,6 +96,19 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
     ),
+    "SHORTCUT_DEBUG": (
+        contracts.ShortcutDebug,
+        {
+            "type": "SHORTCUT_DEBUG",
+            "top": "Mija, estoy bien, llámame a las seis.",
+            "history_share": 0.72,
+            "jev": "answered",
+            "jev_pick": "Mija, estoy bien, llámame a las seis.",
+            "jev_confidence": 0.52,
+            "shortcut": True,
+            "reason": "history share 0.72 >= 0.6",
+        },
+    ),
     "METRICS": (
         contracts.Metrics,
         {"type": "METRICS", "text": "Mija, estoy bien.", "selections": 2, "scan_steps": 0, "day1_selections": 5, "day1_scan_steps": 6},
