@@ -35,7 +35,7 @@ Status: **done** = built, **planned** = agreed, not built yet.
   `<Play>` with a public URL, and the audio lives on the laptop (the Core is not reachable from the
   internet). Hosting it would mean uploading the patient's sentences, against D14.
 
-## 4. Each picked word is spoken as it is picked (chunk 4, done)
+## 4. Each picked word is spoken as it is picked (chunk 4, done; interrupt rules superseded by #10)
 
 - PRD: D5 says nothing is spoken without the confirm screen.
 - Now: auditory feedback ("speak picks", `speak_picks` in `data/profile.yaml`, on by default,
@@ -48,7 +48,7 @@ Status: **done** = built, **planned** = agreed, not built yet.
   dropped, so it never cuts the person's sentence. Echoes play at 70% volume. The Core also drops an
   echo whose audio arrives after something newer was said, since a late word is only confusing.
 
-## 5. "Other..." tile on every level (chunk 5, done)
+## 5. "Other..." tile on every level (chunk 5, done; "Spell it" superseded by #11)
 
 - PRD: section 8 has a "Say something" home tile with "AI phrases from context, Spell it"; D11
   wants spelling reachable as a way out.
@@ -200,7 +200,7 @@ Status: **done** = built, **planned** = agreed, not built yet.
 - After "Spell it" appears in place (nothing new to show), the highlight stays on it, so one clench
   picks it.
 
-## 8. Learning: ranking, stability rule, shortcut and Day 1 mode (chunk 6, done)
+## 8. Learning: ranking, stability rule, shortcut and Day 1 mode (chunk 6, done; shortcut rule superseded by #12)
 
 - PRD: section 9 layer 2 (score, weights 0.4 / 0.2 / 0.1 / 0.3), D7 (most likely first), "Showing
   it in the demo" (Day 1 vs a simulated week).
@@ -356,3 +356,95 @@ Status: **done** = built, **planned** = agreed, not built yet.
   `--load` writes each simulated use once in each language by default (`--lang es|en|both`). Writing
   both languages doubles the evidence per path, but every score part is scaled across the candidates
   being ranked, so menus, Suggested and the shortcut come out the same as a one-language week.
+
+## 10. Echo queue instead of interrupts (chunk 7.5, done; supersedes the interrupt rules in #4)
+
+- Tested by a person: fast picks cut earlier words off (a new echo interrupted the old one), and the
+  Core dropped a late echo when something newer had been said, so some picked words were never heard.
+- Now the board has one sound queue (`web/src/board/queue.ts`): echoes and the "Other..." click play
+  in order, one after another, never cutting each other off. A phrase waits for the echoes queued
+  before it. A system line (help) clears the queue and plays at once. At most 6 items wait; on
+  overflow the oldest waiting echo is dropped (a phrase only if nothing else waits) and logged.
+- An echo is never held back by the Core: when its audio is not cached the Core sends SPEAK at once
+  (browser voice, in pick order) and makes the ElevenLabs audio in the background for next time,
+  instead of waiting up to 2.5 s (which is what let a later cached word overtake it). The prompt's
+  "if cached audio isn't ready within 300 ms" is applied on the board: a PLAY_AUDIO echo that has not
+  started playing 300 ms after its turn comes is said by the browser voice in its place.
+- Removed: "a new echo interrupts an older echo", "an echo during a phrase or system line is
+  dropped", and the Core's "late echo is dropped".
+
+## 11. "Other..." pages loop; no "Spell it" (chunk 7.5, done; supersedes "Spell it" in #5)
+
+- Each "Other..." pick shows the next page of new options. After 3 AI pages, or when there is
+  nothing new (the AI returns nothing and the level's `more` list is used up, or there is no AI),
+  the next pick loops back to the level's own options (the page the first "Other..." was picked
+  on), from its first tile. The `more` list still counts as a page when the AI has nothing, so with
+  no key Home > Other... shows Yes / No / Good morning / Wait a moment and the next pick goes back
+  to Home. "Spell it", its system line and the `.spell` tile id are gone; spelling (PRD D11) is left
+  for its own chunk.
+- A DOUBLE_BLINK always goes up one menu level: "Other..." pages count as the level they came from,
+  so Home > I need > Other > Other goes to Home. A suggestions screen is one level (above its leaf's
+  level).
+- "Other..." says no word: a CLICK message (Core -> Board) plays a short soft click made with
+  WebAudio (a 60 ms sine blip, 1.6 to 0.8 kHz, at echo volume), no audio file. A new message rather
+  than a new utterance kind, since it has no text and no AUDIO_DONE. Sent only with speak picks on.
+
+## 12. Suggested shortcut: Jev helps, never gates (chunk 7.5, done; supersedes the Jev rule in #8)
+
+- The shortcut fires when learning is on and EITHER the top phrase's history share is >= 0.6, OR
+  the share is >= 0.4 AND Jev picks the same phrase with confidence >= 0.45. Jev disagreeing never
+  blocks what the history alone allows. Jev alone (little history) is no longer enough.
+- The "top phrase" is ranked by the history only (no Jev prior), so "Jev's pick matches the history
+  top phrase" compares two independent guesses. A cancel in the last 24 h scales both numbers down.
+- SHORTCUT_DEBUG (new message, consoles and the dev panel only) goes out after every Home SCREEN and
+  again when Jev's answer arrives while Home shows: top phrase, history share, Jev status / pick /
+  confidence, and yes/no with a reason. The dev panel shows it as one line.
+- ACTIONS_DRY_RUN changes nothing here: a test runs the same week and two shortcut sends with dry run
+  on and off (Telegram mocked) and gets the same confirms, METRICS and events.
+
+## 13. RESET, and every new screen starts on its first tile (chunk 7.5, done)
+
+- RESET (board or dev panel -> Core): Home, stack cleared, highlight on tile 0 (Suggested), scan timer
+  from 0. The board sends it once when "Click to start" is clicked (before READY), not on a
+  reconnect, so a network blip never moves the person. The dev panel has "Reset to Home".
+- RESET leaves loading, confirming and speaking (nothing is said or sent), but is ignored during the
+  help countdown: a reloaded board must never cancel a call for help; a double blink does.
+- RESET always sends a new SCREEN `seq` (even when Home already shows), so a POINT for the old screen
+  cannot move the highlight, and it puts the head / gaze pointers on tile 0 too until their next POINT.
+- Scan mode already started every new screen on tile 0 with a full scan step; this is now tested. A
+  Jev re-rank of the same screen and returning from the help countdown keep the highlight (same
+  screen).
+
+## 14. Long clench 2.5 s and a 5% tile switch margin, both in the profile (chunk 7.5, done)
+
+- `long_clench_ms` (default 2500, 1000 to 5000) and `tile_switch_margin` (default 0.05, 0 to 0.2) are
+  in `data/profile.yaml` and announced in SETTINGS (optional fields, settable live), because the dev
+  panel's hold-Space and the board's sticky edges must use the Core's value. The 5 s help countdown
+  is unchanged. The dev panel has a 0 to 20% margin slider (sent after the slider settles, like scan
+  speed). The Core does not check LONG_CLENCH's `duration`; the Sensor Service will use the value.
+
+## 15. Gaze slot for eye tracking (chunk 7.5, done)
+
+- `web/src/facetrack` now has pluggable screen-point sources (`source.ts`): `head` (MediaPipe head
+  pose, as before) and `gaze` (`gaze.ts`, fed by other code with x, y in 0..1, found, confidence
+  0..1; also reachable as `window.clenchGaze` for a separately loaded tracker). `usePointing.ts`
+  replaces `useHeadPointing.ts` and turns the active source into POINT / FACE_OK the same way.
+- New pointing mode `gaze` (contracts, `core/pointer/gaze.py`): behaves like Webcam but follows POINT
+  with source `"gaze"`. POINT `source` and SCREEN `pointer` gain `"gaze"`.
+- Auto: gaze if available, else head, else scan. "Available" = a gaze sample in the last 500 ms with
+  found and confidence >= 0.5. The board decides between gaze and head (it has both); the Core's
+  Auto follows either POINT source once the person is seen and shows which in SCREEN `pointer`.
+  The head camera stays on in Auto while gaze drives, so the head takes over at once.
+- FACE_OK now means "the active source sees the person" (eyes for gaze). In Gaze mode an eye tracker
+  that stops feeding counts as not seen, and the board says "No eye tracker connected".
+- The interface is documented for the teammate's tracker (`kushagra/`) in `docs/eye-tracking.md`.
+
+## Smaller choices (chunk 7.5)
+
+- `web/vite.config.ts` reads `CORE_URL` for its proxy target, so a second core (8100) and web app
+  (5273) can run next to the usual ones for checks.
+- The dev panel grew (Reset, margin slider, eye tracker and Shortcut lines); it now scrolls when the
+  screen is short instead of running off the top.
+- `test_a_recent_cancel_turns_the_shortcut_off` only passed before 18:30 on 2026-09-26 (the cancel is
+  logged at the wall clock, the ranker's clock was fixed at 18:30 that day); it now moves the cancel
+  next to the ranker's clock.

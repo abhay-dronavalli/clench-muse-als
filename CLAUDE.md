@@ -4,7 +4,8 @@ Clench is a headband system (Muse 2) that lets a person who cannot move or speak
 someone with late-stage ALS, talk, message their family and control their room using only jaw
 clenches and blinks. A screen shows up to six big tiles in a menu that opens into smaller menus. A
 highlight moves across the tiles, either by itself (Scan), by following small head turns seen by the
-laptop webcam (Webcam), or by the headband's motion sensor (Head tilt). A clench picks, a double
+laptop webcam (Webcam), by an eye tracker plugged into the board (Gaze), or by the headband's
+motion sensor (Head tilt). A clench picks, a double
 blink goes back, and a long clench calls for help. After two or three picks an AI (Gemini first)
 writes the full sentence in English or Spanish, the person confirms with one more clench, and the
 laptop speaks it, texts it or places a call (Twilio). Over time it learns the person: their signals,
@@ -36,8 +37,8 @@ and texting services reach the internet.
 
 Key files so far: `core/main.py` (FastAPI app, WebSocket routes), `core/session.py` (state machine,
 owns the highlight, SCREEN `seq`, clench look-back, help countdown), `core/pointer/` (Pointer interface;
-`scan.py`, `webcam.py` follows POINT, `auto.py` webcam while a face is seen, scan after 3 s without,
-`headtilt.py` scans until the sensor chunk), `core/menu.py`
+`scan.py`, `webcam.py` follows POINT, `gaze.py` follows gaze POINTs, `auto.py` gaze or head while
+the person is seen, scan after 3 s without, `headtilt.py` scans until the sensor chunk), `core/menu.py`
 (loads `data/menu.yaml` + `data/contacts.yaml`), `core/profile.py` (`data/profile.yaml`),
 `core/actions/` (action registry: speak, send_message via Telegram, place_call via Twilio Voice,
 room_control mock), `core/suggest/` (AI layer: `provider.py` LLMProvider protocol and validated
@@ -49,14 +50,16 @@ optional TypeSafe Jev prior), `core/metrics.py` (clenches and scan steps per mes
 `core/voice.py` (everything the board says: ElevenLabs TTS, disk audio cache,
 circuit breaker, prewarm, browser-speech fallback), `core/db.py` (SQLite events, phrases, audio_cache), `core/config.py` (.env loading),
 `core/hub.py` (broadcast to boards/consoles), `core/clock.py` (injectable timers for tests),
-`web/src/board/` (patient board, audio player and browser speech in `speech.ts`, toasts, help countdown,
-suggestion / "Other..." / loading tiles in `views.tsx`), `web/src/facetrack/` (webcam pointing:
+`web/src/board/` (patient board, audio player and browser speech in `speech.ts` with the in-order
+sound queue in `queue.ts`, the "Other..." click, toasts, help countdown,
+suggestion / "Other..." / loading tiles in `views.tsx`), `web/src/facetrack/` (webcam and gaze pointing:
 `tracker.ts` camera + MediaPipe Face Landmarker, `pose.ts` head angles to a screen point, `tiles.ts`
-sticky tile choice, `calibrate.ts` + `CalibrationOverlay.tsx` head range, `useHeadPointing.ts` sends
-POINT / FACE_OK, `indicators.tsx` camera light, cursor dot, Scanning badge; `*.test.ts` vitest),
+sticky tile choice, `calibrate.ts` + `CalibrationOverlay.tsx` head range, `source.ts` pluggable point
+sources (head, gaze), `gaze.ts` the gaze slot an eye tracker feeds (`docs/eye-tracking.md`),
+`usePointing.ts` sends POINT / FACE_OK, `indicators.tsx` camera light, cursor dot, Scanning badge; `*.test.ts` vitest),
 `web/scripts/mediapipe-assets.mjs` (puts the MediaPipe wasm and model in `web/public/mediapipe/`),
 `web/src/dev/DevPanel.tsx` (keyboard stand-in, shows the settings the Core reports, pointing mode,
-camera preview in `CameraPreview.tsx`, Day 1 toggle, METRICS line),
+camera preview in `CameraPreview.tsx`, Day 1 toggle, METRICS and SHORTCUT_DEBUG lines, Reset to Home),
 `web/src/lib/useSocket.ts` (auto-reconnect), `scripts/seed_demo.py` + `data/seed_demo_week.json`
 (the simulated demo week).
 
@@ -115,6 +118,10 @@ uv run uvicorn core.main:app --reload --port 8000
 # (/ws/*, /api/* and /audio/* are proxied to the core on 127.0.0.1:8000)
 npm --prefix web run dev
 
+# A second copy side by side (e.g. for checks while the first one runs): core on 8100, web on 5273
+uv run uvicorn core.main:app --port 8100
+$env:CORE_URL = 'http://127.0.0.1:8100'; npm --prefix web run dev -- --port 5273
+
 # Sensor service: not built yet (planned: uv run python -m sensor.main)
 ```
 
@@ -150,14 +157,18 @@ For the natural voice:
 
 Audio is cached in `data/audio_cache/<sha256>.mp3` (git-ignored; delete the folder's mp3 files to
 start fresh) and served at `/audio/...`, which the web dev server proxies. A cached line plays at once
-and never touches the network. An uncached line waits at most 2.5 s (a picked word) or 4 s (a sentence
-or system line) for ElevenLabs; if it is slower or fails, the browser voice says it right away and a
-slow request is still cached for next time. After a bad key (401), no credit or quota (402), or 3
+and never touches the network. An uncached picked word is said by the browser voice at once (in its
+place among the other picked words) and made in the background for next time. An uncached sentence or
+system line waits at most 4 s for ElevenLabs; if it is slower or fails, the browser voice says it
+right away and a slow request is still cached for next time. After a bad key (401), no credit or quota (402), or 3
 errors in a row, the core logs one warning and uses the browser voice for 5 minutes.
 
-Speak picks: each picked tile's label is said as it is picked (70% volume). On by default
-(`speak_picks` in `data/profile.yaml`), switchable live from the dev panel. The confirmed sentence is
-still only said after the confirm clench.
+Speak picks: each picked tile's label is said as it is picked (70% volume); "Other..." plays a
+short soft click instead of a word. On by default (`speak_picks` in `data/profile.yaml`), switchable
+live from the dev panel. Picked words play in order, one after another, never cutting each other
+off; a word whose audio has not started within 300 ms is said by the browser voice in its place.
+The confirmed sentence is still only said after the confirm clench, and waits for the queued words;
+a help line clears the queue and plays at once.
 
 ### Real messages and calls
 
@@ -193,8 +204,9 @@ With no key the app works the same with the fixed phrases from `data/menu.yaml` 
   leaf's fixed phrase, then "Other...". A clench on a sentence opens the confirm screen with exactly
   that sentence. Without AI (or if it is slow or fails) the leaf goes straight to the confirm screen.
 - "Other..." ("Otro...") on every level brings up to 5 new options for the same path (without AI:
-  the level's `more` list from `menu.yaml`, if any). After two in a row it reads "Spell it"
-  ("Deletrear"), which for now only says "Spelling is coming soon.".
+  the level's `more` list from `menu.yaml`, if any). Each pick shows the next page; after 3 pages,
+  or when there is nothing new (or no AI), it loops back to the level's own options. A double blink
+  on an "Other..." page goes up one menu level (the pages count as the level they came from).
 - Home "Suggested" shows the AI's sentences for right now, the patient's most used sentences and its
   fixed phrases, best first (see "Learning" below).
 - The AI never picks the action or the contact; those come from the menu path.
@@ -234,8 +246,10 @@ stability margin are in `data/profile.yaml` (`ranking`).
 - Suggested also offers the sentences the patient confirms most, each with the action and contact of
   the menu leaf it was said under (María's text is still a Telegram message to María).
 - One-clench shortcut: when the top Suggested phrase is a confident guess (history share of this
-  hour >= 0.6 with at least 3 recent uses; with Jev on, Jev must agree), picking Suggested goes
-  straight to the confirm screen with it. B there opens the full Suggested list instead of going
+  hour >= 0.6 with at least 3 recent uses, or >= 0.4 when Jev picks the same phrase with confidence
+  >= 0.45; Jev never blocks what the history alone allows), picking Suggested goes straight to the
+  confirm screen with it. The dev panel's Shortcut line (SHORTCUT_DEBUG, after every Home render)
+  shows the top phrase, the history share, Jev's pick and "shortcut: yes/no (reason)". B there opens the full Suggested list instead of going
   home. The confirm clench is still required.
 - Day 1 mode (`learning: false` in SETTINGS; default `learning` in `data/profile.yaml`, dev panel
   toggle): `menu.yaml` order, the fixed Suggested list, no shortcut, no Jev, no history for the AI.
@@ -270,15 +284,18 @@ Restart the core: it logs `ranking: learning on, Jev via TypeSafe API` and `/hea
 and `jev`. Jev never blocks the scan: its answer (1.5 s timeout, 10 min cache) re-ranks the screen
 quietly only if the person has not moved yet; after a bad key or 3 failures it is off for 5 minutes.
 
-### Webcam pointing (Auto, Webcam, Head tilt)
+### Webcam pointing (Auto, Webcam, Gaze, Head tilt)
 
-Pointing mode (PRD D2) is a setting, switchable live from the dev panel (Auto / Scan / Webcam / Head
-tilt) or SETTINGS: the clench always picks; only where the highlight comes from changes.
+Pointing mode (PRD D2) is a setting, switchable live from the dev panel (Auto / Scan / Webcam / Gaze /
+Head tilt) or SETTINGS: the clench always picks; only where the highlight comes from changes.
 
 - Scan: the highlight moves by itself (scan speed). No camera.
 - Webcam: turn the head slightly toward a tile; the highlight follows. No timer.
-- Auto (the default): scans at first, switches to the head once the webcam sees a face and the head
-  points at a tile, and back to scanning after 3 s without a face. While Auto is scanning the board
+- Gaze: an eye tracker plugged into the board's gaze slot moves the highlight (`docs/eye-tracking.md`).
+  Without one the board says "No eye tracker connected" and the highlight stays put.
+- Auto (the default): scans at first, switches to the gaze (when an eye tracker sees the eyes) or
+  else the head once the person is seen and points at a tile, and back to scanning after 3 s without
+  a face. While Auto is scanning the board
   shows a blue "Scanning" / "Escaneando" badge (top right).
 - Head tilt: not built yet (it needs the headband's motion data from the sensor chunk). It scans, the
   core logs `pointing mode headtilt is not built yet ...` and the badge says so.
@@ -286,7 +303,8 @@ tilt) or SETTINGS: the clench always picks; only where the highlight comes from 
 How it works: the board runs MediaPipe Face Landmarker in the browser (GPU, CPU if the GPU fails,
 about 25 frames a second), smooths the head's yaw and pitch, maps them to a point on the screen with
 the calibrated head range, and highlights the tile under that point (or the nearest one). A new tile
-is taken only once the point is 15% inside it, so borders do not flicker. The board sends POINT (tile
+is taken only once the point is 5% inside it (`tile_switch_margin` in `data/profile.yaml`, 0 to
+0.2, and a dev panel slider that changes it live), so borders do not flicker. The board sends POINT (tile
 and the SCREEN `seq` it belongs to) only when the tile changes, and FACE_OK when the face is seen or
 lost for 300 ms; the core ignores a POINT for an older screen. Clenching can nudge the head, so in
 webcam mode a clench picks the tile that was highlighted 250 ms before it (`clench_lookback_ms` in
@@ -334,16 +352,17 @@ Camera troubleshooting (Windows):
 | Key | Event |
 |---|---|
 | Space (tap) | CLENCH: pick the highlighted tile / confirm |
-| Space (hold 1.5 s) | LONG_CLENCH: start the 5 s help countdown |
-| B | DOUBLE_BLINK: go back one level / cancel the confirm screen / cancel the help countdown |
+| Space (hold 2.5 s) | LONG_CLENCH: start the 5 s help countdown (`long_clench_ms` in `data/profile.yaml`) |
+| B | DOUBLE_BLINK: go up one menu level / cancel the confirm screen / cancel the help countdown |
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
-The expanded panel also has buttons for the same events, the pointing mode selector (Auto / Scan /
-Webcam / Head tilt) with the camera preview, "Calibrate head range" and the Cursor dot toggle (see
+The expanded panel also has buttons for the same events, "Reset to Home" (RESET: Home, first tile),
+the pointing mode selector (Auto / Scan / Webcam / Gaze / Head tilt) with the camera preview, the eye
+tracker status, "Calibrate head range", the Tile switch margin slider and the Cursor dot toggle (see
 "Webcam pointing"), a scan speed slider, an EN/ES toggle, a Speak picks on/off toggle, a Day 1 mode
 on/off toggle (all showing the values the Core reports in SETTINGS), a line showing where the last
 thing said came from ("ElevenLabs (cached)", "ElevenLabs" or "Browser") and the last METRICS ("Took 2
-clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
+clenches, 0 s waiting (Day 1: 5 clenches, 6 s)") and the Shortcut line (SHORTCUT_DEBUG).
 
 ### Milestone manual test (press Space, pick, confirm, hear it)
 
@@ -351,7 +370,8 @@ clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
    order. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
    green, and the home board shows six Spanish tiles (Sugerencias, Necesito, Personas, Cómo me
-   siento, Cuarto and the dashed "Otro...") with the highlight moving about once a second. The
+   siento, Cuarto and the dashed "Otro...") with the highlight on Sugerencias (the click sends RESET),
+   then moving about once a second. The
    browser asks for the camera (Auto mode): for steps 3 to 10 press backtick and click Scan, so the
    highlight keeps scanning whoever sits in front of the laptop.
 3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
@@ -366,14 +386,15 @@ clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
    "Other...") and confirm with Space: the laptop says "Honey, I'm okay, call me at six." and a gray
    "(demo mode) would message Maria" toast shows for 4 s (green "Message sent to Maria" with real
    sends on). The core terminal logs `DRY RUN send_message to maria: ...`.
-7. Hold Space for 1.5 s: a red full-screen countdown 5, 4, 3... and the laptop says "Calling for
+7. Hold Space for 2.5 s (a shorter hold is a normal clench): a red full-screen countdown 5, 4, 3... and the laptop says "Calling for
    help. Double blink to cancel." Press B: back where you were. Hold Space again and let it reach 0:
    the board returns to Home at once, the laptop says "Calling Maria", and toasts show the call and
    the message ("Luis needs help now").
 8. Press backtick: the Voice line shows "Browser" with no ElevenLabs keys, "ElevenLabs" /
    "ElevenLabs (cached)" with them. Click Speak picks to Off and pick a tile: nothing is said.
-9. On Home pick "Other...": new options (without a key: Yes, No, Good morning, Wait a moment). Pick
-   "Other..." again: the last tile now reads "Spell it"; picking it says "Spelling is coming soon.".
+9. On Home pick "Other...": a soft click (no word) and new options (without a key: Yes, No, Good
+   morning, Wait a moment). Pick "Other..." again: without a key it loops back to Home's own tiles;
+   with a key up to 3 pages, then back. Pick I need › Other... › Other... and press B: Home.
 10. Learning: run `uv run python scripts/seed_demo.py --load` (the core keeps running). Open the dev
     panel and click Day 1 mode to On: the board goes Home in `menu.yaml` order. Text María as in
     step 6: the Last message line reads "Took 5 clenches, 6 s waiting" with a Gemini key (4
