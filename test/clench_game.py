@@ -34,7 +34,8 @@ from clench_detect import (
     meter,
     read_levels,
 )
-from config import board_label, build_parser, eeg_channels_and_names, get_board
+from config import (board_label, build_parser, eeg_channels_and_names, get_board,
+                    prepare_or_explain)
 
 import json
 
@@ -188,7 +189,8 @@ def main():
     rows = {"emg": [channels[0], channels[3]], "blink": [channels[1], channels[2]]}
 
     print(f"{board_label(board)} @ {fs} Hz")
-    board.prepare_session()
+    if not prepare_or_explain(board):
+        return 1
     try:
         board.start_stream()
         time.sleep(WINDOW_SECONDS + 0.3)

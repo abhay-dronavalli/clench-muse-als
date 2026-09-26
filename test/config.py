@@ -81,6 +81,38 @@ def get_board(args: argparse.Namespace) -> BoardShim:
 
 # ------------------------------------------------------------------- utilities
 
+CONNECT_HELP = [
+    "Could not reach the headband. In the order these actually go wrong:",
+    "  1. Is it ON? Hold the button until the LED breathes slowly (not solid).",
+    "     A Muse with nothing connected powers itself off after a few minutes.",
+    "  2. Did another script JUST exit? BLE needs ~5 seconds to re-advertise.",
+    "     Wait, then try again.",
+    "  3. Is something else holding it? Muse phone app, muselsl, another window.",
+    "  4. Name it explicitly:  --name Muse-XXXX  (see the battery compartment)",
+    "  5. Battery low? Charge 20 minutes and retry.",
+    "  6. Prove the code is fine with --synthetic, then retry with --debug.",
+]
+
+
+def prepare_or_explain(board):
+    """prepare_session() with a readable failure instead of a raw traceback.
+
+    Returns True if the session is open. Every script that connects should go
+    through this: a stack trace tells you nothing you can act on, and the real
+    cause is nearly always one of the six things listed above.
+    """
+    try:
+        board.prepare_session()
+        return True
+    except Exception as exc:
+        print()
+        print(f"CANNOT CONNECT: {type(exc).__name__}: {exc}")
+        print()
+        for line in CONNECT_HELP:
+            print(line)
+        return False
+
+
 def board_label(board: BoardShim) -> str:
     """Human-readable name of the board we ended up with."""
     return "SYNTHETIC_BOARD" if board.board_id == BoardIds.SYNTHETIC_BOARD else "MUSE_2_BOARD"

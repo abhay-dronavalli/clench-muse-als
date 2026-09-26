@@ -40,7 +40,8 @@ import numpy as np
 from brainflow.board_shim import BoardShim, BrainFlowPresets
 from brainflow.data_filter import DataFilter, FilterTypes, NoiseTypes
 
-from config import board_label, build_parser, eeg_channels_and_names, get_board
+from config import (board_label, build_parser, eeg_channels_and_names, get_board,
+                    prepare_or_explain)
 
 CALIBRATION_FILE = pathlib.Path(__file__).parent / "calibration.json"
 
@@ -388,7 +389,8 @@ def main():
     print(f"  clench channels: {names[0]}, {names[3]}   "
           f"blink channels: {names[1]}, {names[2]}")
 
-    board.prepare_session()
+    if not prepare_or_explain(board):
+        return 1
     try:
         board.start_stream()
         time.sleep(WINDOW_SECONDS + 0.3)  # let the window fill before we measure
