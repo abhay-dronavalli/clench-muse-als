@@ -295,7 +295,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   }
 
   return (
-    <aside className="fixed bottom-2 left-2 z-50 w-80 rounded-xl bg-zinc-800/95 p-4 text-sm text-zinc-100 shadow-2xl ring-1 ring-zinc-600">
+    <aside className="fixed bottom-2 left-2 z-50 max-h-[calc(100vh-1rem)] w-80 overflow-y-auto rounded-xl bg-zinc-800/95 p-4 text-sm text-zinc-100 shadow-2xl ring-1 ring-zinc-600">
       <header className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2 font-bold">
           <StatusDot status={status} label="Input" /> Dev input
