@@ -1,4 +1,5 @@
 .venv/
 recordings/
+calibration.json
 __pycache__/
 *.pyc

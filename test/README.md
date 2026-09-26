@@ -53,6 +53,7 @@ python check_connection.py     # 1. does data arrive at all?
 python live_bands.py           # 2. live delta/theta/alpha/beta/gamma + mindfulness
 python record.py --seconds 60  # 3. save a session to recordings/*.csv
 python live_plot.py            # 4. (optional) scope view of the 4 EEG channels
+python clench_detect.py        # 5. calibrate, then emit CLENCH / BLINK input events
 ```
 
 Add `--synthetic` to any of them for fake data with no hardware:
@@ -62,6 +63,7 @@ python check_connection.py --synthetic
 python live_bands.py --synthetic
 python record.py --synthetic --seconds 10 --label smoke
 python live_plot.py --synthetic
+python clench_detect.py --synthetic --no-clench-cal
 ```
 
 Or set it once for the whole shell:
@@ -107,6 +109,14 @@ preset into `recordings/` with `DataFilter.write_file`. Read them back with
 **`live_plot.py`** — matplotlib scope of the four EEG channels, bandpassed 1–40 Hz
 with 50/60 Hz notch. `--save frame.png` grabs a single frame headlessly.
 
+**`clench_detect.py`** — the input layer. Calibrates to you, then prints `CLENCH`,
+`LONG_CLENCH`, `BLINK` and `DOUBLE_BLINK` as you make them, with a live meter so you
+can see how close to the threshold you are. See "Using it as input" below.
+
+**`test_gestures.py`** — feeds made-up envelope traces through the gesture logic and
+asserts the right events come out. Run it after changing any threshold or timing;
+it needs no headband and finishes instantly.
+
 ### Presets (what data lives where)
 
 | Preset | Contents | Rate | Notes |
@@ -144,6 +154,58 @@ The single biggest factor in whether any of this looks like brain activity:
 | **Heart rate** | `record.py --seconds 30`, sitting still | `*_ancillary.csv` holds the PPG trace; its periodicity is your pulse (~1 Hz) |
 
 ---
+
+## Using it as input
+
+`clench_detect.py` is where this stops being a signal viewer and starts being a
+controller. Two different physiological signals, deliberately kept apart:
+
+| Gesture | What it really is | Where it shows up | Band |
+|---|---|---|---|
+| Jaw clench | **EMG** — masseter muscle firing | TP9 / TP10 (ears) | 20–110 Hz |
+| Blink | **EOG** — eyelid movement artifact | AF7 / AF8 (forehead) | 1–10 Hz |
+
+Neither is brainwaves, and that is exactly why they are good input: they are huge,
+fast, and voluntary, where real EEG intent is small, slow and unreliable.
+
+### Calibrate every time you put the band on
+
+Microvolt levels depend on skin moisture and how the ear-tips are seated, so a
+threshold from yesterday is meaningless today. Calibration takes about 30 seconds:
+
+```powershell
+python clench_detect.py
+```
+
+1. **Rest** (10 s) — sit still, jaw relaxed and slightly open, try not to blink.
+   Measures your noise floor.
+2. **Clench** (3 × 2 s) — clench hard on each prompt. Measures your ceiling.
+3. **Blink** (5 s) — blink hard about once a second.
+
+The threshold lands 30% of the way from rest up to your real peak, which is far
+more reliable than a fixed multiple of the noise. It is saved to `calibration.json`;
+reuse it with `--load` as long as the band has not moved.
+
+### What good numbers look like
+
+The `--- THRESHOLDS ---` block prints your rest level, the firing threshold, and
+your measured peak with a **headroom** figure. Headroom is peak ÷ threshold:
+
+- **3x or more** — excellent, clench detection will feel instant and never misfire.
+- **1.5x–3x** — usable.
+- **under 1.5x** — re-seat the ear-tips and recalibrate. The script warns you.
+
+### Tuning
+
+| Flag | Use it when |
+|---|---|
+| `--long-ms 1500` | LONG_CLENCH (the help signal) fires too fast or too slow |
+| `--double-ms 700` | Your two blinks are not being caught as one DOUBLE_BLINK — raise it |
+| `--k 6` | Only affects the fallback threshold when you skip active calibration. Raise it if resting noise causes false CLENCHes |
+| `--no-clench-cal` | Quick start with a purely statistical threshold, no prompts |
+
+If you get false CLENCHes while sitting still, the cause is almost always a loose
+ear-tip rather than a bad threshold — check `live_plot.py` first.
 
 ## Troubleshooting a real Muse
 
