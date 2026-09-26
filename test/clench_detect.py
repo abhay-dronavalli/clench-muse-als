@@ -219,9 +219,17 @@ def calibrate(board, rows, fs, window_samples, args):
                 # 30% of the way up. Low enough that a gentle clench still fires,
                 # high enough that chewing-adjacent noise does not.
                 emg_threshold = emg_rest + 0.30 * (emg_peak - emg_rest)
-            else:
+            elif emg_peak > emg_rest:
                 print("   !! clench barely rose above rest -- check the ear-tips.")
                 print("      Falling back to the statistical threshold.")
+            # A good clench is many times the resting floor. If it is not, the
+            # threshold ends up sitting just above the noise, which produces both
+            # missed clenches and phantom ones.
+            if emg_peak and emg_peak < emg_rest * 4:
+                print(f"   !! WEAK CLENCH: peak {emg_peak:.0f} uV is only "
+                      f"{emg_peak / emg_rest:.1f}x your resting {emg_rest:.0f} uV.")
+                print("      Redo this: clench HARD the instant the countdown starts,")
+                print("      and hold it for the whole 2 seconds. Check the ear-tips too.")
 
         print("\n3) BLINK: blink hard, once a second, for 5 seconds.")
         wait_for_enter("   Press Enter when ready...")
@@ -390,13 +398,15 @@ def detect_loop(board, rows, fs, window_samples, calibration, args):
         emg_level, blink_level = levels
 
         for name, detail in recognizer.update(emg_level, blink_level, now):
-            print(f"{CR}  [{now - started:6.1f}s]  {name:<13} {detail}" + " " * 20)
+            line = f"  [{now - started:6.1f}s]  {name:<13} {detail}"
+            print(CR + line.ljust(LINE_WIDTH))
             recent.append(name)
 
         # Live meter: bar fills as you approach the threshold, | marks the line.
-        print(f"{CR}  {meter(emg_level, recognizer.clench.threshold)} emg {emg_level:6.1f}   "
-              f"{meter(blink_level, recognizer.blink.threshold)} blink {blink_level:6.1f}   "
-              f"{' '.join(list(recent)[-3:]):<40}", end="", flush=True)
+        status = (f"  {meter(emg_level, recognizer.clench.threshold)} emg {emg_level:6.1f}   "
+                  f"{meter(blink_level, recognizer.blink.threshold)} blink {blink_level:6.1f}   "
+                  f"{' '.join(list(recent)[-3:])}")
+        print(CR + status.ljust(LINE_WIDTH), end="", flush=True)
         time.sleep(TICK_SECONDS)
 
 

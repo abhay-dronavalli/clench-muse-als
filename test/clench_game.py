@@ -125,7 +125,7 @@ def play(board, rows, fs, window_samples, calibration, args):
             detail = f"  (cursor was on cell {cursor + 1}, target was {target + 1})"
         if outcome == "TIMEOUT":
             detail = "  (no clench detected)"
-        print(f"{CR}  round {round_number:2d}/{args.rounds}   {marks}{detail}" + " " * 20)
+        print(CR + f"  round {round_number:2d}/{args.rounds}   {marks}{detail}".ljust(120))
         results.append((outcome, reaction_ms))
         time.sleep(FEEDBACK_SECONDS)
 
