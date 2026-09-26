@@ -223,7 +223,9 @@ def test_day1_mode_ignores_history(menu, profile, db):
 
 
 def test_suggested_offers_the_most_used_sentences_with_their_action(menu, profile, db):
-    confirm_many(db, "people.maria.text", MARIA, DAYS * 2, action="send_message", contact="maria")
+    # Sent every morning: the most used sentence, but not a confident guess at 18:30 (no shortcut).
+    mornings = [t - 9.5 * 3600 for t in DAYS]
+    confirm_many(db, "people.maria.text", MARIA, mornings * 2, action="send_message", contact="maria")
     confirm_many(db, "need.water", "I'd like some water, please.", DAYS[:3])
     s, sent = make(menu, profile, db)
     pick(s, sent, "Suggested")

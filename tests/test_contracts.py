@@ -43,7 +43,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
     "SETTINGS": (
         contracts.Settings,
-        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False},
+        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False, "learning": True},
     ),
     "SCREEN": (
         contracts.Screen,
@@ -134,6 +134,7 @@ def test_round_trip(name):
         {"type": "ACTION_RESULT", "action": "place_call", "ok": True, "detail": ""},  # contact is required
         {"type": "READY", "board": 1},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
+        {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "learning": "day1"},
         {
             "type": "SCREEN",
             "screen": "menu",
@@ -164,10 +165,11 @@ def test_screen_loading_is_optional():
     assert msg.loading is False
 
 
-def test_settings_lang_and_speak_picks_are_optional():
+def test_settings_lang_speak_picks_and_learning_are_optional():
     msg = parse_message({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 800})
     assert msg.lang is None
     assert msg.speak_picks is None
+    assert msg.learning is None
 
 
 def test_typescript_contract_has_every_type():

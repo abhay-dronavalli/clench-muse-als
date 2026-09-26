@@ -37,7 +37,7 @@ Every client gets the current SETTINGS the moment it connects, and again after e
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
 | READY | Board | Core | Board connected; Core replies with the current view |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
-| SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks; the Core announces the current values |
+| SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks, learning; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
@@ -180,9 +180,9 @@ matching AUDIO_DONE wins and later ones are ignored.
 
 ### SETTINGS
 
-Caregiver changes pointing mode, scan speed, language or speak picks. Applies at once, no restart
-(PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks toggle) on
-`/ws/input`.
+Caregiver changes pointing mode, scan speed, language, speak picks or learning. Applies at once, no
+restart (PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks and
+Day 1 mode toggles) on `/ws/input`.
 
 The Core sends the same message the other way, with every field filled in, to each board, console
 and input client when it connects, and to all of them after every SETTINGS it receives (the sender
@@ -194,9 +194,10 @@ included). Screens show these values instead of assuming defaults.
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
+| `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true}
 ```
 
 ## Core -> Board

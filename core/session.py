@@ -83,6 +83,7 @@ from core.profile import Profile
 from core.rank import Entry, Ranker
 from core.rank.history import Sentence, leaf_path
 from core.rank.jev import JevAnswer, JevRanker
+from core.rank.ranker import SHORTCUT_HISTORY_SHARE
 from core.suggest.provider import MAX_SENTENCES, Option, drop_known, text_key
 from core.suggest.service import Pending, Suggester
 from core.voice import Voice
@@ -94,6 +95,7 @@ SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
 HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
 SPELL_AFTER = 2  # "Other..." picks in a row before the tile becomes "Spell it"
+JEV_SHORTCUT = 0.8  # Jev confidence needed for the one-clench shortcut
 
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
@@ -278,6 +280,9 @@ class Session:
         self._help_left = 0  # seconds left in the help countdown
         self._help_from = SessionState.SCANNING  # where a cancelled countdown goes back to
         self._waiting: object | None = None  # token of the AI result LOADING waits for
+        # The Suggested tile when CONFIRMING came from the one-clench shortcut: a double blink then
+        # opens the Suggested list instead of going home.
+        self._shortcut_from: Item | None = None
         self._loading_timer: TimerHandle | None = None
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms)
 
@@ -302,8 +307,7 @@ class Session:
 
     def start(self) -> None:
         """Show home and start scanning."""
-        self._stack = [self._home()]
-        self._enter_frame()
+        self._go_home()
 
     def stop(self) -> None:
         self.pointer.stop()
@@ -326,7 +330,11 @@ class Session:
     def settings(self) -> Settings:
         """The current settings, as the Core announces them to every client."""
         return Settings(
-            pointing_mode=self.pointing_mode, scan_ms=self.scan_ms, lang=self.lang, speak_picks=self.speak_picks
+            pointing_mode=self.pointing_mode,
+            scan_ms=self.scan_ms,
+            lang=self.lang,
+            speak_picks=self.speak_picks,
+            learning=self.learning,
         )
 
     def handle(self, msg: Message) -> None:
@@ -390,7 +398,12 @@ class Session:
             log.info("cancelled: %r", text)
             self._record(item, rejected=True, text=text)
             self._pending = None
-            self._enter_frame()  # back to the screen the sentence was picked on
+            branch, self._shortcut_from = self._shortcut_from, None
+            if branch is not None:
+                # The one-clench guess was wrong: show the whole Suggested list instead of going home.
+                self._open_suggested_list(branch)
+            else:
+                self._enter_frame()  # back to the screen the sentence was picked on
         elif self.state is SessionState.HELP_COUNTDOWN:
             self._cancel_help()
         else:
@@ -416,7 +429,13 @@ class Session:
         if item.kind == "branch":
             assert item.node is not None
             if item.node.ai_now:
-                self._wait(self._now_request(), lambda sentences: self._open_suggested(item, sentences))
+                top = self._shortcut(item)
+                if top is not None:
+                    log.info("shortcut: straight to the confirm screen with %r", top.phrase(self.lang))
+                    self._shortcut_from = item
+                    self._confirm(top)
+                else:
+                    self._open_suggested_list(item)
             else:
                 self._push(self._menu_frame(item.node, item.id, item))
         elif self.suggester.available:
@@ -448,6 +467,7 @@ class Session:
     def _confirm_pending(self) -> None:
         item = self._pending
         assert item is not None and item.action is not None
+        self._shortcut_from = None
         text = item.phrase(self.lang)
         ctx = self._context(text, item.contact)
         self._record(item, confirmed=True, text=text)
@@ -470,13 +490,16 @@ class Session:
         self._cancel_speak_timer()
         self._speaking_id = None
         self._pending = None
-        self._stack = [self._home()]
-        self._enter_frame()
+        self._go_home()
 
     # --- frames ---------------------------------------------------------------
 
     def _home(self) -> Frame:
         return self._menu_frame(self._menu.root, "", None)
+
+    def _go_home(self) -> None:
+        self._stack = [self._home()]
+        self._enter_frame()
 
     def _menu_item(self, node: MenuNode, prefix: str) -> Item:
         tile_id = _join(prefix, node.id)
@@ -673,12 +696,62 @@ class Session:
     def _jev_on(self) -> bool:
         return self.learning and self.jev is not None and self.jev.available
 
-    def _jev_request(self, items: list[Item]) -> Pending[JevAnswer]:
+    def _jev_key(self, items: list[Item]) -> tuple[Any, ...]:
+        return (tuple(i.id for i in items), self.ranker.hour(), self.ranker.last_outcome_id(), self.lang)
+
+    def _jev_request(self, items: list[Item], crumbs: list[str] | None = None) -> Pending[JevAnswer]:
         """Jev's probabilities for `items` right now (cached on ids, hour, last outcome, language)."""
         assert self.jev is not None
-        key = (tuple(i.id for i in items), self.ranker.hour(), self.ranker.last_outcome_id(), self.lang)
         criteria = {i.id: i.phrase(self.lang) if i.kind == "suggestion" else i.label(self.lang) for i in items}
-        return self.jev.rank(key, criteria, self.ranker.jev_state(self.lang, self._crumbs(), self.state_level))
+        state = self.ranker.jev_state(self.lang, self._crumbs() if crumbs is None else crumbs, self.state_level)
+        return self.jev.rank(self._jev_key(items), criteria, state)
+
+    # --- one-clench shortcut ----------------------------------------------------
+
+    def _suggested_branch(self) -> Item | None:
+        return next((i for i in self._stack[0].items if i.node is not None and i.node.ai_now), None)
+
+    def _shortcut(self, branch: Item) -> Item | None:
+        """The phrase to confirm straight away when Suggested is picked, or None. Only with learning on,
+        and only when the top phrase (history and fixed phrases, ranked) is a confident guess: Jev's
+        confidence >= 0.8 with Jev on (and Jev picking the same phrase), otherwise the history share
+        >= 0.6 (Ranker.history_confidence). A cancel of it in the last 24 h lowers the confidence as it
+        lowers the score. The confirm clench is still required (PRD D5)."""
+        if not self.learning:
+            return None
+        pool = self._suggested_pool(branch, None)  # no AI sentences: the learned habits only
+        if not pool:
+            return None
+        entries = [self._entry(i, by_text=True) for i in pool]
+        answer = self.jev.cached(self._jev_key(pool)) if self.jev is not None and self._jev_on() else None
+        scored = self.ranker.score(
+            entries, self.lang, priors=answer.probabilities if answer else None, state_level=self.state_level
+        )
+        top = self.ranker.order_full(entries, scored)[0]
+        keep = 1.0 - scored[top].reject
+        if answer is not None:
+            confidence, need, how = (answer.confidence if answer.choice == top else 0.0) * keep, JEV_SHORTCUT, "Jev"
+        else:
+            confidence, need, how = self.ranker.history_confidence(top, scored) * keep, SHORTCUT_HISTORY_SHARE, "history"
+        log.info("shortcut check: %s confidence %.2f for %s (needs %.1f)", how, confidence, top, need)
+        return next(i for i in pool if i.id == top) if confidence >= need else None
+
+    def _prefetch_shortcut(self) -> None:
+        """At home, ask Jev about the Suggested phrases now, so the shortcut can use its answer."""
+        branch = self._suggested_branch()
+        if branch is None or not self._jev_on():
+            return
+        pool = self._suggested_pool(branch, None)
+        if len(pool) >= 2:
+            self._jev_request(pool, [branch.label(self.lang)])
+
+    def _open_suggested_list(self, branch: Item) -> None:
+        """The whole Suggested list: with the AI's sentences for right now (waiting for them at most
+        4 s), or the fixed list in Day 1 mode."""
+        if not self.learning:
+            self._open_suggested(branch, None)
+            return
+        self._wait(self._now_request(), lambda sentences: self._open_suggested(branch, sentences))
 
     def _ask_jev(self, frame: Frame) -> None:
         """Ask Jev about this frame's candidates, in the background. The scanner never waits: the
@@ -718,6 +791,8 @@ class Session:
         """Show the top frame from its first tile and prefetch what could be picked next."""
         self.state = SessionState.SCANNING
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
+        if len(self._stack) == 1:
+            self._prefetch_shortcut()
         self.pointer.on_tiles_changed(len(self.frame.items) + 1)
         self.pointer.start()
         self._emit(self._screen())
@@ -763,7 +838,7 @@ class Session:
             self._ai_path(),
             self.lang,
             leaves=tuple((i.label(self.lang), i.phrase(self.lang)) for i in frame.items if i.kind == "leaf"),
-            now=any(i.kind == "branch" and i.node is not None and i.node.ai_now for i in frame.items),
+            now=self.learning and any(i.kind == "branch" and i.node is not None and i.node.ai_now for i in frame.items),
             other_shown=frame.shown if frame.others < SPELL_AFTER else None,
         )
 
@@ -850,8 +925,8 @@ class Session:
         self._run_action("place_call", ctx)
         self._run_action("send_message", ctx)
         self._voice.speak(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), self.lang, "system")
-        self._stack = [self._home()]
-        self._enter_frame()  # straight home: a system line never holds the session
+        self._shortcut_from = None
+        self._go_home()  # straight home: a system line never holds the session
 
     def _help_screen(self) -> Screen:
         return Screen(
@@ -877,9 +952,25 @@ class Session:
         lang_changed = s.lang is not None and s.lang != self.lang
         if s.lang is not None:
             self.lang = s.lang
+        learning_changed = s.learning is not None and s.learning != self.learning
+        if s.learning is not None:
+            self.learning = s.learning
+            self.suggester.use_history = s.learning
         self._emit(self.settings())  # every client sees the real values, whoever changed them
-        if lang_changed:
+        if learning_changed:
+            self._change_learning()
+        elif lang_changed:
             self._change_language()
+
+    def _change_learning(self) -> None:
+        """Day 1 mode on or off. While scanning, the board goes back to home so the before / after
+        shows at once; otherwise (confirming, speaking, help) it applies from the next screen."""
+        log.info("learning %s", "on" if self.learning else "off: Day 1 mode (menu.yaml order, fixed Suggested list)")
+        if self.state in (SessionState.SCANNING, SessionState.LOADING):
+            self._cancel_wait()
+            self._go_home()
+        else:
+            self._stack = [self._home()]  # where CONFIRMING's cancel and SPEAKING's end return to
 
     def _change_language(self) -> None:
         """Menu labels follow the language. AI text was written in the old one, so screens holding

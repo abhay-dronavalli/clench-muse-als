@@ -113,6 +113,8 @@ export interface Settings {
   lang?: Lang
   /** say each picked tile aloud; omit to keep the current value */
   speak_picks?: boolean
+  /** rank by the patient's history; false = "Day 1 mode" (menu.yaml order); omit to keep it */
+  learning?: boolean
 }
 
 // --- Core -> Board ---

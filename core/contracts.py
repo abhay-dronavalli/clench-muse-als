@@ -122,6 +122,8 @@ class Settings(_Msg):
     scan_ms: int = Field(gt=0)
     lang: Lang | None = None  # omit to keep the current language
     speak_picks: bool | None = None  # say each picked tile aloud; omit to keep the current value
+    # Rank by the patient's history; false = "Day 1 mode" (menu.yaml order). Omit to keep it.
+    learning: bool | None = None
 
 
 # --- Core -> Board ------------------------------------------------------------
