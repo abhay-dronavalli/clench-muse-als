@@ -234,11 +234,36 @@ def test_two_others_in_a_row_become_spell_it(session, sched, sent, loop):
     assert second[-1] == "Spell it"
     assert not set(first[:-1]) & set(second[:-1])  # the second batch repeats nothing
     assert last_screen(sent).path == ["Other", "Other"]
-    # Going back resets the count for that screen: its tile reads "Other..." again.
-    session.handle(DoubleBlink(t=0.0))
-    assert labels(sent)[-1] == "Other..."
+    # A double blink leaves both "Other..." pages at once: they belong to the home level.
     session.handle(DoubleBlink(t=0.0))
     assert last_screen(sent).path == []
+    assert labels(sent)[-1] == "Other..."
+
+
+def test_double_blink_after_other_pages_goes_up_one_menu_level(session, sched, sent, loop):
+    loop.run()
+    pick(session, sched, sent, "I need")
+    loop.run()
+    pick(session, sched, sent, "Other...")
+    loop.run()
+    pick(session, sched, sent, "Other...")
+    assert last_screen(sent).path == ["I need", "Other", "Other"]
+    session.handle(DoubleBlink(t=0.0))
+    # Home, not the first "I need" page: the "Other..." pages are the same level as "I need".
+    assert last_screen(sent).path == []
+    assert [t.id for t in last_screen(sent).tiles][:2] == ["suggested", "need"]
+    assert session.highlight == 0
+
+
+def test_double_blink_from_a_submenu_other_page_goes_to_its_parent(session, sched, sent, loop):
+    loop.run()
+    for tile in ["I need", "Pain"]:
+        pick(session, sched, sent, tile)
+        loop.run()
+    pick(session, sched, sent, "Other...")
+    assert last_screen(sent).path == ["I need", "Pain", "Other"]
+    session.handle(DoubleBlink(t=0.0))
+    assert last_screen(sent).path == ["I need"]
 
 
 def test_spanish_spell_it(menu, profile, sched, sent, loop):
@@ -414,9 +439,10 @@ def test_echo_rules(session, sched, sent, loop):
     sentence = labels(sent)[0]
     pick(session, sched, sent, "Other...")
     loop.run()
-    session.handle(DoubleBlink(t=0.0))
+    session.handle(DoubleBlink(t=0.0))  # up one level: I need
+    pick(session, sched, sent, "Water")
     pick(session, sched, sent, sentence)
-    assert said(sent, "echo") == ["I need", "Water", "Other"]  # never the sentence itself
+    assert said(sent, "echo") == ["I need", "Water", "Other", "Water"]  # never the sentence itself
 
 
 def test_only_the_top_sentence_is_made_in_advance(session, sched, sent, loop):

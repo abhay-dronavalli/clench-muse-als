@@ -72,8 +72,9 @@ Short jaw clench: pick the highlighted tile. Also sent by the web dev panel (Spa
 
 ### DOUBLE_BLINK
 
-Two blinks within about 700 ms: go back one step, answer No, or cancel (help countdown,
-confirm screen). Single blinks are never sent (PRD D4).
+Two blinks within about 700 ms: go up one menu level, answer No, or cancel (help countdown,
+confirm screen). Pages opened with "Other..." count as the level they came from, so Home > I need >
+Other > Other goes back to Home. Single blinks are never sent (PRD D4).
 
 | Field | Type | Notes |
 |---|---|---|

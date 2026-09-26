@@ -9,7 +9,8 @@ background through the action registry; its outcome comes back as ACTION_RESULT.
 has an id; SPEAKING only ends on the AUDIO_DONE with the id of the utterance it is waiting for.
 
 Where the person is: a stack of frames. A frame is a menu level, a batch of new options from
-"Other...", or the suggestions screen for a picked leaf. DOUBLE_BLINK pops one frame.
+"Other...", or the suggestions screen for a picked leaf. DOUBLE_BLINK goes up one menu level: it
+pops the "Other..." pages of the current level together with the level itself.
 
 AI (PRD section 5 step 6, D6, decisions.md #5 and #7):
   - Picking a leaf opens the suggestions screen: up to 3 AI sentences, then the leaf's fixed phrase,
@@ -417,8 +418,7 @@ class Session:
     def _on_double_blink(self) -> None:
         if self.state is SessionState.SCANNING:
             if len(self._stack) > 1:
-                self._stack.pop()
-                self._enter_frame()
+                self._up_one_level()
             else:
                 log.info("DOUBLE_BLINK at home: nothing to go back to")
         elif self.state is SessionState.LOADING:
@@ -736,6 +736,15 @@ class Session:
 
     def _push(self, frame: Frame) -> None:
         self._stack.append(frame)
+        self._enter_frame()
+
+    def _up_one_level(self) -> None:
+        """DOUBLE_BLINK: up one menu level. Pages opened with "Other..." belong to the level they came
+        from, so they are all left together with it (Home > I need > Other > Other goes to Home)."""
+        while len(self._stack) > 1 and self.frame.via_other:
+            self._stack.pop()
+        if len(self._stack) > 1:
+            self._stack.pop()
         self._enter_frame()
 
     # --- ranking --------------------------------------------------------------
