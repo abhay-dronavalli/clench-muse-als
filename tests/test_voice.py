@@ -174,7 +174,7 @@ def test_miss_writes_file_and_row_then_hit_makes_no_request(cache, db):
     key = AudioCache.key("Dolor", "es", "VOICE123", "eleven_flash_v2_5")
     url = f"/audio/{key}.mp3"
     assert sent == [
-        PlayAudio(id=first, kind="echo", url=url, text="Dolor", lang="es", cached=False),
+        Speak(id=first, kind="echo", text="Dolor", lang="es"),  # an echo never waits for ElevenLabs
         PlayAudio(id=second, kind="echo", url=url, text="Dolor", lang="es", cached=True),
     ]
     assert cache.path(key).read_bytes() == MP3
@@ -265,20 +265,25 @@ def test_same_text_twice_makes_one_request(cache):
     assert [type(m) for m in sent] == [PlayAudio, PlayAudio]
 
 
-def test_late_echo_is_dropped_when_something_newer_was_said(cache):
+def test_echoes_go_out_at_once_in_order_and_are_cached_for_next_time(cache):
     service = ElevenLabs(delay=0.05)
     sent: list[Message] = []
 
     async def go():
         voice = Voice(sent.append, tts=service.tts(), cache=cache)
-        voice.speak("Necesito", "es", "echo")
-        newer = voice.speak("Dolor", "es", "echo")
+        ids = [voice.speak(text, "es", "echo") for text in ["Necesito", "Dolor", "Espalda"]]
+        # Sent before any audio exists: the board says them with the browser voice, in order.
+        assert [(m.id, m.text) for m in sent] == list(zip(ids, ["Necesito", "Dolor", "Espalda"]))
         await asyncio.sleep(0.2)
+        assert len(sent) == 3  # nothing late, nothing dropped
+        again = voice.speak("Dolor", "es", "echo")
         await voice.aclose()
-        return newer
+        return again
 
-    newer = asyncio.run(go())
-    assert [(m.id, m.text) for m in sent] == [(newer, "Dolor")]
+    again = asyncio.run(go())
+    assert all(isinstance(m, Speak) for m in sent[:3])
+    assert isinstance(sent[3], PlayAudio) and sent[3].id == again and sent[3].cached
+    assert len(service.requests) == 3
 
 
 # --- circuit breaker ---------------------------------------------------------------------------

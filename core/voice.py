@@ -5,9 +5,12 @@ the session only reacts to the phrase it is waiting for.
 
 speak(text, lang, kind):
   - audio already in the disk cache: PLAY_AUDIO right away (no network).
-  - not cached and ElevenLabs is available: synthesize with a short timeout (2.5 s for an echo, 4 s
-    for a phrase or system line). In time: save it and send PLAY_AUDIO. Too slow or an error: send
-    SPEAK so the browser voice says it at once; a slow request keeps going and is cached for next time.
+  - an echo (a picked word) that is not cached: SPEAK right away, so the board says it with the
+    browser voice in its place among the other picked words, and ElevenLabs makes the audio in the
+    background for next time. Echoes are sent in the order they were picked and never dropped.
+  - a phrase or system line that is not cached, with ElevenLabs available: synthesize with a 4 s
+    timeout. In time: save it and send PLAY_AUDIO. Too slow or an error: send SPEAK so the browser
+    voice says it at once; a slow request keeps going and is cached for next time.
   - no ElevenLabs key or voice id (NullTTS), or the circuit breaker is open: SPEAK.
 
 The app therefore always talks, with no key and with no internet. After a 401, a 402 / quota error or
@@ -44,8 +47,9 @@ Emit = Callable[[Message], None]
 AUDIO_DIR = DATA_DIR / "audio_cache"
 AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$")
 
-# How long a live utterance waits for ElevenLabs before the browser voice says it instead.
-TIMEOUTS: dict[UtteranceKind, float] = {"echo": 2.5, "phrase": 4.0, "system": 4.0}
+# How long a live phrase or system line waits for ElevenLabs before the browser voice says it
+# instead. An echo never waits (see speak()).
+TIMEOUTS: dict[UtteranceKind, float] = {"phrase": 4.0, "system": 4.0}
 
 ELEVENLABS_API = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_MODEL = "eleven_flash_v2_5"
@@ -325,7 +329,6 @@ class Voice:
         self._cache = cache
         self.breaker = breaker or CircuitBreaker()
         self._timeouts = timeouts
-        self._latest: str | None = None  # newest utterance id; a late echo older than this is dropped
         self._inflight: dict[str, asyncio.Task[bool]] = {}  # one request per text, shared by callers
         self._tasks: set[asyncio.Task[Any]] = set()
         self.chars_sent = 0  # characters of audio made since startup (free-tier quota watch)
@@ -341,7 +344,6 @@ class Voice:
     def speak(self, text: str, lang: Lang, kind: UtteranceKind) -> str:
         """Say `text` on the board and return the utterance id. Never blocks and never raises."""
         uid = new_utterance_id()
-        self._latest = uid
         key = self._key(text, lang)
         if key is not None:
             assert self._cache is not None
@@ -353,7 +355,10 @@ class Voice:
                     loop = asyncio.get_running_loop()
                 except RuntimeError:  # no event loop (some tests): no time to fetch audio
                     loop = None
-                if loop is not None:
+                if loop is not None and kind == "echo":
+                    # Never held back: said by the browser now, in order, and cached for next time.
+                    self._fetch(key, text, lang)
+                elif loop is not None:
                     self._keep(loop.create_task(self._speak_uncached(uid, key, text, lang, kind)))
                     return uid
         self._emit(Speak(id=uid, kind=kind, text=text, lang=lang))
@@ -433,9 +438,6 @@ class Voice:
         msg: Message = self._play(uid, key, text, lang, kind, cached=False) if ok else Speak(
             id=uid, kind=kind, text=text, lang=lang
         )
-        if kind == "echo" and self._latest != uid:
-            log.debug("voice: echo %r dropped, something newer was said", text)
-            return
         self._emit(msg)
 
     def _fetch(self, key: str, text: str, lang: Lang) -> asyncio.Task[bool]:
