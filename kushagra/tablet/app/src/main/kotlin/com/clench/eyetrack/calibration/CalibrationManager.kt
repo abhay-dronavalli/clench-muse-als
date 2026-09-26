@@ -19,6 +19,9 @@ class CalibrationManager {
     )
 
     private val gazeSamples = mutableListOf<CalibrationSample>()
+
+    /** Read-only view for accuracy computation. */
+    val samples: List<CalibrationSample> get() = gazeSamples
     private val headSamples = mutableListOf<HeadPose>()
     private val faceSamples = mutableListOf<FacePoseSnapshot>()
 

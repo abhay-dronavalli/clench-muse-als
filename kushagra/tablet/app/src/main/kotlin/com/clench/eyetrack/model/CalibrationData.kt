@@ -36,6 +36,13 @@ data class CalibrationResult(
     val faceSnapshot: FacePoseSnapshot,
 )
 
+/** Accuracy stats computed after calibration completes. */
+data class CalibrationAccuracy(
+    val meanErrorPx: Float,
+    val maxErrorPx: Float,
+    val meanErrorPct: Float,
+)
+
 /** The 9-point calibration flow state. */
 enum class CalibrationStep {
     IDLE,
