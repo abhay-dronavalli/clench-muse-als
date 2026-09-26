@@ -17,6 +17,8 @@ state with no matplotlib in it, which is exactly why it was written that way.
 """
 
 import random
+import json
+from pathlib import Path
 import time
 import tkinter as tk
 from tkinter import ttk
@@ -331,15 +333,16 @@ class FlappyWindow(ActivityWindow):
 class Round:
     """One prompt and what came of it."""
 
-    def __init__(self, want):
+    def __init__(self, want, now=None):
         self.want = want
-        self.shown_at = time.monotonic()
+        self.shown_at = time.monotonic() if now is None else now
+        self.ended_at = None
         self.outcome = None            # "hit" | "wrong" | "miss"
         self.latency_ms = None
         self.got = None
 
 
-class DrillWindow(ActivityWindow):
+class DrillState:
     """Prompts one of the two inputs at random and records what actually fired.
 
     Reliability and latency are different questions and this answers both, but
@@ -361,57 +364,93 @@ class DrillWindow(ActivityWindow):
     HOW = {CLENCH: "one short jaw clench",
            LONG_BLINK: "close your eyes and keep them shut"}
 
-    def __init__(self, parent, on_close, rounds=ROUNDS, inputs=(CLENCH, LONG_BLINK),
-                 seed=None):
-        super().__init__(parent, "Two-input drill", 620, 340, on_close)
+    def __init__(self, rounds=ROUNDS, inputs=(CLENCH, LONG_BLINK), seed=None,
+                 clock=time.monotonic, require_neutral=False):
+        self.clock = clock
+        self.started_at = clock()
+        self.require_neutral = require_neutral
+        self.neutral_since = None
+        self.last_state_at = None
+        self.feedback = "Open eyes and relax jaw. Wait for the prompt."
+        self.timeline = []
         self.total_rounds = rounds
         self.inputs = list(inputs)
         self.rng = random.Random(seed)
         self.rounds = []
         self.current = None
-        self.waiting_until = time.monotonic() + 1.5   # a beat before the first prompt
+        self.waiting_until = clock() + 1.5   # a beat before the first prompt
         self.other_events = {}
         self.stray = 0
         self.flash_until = 0.0
         self.finished = False
-        self.status.configure(text="Do only what the prompt asks. Q closes.")
 
     # -------------------------------------------------------------- the input
 
-    def on_gesture(self, name, detail):
-        if self.finished:
-            return
+    def on_detector_state(self, ready, occurred_at=None):
+        now = self.clock() if occurred_at is None else occurred_at
+        self.last_state_at = now
+        if not ready:
+            self.neutral_since = None
+        elif self.neutral_since is None:
+            self.neutral_since = now
+
+    def on_gesture(self, name, detail, occurred_at=None):
+        now = self.clock() if occurred_at is None else occurred_at
+        record = dict(t=now-self.started_at, event=name, detail=detail)
+        self.timeline.append(record)
         if name not in self.inputs:
             # BLINK and DOUBLE_BLINK happen involuntarily; they are worth counting
             # but they are not failures of this drill.
             self.other_events[name] = self.other_events.get(name, 0) + 1
+            record["disposition"] = "not a drilled input"
             return
 
-        self.flash_until = time.monotonic() + 0.12
-        if self.current is None:
+        self.flash_until = self.clock() + 0.12
+        # Score by detection time, not queue-delivery time. A UI stall may deliver
+        # an on-time event after update_frame has marked that round as missed.
+        target = next((r for r in self.rounds
+                       if r.shown_at <= now <= r.ended_at), None)
+        if target is None and self.current is not None:
+            if self.current.shown_at <= now <= self.current.shown_at + self.TIMEOUT_S:
+                target = self.current
+            elif now > self.current.shown_at + self.TIMEOUT_S:
+                self.current.outcome = "miss"
+                self._finish_round()
+        if target is None or target.outcome in ("hit", "wrong"):
             # Fired while nothing was asked for. This is the number that decides
             # whether an input is safe to leave switched on.
             self.stray += 1
+            record["disposition"] = "outside active prompt or duplicate"
+            self.feedback = f"{name} detected outside its prompt; not a hit. Open eyes and relax."
             return
 
-        self.current.got = name
-        self.current.latency_ms = (time.monotonic() - self.current.shown_at) * 1000
-        self.current.outcome = "hit" if name == self.current.want else "wrong"
-        self._finish_round()
+        target.got = name
+        target.latency_ms = (now - target.shown_at) * 1000
+        target.outcome = "hit" if name == target.want else "wrong"
+        record["disposition"] = target.outcome
+        record["wanted"] = target.want
+        self.feedback = (f"{target.outcome.upper()}: detected {name}, wanted {target.want}. "
+                         "Open eyes and relax jaw.")
+        if target is self.current:
+            self._finish_round(ended_at=now)
 
     # ---------------------------------------------------------------- the state
 
     def update_frame(self, dt):
-        now = time.monotonic()
+        now = self.clock()
         if self.finished:
             self.draw()
             return
 
         if self.current is None:
-            if now >= self.waiting_until:
+            neutral = (not self.require_neutral or
+                       (self.neutral_since is not None and self.last_state_at is not None
+                        and now - self.neutral_since >= .6 and now - self.last_state_at <= .3))
+            if now >= self.waiting_until and neutral:
                 self._next_round()
         elif now - self.current.shown_at > self.TIMEOUT_S:
             self.current.outcome = "miss"
+            self.feedback = f"MISSED {self.current.want}: no matching input within {self.TIMEOUT_S:g} s."
             self._finish_round()
         self.draw()
 
@@ -419,18 +458,31 @@ class DrillWindow(ActivityWindow):
         if len(self.rounds) >= self.total_rounds:
             self.finished = True
             return
-        self.current = Round(self.rng.choice(self.inputs))
+        self.current = Round(self.rng.choice(self.inputs), self.clock())
 
-    def _finish_round(self):
+    def _finish_round(self, ended_at=None):
+        self.current.ended_at = (min(self.clock(), self.current.shown_at + self.TIMEOUT_S)
+                                 if ended_at is None else ended_at)
         self.rounds.append(self.current)
         self.current = None
+        self.neutral_since = None
         if len(self.rounds) >= self.total_rounds:
             # Finish the moment the last round lands. Waiting out the
             # between-rounds gap first left the summary a second late, staring at
             # "wait" after the drill was already over.
             self.finished = True
         else:
-            self.waiting_until = time.monotonic() + self.GAP_S
+            self.waiting_until = self.clock() + self.GAP_S
+
+    def report(self):
+        return dict(finished=self.finished, tally=self.tally(), stray=self.stray,
+            other_events=self.other_events, timeline=self.timeline,
+            rounds=[dict(wanted=r.want, shown_at=r.shown_at-self.started_at,
+                         ended_at=r.ended_at-self.started_at, outcome=r.outcome,
+                         got=r.got, latency_ms=r.latency_ms) for r in self.rounds])
+
+    def draw(self):
+        """Headless model; the window supplies rendering."""
 
     # ------------------------------------------------------------ the reporting
 
@@ -465,6 +517,41 @@ class DrillWindow(ActivityWindow):
             lines.append(f"other events seen: {spare}")
         return lines
 
+class DrillWindow(DrillState, ActivityWindow):
+    """Display the independently testable scoring model."""
+
+    def __init__(self, parent, on_close, rounds=DrillState.ROUNDS,
+                 inputs=(CLENCH, LONG_BLINK), seed=None, require_neutral=False,
+                 report_path=None, profile=None):
+        ActivityWindow.__init__(self, parent, "Two-input drill", 760, 380, on_close)
+        DrillState.__init__(self, rounds, inputs, seed, require_neutral=require_neutral)
+        self.report_path = Path(report_path) if report_path else None
+        self.profile = profile
+        self._saved_version = None
+
+    def update_frame(self, dt):
+        DrillState.update_frame(self, dt)
+        self.status.configure(text=self.feedback)
+        if self.finished:
+            self.save_report()
+
+    def save_report(self):
+        version = (len(self.rounds), len(self.timeline), self.finished)
+        if self.report_path is None or version == self._saved_version:
+            return
+        report = self.report()
+        report["profile"] = self.profile
+        try:
+            self.report_path.parent.mkdir(exist_ok=True, parents=True)
+            self.report_path.write_text(json.dumps(report, indent=2) + "\n")
+            self._saved_version = version
+        except OSError as exc:
+            self.feedback = f"Could not save drill report: {exc}"
+
+    def close(self):
+        self.save_report()
+        ActivityWindow.close(self)
+
     # ------------------------------------------------------------- the drawing
 
     def draw(self):
@@ -497,7 +584,8 @@ class DrillWindow(ActivityWindow):
                            font=("Segoe UI", 11), fill=HINT)
 
         if self.current is None:
-            canvas.create_text(self.width / 2, self.height / 2, text="wait",
+            canvas.create_text(self.width / 2, self.height / 2,
+                               text="OPEN EYES - RELAX JAW" if self.require_neutral else "wait",
                                font=("Segoe UI", 28, "bold"), fill=HINT)
         else:
             elapsed = now - self.current.shown_at

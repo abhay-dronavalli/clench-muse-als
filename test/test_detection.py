@@ -246,3 +246,29 @@ def test_malformed_profile_is_rejected(tmp_path, monkeypatch):
     board = SimpleNamespace(board_id=BoardIds.MUSE_2_BOARD)
     cd.calibration_file(board, "bad").write_text('{"emg_threshold": NaN}')
     assert cd.load_calibration(board, "bad", QuietUI()) is None
+
+
+@pytest.mark.parametrize("scale", [.2, 5])
+def test_csv_replay_reports_hits_and_per_channel_comparison(tmp_path, scale):
+    import json
+    from brainflow.board_shim import BoardShim, BoardIds
+    from brainflow.data_filter import DataFilter
+    from evaluate_detection import evaluate
+    from config import eeg_channels_and_names
+    board_id = BoardIds.MUSE_2_BOARD.value
+    fs = BoardShim.get_sampling_rate(board_id)
+    rows, names = eeg_channels_and_names(board_id)
+    t = np.arange(7*fs)/fs
+    raw = np.zeros((BoardShim.get_num_rows(board_id), len(t)))
+    raw[rows] = np.random.default_rng(9).normal(0, .2*scale, (4, len(t)))
+    raw[rows[0]] += ((t >= 2) & (t < 2.5))*15*scale*np.sin(2*np.pi*75*t)
+    DataFilter.write_file(raw, str(tmp_path / "synthetic.csv"), "w")
+    c = dict(fs=fs, emg_rest=.2*scale, emg_threshold=3*scale,
+             blink_rest=.1*scale, blink_threshold=10*scale)
+    (tmp_path / "profile.json").write_text(json.dumps(c))
+    result = evaluate(dict(recording="synthetic.csv", profile="profile.json",
+        board_id=board_id, baseline=[1, 1.8],
+        actions=[dict(start=2, end=4, event="CLENCH")]), tmp_path)
+    assert (result["hits"], result["misses"], result["false_triggers"]) == (1, 0, 0)
+    assert set(result["channels"]) == set(names)
+    assert result["channels"]["TP9"]["peak_to_rest_ratio"] > 20

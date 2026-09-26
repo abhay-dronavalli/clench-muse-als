@@ -218,3 +218,19 @@ real people remains unverified until these recordings and a fresh Drill exist.
 These rules are deterministic engineering checks, not thresholds validated on a
 human population. The measurements needed for individual channel normalization,
 fatigue tolerance and drift behavior are still missing.
+
+## Implemented Drill changes
+
+The scoring model now has deterministic headless tests for on-time LONG_BLINK,
+late detections, delayed queue delivery, wrong inputs, missing fresh samples and
+consecutive prompts while eyes remain held. Station's Drill requires 600 ms of
+released, neutral signal after refractory periods, with a fresh detector update,
+before starting a prompt. It explicitly asks the person to open eyes and relax.
+Each event records detection time and scoring reason. Saved reports in
+`test/recordings/drill-<timestamp>.json` contain profile, rounds, outcomes and event
+timeline. A late *delivery* can correct a timeout only if the detection timestamp
+was within the original response window; an actually late gesture cannot.
+
+This closes a reproducible Drill timing/rearm gap. It does not establish that the
+same gap caused the user's particular run; the saved timeline will distinguish
+that from weak signal, wrong-input termination or actual response timeout.

@@ -58,7 +58,6 @@ def evaluate(entry, root):
     fs = BoardShim.get_sampling_rate(board_id)
     if c["fs"] != fs:
         raise ValueError("Recording and calibration sampling rates differ")
-    duration = None
     data = DataFilter.read_file(str(root / entry["recording"]))
     channels, names = eeg_channels_and_names(board_id)
     rows = {"emg": [channels[0], channels[3]], "blink": [channels[1], channels[2]]}

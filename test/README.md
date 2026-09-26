@@ -22,7 +22,7 @@ Run the headband-free regressions explicitly (`test/` is not in root pytest disc
 ```powershell
 # From the repository root; uses the test-bench virtualenv.
 .\test\.venv\Scripts\python.exe -m pip install -r test/requirements.txt
-.\test\.venv\Scripts\python.exe -m pytest test/test_detection.py -q
+.\test\.venv\Scripts\python.exe -m pytest test -q
 .\test\.venv\Scripts\python.exe test/test_station.py
 .\test\.venv\Scripts\python.exe test/evaluate_detection.py --profiles
 ```
@@ -31,6 +31,14 @@ After calibration, run **Drill** as the "test it" step. It measures prompted hit
 misses, wrong inputs and unprompted triggers. A passing calibration is not an
 accuracy guarantee. Live sensitivity controls, individual ear fallback and drift
 adaptation remain future work pending labeled recordings.
+
+Drill waits for the detectors to release and the signal to be quiet before each
+prompt. Between prompts, **open your eyes and relax your jaw**. The status explains
+whether a logged gesture was a hit, a wrong input or outside the prompt. Detection
+timestamps survive the worker-to-window queue, so a delayed UI update cannot turn
+an on-time detection into a miss. Truly late detections remain misses. Reports,
+including the selected profile, round timings and event dispositions, are saved
+to `test/recordings/drill-<timestamp>.json` on completion or closing the window.
 
 The historical descriptions below describe the original bench; the update above
 and investigation take precedence where calibration behavior differs.
@@ -247,6 +255,12 @@ EEG channel names, the sampling rate, and mean/std in µV per channel, with a cl
 preset into `recordings/` with `DataFilter.write_file`. Read them back with
 `DataFilter.read_file(path)`.
 
+**`record_protocol.py`** — the same CSVs, but *labelled*. It cues a fixed protocol
+out loud (rest, quick clenches, 1 s clenches, 3 s clenches, blinks, talking,
+chewing) with a beep and a countdown per rep, then writes the timestamps it cued
+beside the CSVs so the recording can be replayed in tests. See "Recording a
+labelled session" below.
+
 **`live_plot.py`** — matplotlib scope of the four EEG channels, bandpassed 1–40 Hz
 with 50/60 Hz notch. `--save frame.png` grabs a single frame headlessly.
 
@@ -303,6 +317,57 @@ The single biggest factor in whether any of this looks like brain activity:
 | **Heart rate** | `record.py --seconds 30`, sitting still | `*_ancillary.csv` holds the PPG trace; its periodicity is your pulse (~1 Hz) |
 
 ---
+
+## Recording a labelled session
+
+Detection can only be tuned offline against signal whose true events are known.
+`record_protocol.py` cues the actions for you, so the labels come out of the run
+itself instead of your memory of it:
+
+```powershell
+.	est\.venv\Scripts\python.exe test/record_protocol.py --dry-run --speed 6   # practise the cues
+.	est\.venv\Scripts\python.exe test/record_protocol.py --profile taher       # the real ~3 min run
+```
+
+Calibrate that profile first and don't move the band afterwards: the recording is
+only comparable to the thresholds it was made under.
+
+| Phase | Length | What you do |
+|---|---|---|
+| rest | 30 s | still, eyes open, jaw loose (this becomes the baseline window) |
+| quick clenches | 5 x 0.4 s | one comfortable bite per beep |
+| 1 s clenches | 5 x 1 s | hold until the bar empties |
+| 3 s clenches | 2 x 3 s | the call-for-help hold |
+| blinks | 5 | one deliberate blink per beep |
+| talking | 20 s | read out loud — a false-trigger source, not a gesture |
+| chewing / yawning | 20 s | same, the worst realistic jaw artifact |
+
+High beep = go, low beep = release. Three keys while it runs:
+
+| Key | Meaning |
+|---|---|
+| `X` | the rep just cued did **not** happen — drops that label, so a missed rep is not scored as a detection miss |
+| `M` | mark this moment (a twitch, a swallow, the band slipping) |
+| `Q` | stop early but keep everything recorded so far |
+
+Each run leaves four or five files in `recordings/` sharing one prefix:
+`*_default.csv` (EEG, the only one the detector reads), `*_auxiliary.csv`,
+`*_ancillary.csv`, `*_labels.json` (every phase, rep, dropped rep and marker, in
+seconds from the **first EEG sample**) and `*_manifest.json`, ready for the
+evaluator, with the matching calibration copied in beside it:
+
+```powershell
+.	est\.venv\Scripts\python.exe test/evaluate_detection.py --manifest test/recordings/<stamp>_<label>_manifest.json
+```
+
+The labels are what you were *asked* to do. They are corrected only where you
+pressed `X`, so before believing a miss, look at the waveform for that window.
+Send the whole prefix as one set; the CSVs are git-ignored and a 3 min EEG file is
+a few MB, so zip it.
+
+Edit the `PROTOCOL` list at the top of the script to change or extend the run —
+double blinks and eye holds are not in it yet, and the cues, labels and manifest
+all follow from that list.
 
 ## Using it as input
 

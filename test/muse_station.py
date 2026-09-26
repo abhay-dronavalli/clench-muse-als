@@ -389,12 +389,20 @@ class StationUI:
         self.post(("progress", None, 0.0, None))
 
     def event(self, name, detail, elapsed):
-        self.post(("event", name, detail, elapsed))
+        self.post(("event", name, detail, elapsed, time.monotonic()))
 
     def tick(self, levels, recognizer, recent):
         hold = recognizer.long_blink.threshold if recognizer.long_blink else None
         self.post(("tick", levels, recognizer.clench.threshold,
                    recognizer.blink.threshold, hold))
+        now = time.monotonic()
+        jaw = recognizer.clench
+        lid = recognizer.long_blink
+        ready = (not jaw.active and levels.emg < jaw.release
+                 and (now-jaw.last_event_at)*1000 > jaw.refractory_ms
+                 and (lid is None or (not lid.active and levels.hold < lid.release
+                      and (now-lid.last_event_at)*1000 > lid.refractory_ms)))
+        self.post(("detector_state", ready, now))
 
     def should_stop(self):
         return self.stop_event.is_set()
@@ -616,10 +624,16 @@ class Station(tk.Tk):
             self._log("!! this profile has no long-blink calibration, so the drill "
                       "can only test the clench.")
             self._log("   Recalibrate to enable the second input.")
+        profile = self._profile_name()
+        report_path = cd.HERE / "recordings" / f"drill-{time.time_ns()}.json"
+        self._log(f"Drill timeline will be saved to {report_path.name}")
         self._start_activity("drill", self._interactive,
-                             window=lambda: sa.DrillWindow(self,
-                                                           self._on_window_closed,
-                                                           inputs=inputs))
+                              window=lambda: sa.DrillWindow(self,
+                                                            self._on_window_closed,
+                                                            inputs=inputs,
+                                                            require_neutral=True,
+                                                            report_path=report_path,
+                                                            profile=profile))
 
     def _peek_calibration(self):
         """Read the selected profile's calibration on the Tk thread, quietly."""
@@ -841,12 +855,20 @@ class Station(tk.Tk):
             if self.activity_window is not None:
                 self.activity_window.on_levels(levels, emg_threshold, hold_threshold)
 
+        elif kind == "detector_state":
+            if isinstance(self.activity_window, sa.DrillState):
+                self.activity_window.on_detector_state(message[1], message[2])
+
         elif kind == "event":
-            _, name, detail, elapsed = message
+            _, name, detail, elapsed = message[:4]
             self.last_event.configure(text=f"{name}    {detail}")
             self._log(f"  [{elapsed:6.1f}s]  {name:<13} {detail}")
             if self.activity_window is not None:
-                self.activity_window.on_gesture(name, detail)
+                if isinstance(self.activity_window, sa.DrillState):
+                    occurred_at = message[4] if len(message) > 4 else time.monotonic()
+                    self.activity_window.on_gesture(name, detail, occurred_at)
+                else:
+                    self.activity_window.on_gesture(name, detail)
 
         elif kind == "prompt":
             prompt = message[1]
