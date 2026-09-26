@@ -7,6 +7,7 @@ export const STRINGS = {
     home: 'Home',
     connecting: 'Connecting to Clench…',
     speaking: 'Speaking…',
+    finding: 'Finding options…',
     hint: 'Clench = send  |  Double blink = cancel',
     confirm: {
       speak: 'Say this?',
@@ -41,6 +42,7 @@ export const STRINGS = {
     home: 'Inicio',
     connecting: 'Conectando con Clench…',
     speaking: 'Hablando…',
+    finding: 'Buscando opciones…',
     hint: 'Apretar = enviar  |  Doble parpadeo = cancelar',
     confirm: {
       speak: '¿Decir esto?',
