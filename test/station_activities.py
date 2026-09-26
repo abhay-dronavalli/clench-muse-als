@@ -357,7 +357,9 @@ class DrillWindow(ActivityWindow):
     TIMEOUT_S = 4.0
     GAP_S = 1.2                 # quiet time between rounds, to catch stray fires
 
-    PROMPT = {CLENCH: "CLENCH", LONG_BLINK: "CLOSE AND HOLD"}
+    PROMPT = {CLENCH: "CLENCH", LONG_BLINK: "EYES SHUT"}
+    HOW = {CLENCH: "one short jaw clench",
+           LONG_BLINK: "close your eyes and keep them shut"}
 
     def __init__(self, parent, on_close, rounds=ROUNDS, inputs=(CLENCH, LONG_BLINK),
                  seed=None):
@@ -499,9 +501,12 @@ class DrillWindow(ActivityWindow):
                                font=("Segoe UI", 28, "bold"), fill=HINT)
         else:
             elapsed = now - self.current.shown_at
-            canvas.create_text(self.width / 2, self.height / 2 - 30,
+            canvas.create_text(self.width / 2, self.height / 2 - 40,
                                text=self.PROMPT[self.current.want],
                                font=("Segoe UI", 34, "bold"), fill=INK)
+            canvas.create_text(self.width / 2, self.height / 2 - 4,
+                               text=self.HOW[self.current.want],
+                               font=("Segoe UI", 12), fill=HINT)
             # A draining bar, because a number you read after the fact does not
             # let you feel lag but a bar you are racing does.
             full = self.width - 120

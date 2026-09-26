@@ -531,8 +531,9 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         ui.log("4) LONG BLINK: close your eyes and HOLD them shut for a full second,")
         ui.log("   three times. Not a hard squeeze -- just closed and still.")
         for rep in range(1, 4):
-            ui.instruct("CLOSE AND HOLD", f"rep {rep} of 3\n"
-                                          f"eyes shut and still, about a second")
+            ui.instruct("EYES SHUT", f"rep {rep} of 3\n"
+                                     f"close your eyes and keep them shut,\n"
+                                     f"about a second, then open")
             ui.wait(f"   Press Enter, then close and hold  (rep {rep}/3)...")
             samples = collect(board, rows, fs, window_samples, 2.0,
                               f"holding {rep}", ui)
