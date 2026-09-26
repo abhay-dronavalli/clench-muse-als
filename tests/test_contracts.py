@@ -65,7 +65,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         {
             "type": "CONFIRM",
             "text": "Mija, estoy bien, llámame a las seis.",
-            "action": "send_text",
+            "action": "send_message",
         },
     ),
     "SPEAK": (

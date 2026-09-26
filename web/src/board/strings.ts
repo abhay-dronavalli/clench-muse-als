@@ -8,7 +8,7 @@ export const STRINGS = {
     hint: 'Clench = send  |  Double blink = cancel',
     confirm: {
       speak: 'Say this?',
-      send_text: 'Send this text?',
+      send_message: 'Send this message?',
       place_call: 'Place this call?',
       room_control: 'Do this?',
       help_alert: 'Call for help?',
@@ -21,7 +21,7 @@ export const STRINGS = {
     hint: 'Apretar = enviar  |  Doble parpadeo = cancelar',
     confirm: {
       speak: '¿Decir esto?',
-      send_text: '¿Enviar este mensaje?',
+      send_message: '¿Enviar este mensaje?',
       place_call: '¿Hacer esta llamada?',
       room_control: '¿Hacer esto?',
       help_alert: '¿Pedir ayuda?',

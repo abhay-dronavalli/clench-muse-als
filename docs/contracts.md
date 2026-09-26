@@ -211,10 +211,10 @@ DOUBLE_BLINK cancels (PRD D5).
 | Field | Type | Notes |
 |---|---|---|
 | `text` | string | the exact sentence that will be spoken or sent |
-| `action` | `"speak"` \| `"send_text"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` | from the action registry |
+| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` | from the action registry |
 
 ```json
-{"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_text"}
+{"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
 ```
 
 ### SPEAK

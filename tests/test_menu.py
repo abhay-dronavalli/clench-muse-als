@@ -38,7 +38,7 @@ def test_both_languages_on_every_node(menu):
         assert node.label_en.strip() and node.label_es.strip(), node.id
         if node.is_leaf:
             assert node.phrase("en").strip() and node.phrase("es").strip(), node.id
-            assert node.action in {"speak", "send_text", "place_call", "room_control"}
+            assert node.action in {"speak", "send_message", "place_call", "room_control"}
 
 
 def test_prd_pain_path(menu):
@@ -53,7 +53,7 @@ def test_people_built_from_contacts(menu):
     for person in people.children:
         assert [(c.id, c.action) for c in person.children] == [
             ("call", "place_call"),
-            ("text", "send_text"),
+            ("text", "send_message"),
             ("say", "speak"),
         ]
         assert all(c.contact == person.id for c in person.children)

@@ -16,7 +16,7 @@ PointSource = Literal["webcam", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
-ActionName = Literal["speak", "send_text", "place_call", "room_control", "help_alert"]
+ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
 
 
 class _Msg(BaseModel):

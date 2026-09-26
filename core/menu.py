@@ -19,7 +19,7 @@ MENU_PATH = DATA_DIR / "menu.yaml"
 CONTACTS_PATH = DATA_DIR / "contacts.yaml"
 
 MAX_TILES = 6  # PRD D8
-MenuAction = Literal["speak", "send_text", "place_call", "room_control"]
+MenuAction = Literal["speak", "send_message", "place_call", "room_control"]
 NodeId = Annotated[str, Field(pattern=r"^[a-z0-9_]+$")]
 Text = Annotated[str, Field(min_length=1)]
 
@@ -113,7 +113,7 @@ class Menu(BaseModel):
 # Call / Text / Say out loud under each contact.
 _CONTACT_ACTIONS: list[tuple[str, str, str, MenuAction]] = [
     ("call", "Call", "Llamar", "place_call"),
-    ("text", "Text", "Mensaje", "send_text"),
+    ("text", "Text", "Mensaje", "send_message"),
     ("say", "Say out loud", "Decir en voz alta", "speak"),
 ]
 

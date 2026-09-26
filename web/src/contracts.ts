@@ -12,7 +12,7 @@ export type PointSource = 'webcam' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
-export type ActionName = 'speak' | 'send_text' | 'place_call' | 'room_control' | 'help_alert'
+export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 

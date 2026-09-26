@@ -120,7 +120,7 @@ The panel also has buttons for the same events, a scan speed slider and an EN/ES
    confirm screen: the laptop speaks the sentence, then the board returns to Home.
 5. Click EN/ES in the dev panel: the tiles switch to Spanish. Pick Personas › María › Mensaje, confirm
    with Space, and hear "Mija, estoy bien, llámame a las seis." The core terminal logs
-   `would send_text to Maria (daughter)` (real texts come in chunk 4).
+   `would send_message to Maria (daughter)` (real texts come in chunk 4).
 
 ## CHUNK REPORT format
 

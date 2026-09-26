@@ -191,7 +191,7 @@ def test_people_text_in_spanish(session, sched, sent):
     assert last_screen(sent).tiles[1].label == "Necesito"
     for tile in ["people", "maria", "text"]:
         pick(session, sched, sent, tile)
-    assert sent[-1] == Confirm(text="Mija, estoy bien, llámame a las seis.", action="send_text")
+    assert sent[-1] == Confirm(text="Mija, estoy bien, llámame a las seis.", action="send_message")
     sched.advance(CLENCH_DEBOUNCE_S + 0.05)
     session.handle(clench())
     assert spoken(sent) == [Speak(text="Mija, estoy bien, llámame a las seis.", lang="es")]
