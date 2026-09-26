@@ -101,9 +101,8 @@ def play(board, rows, fs, window_samples, calibration, args):
             if levels is None:
                 time.sleep(TICK_SECONDS)
                 continue
-            emg_level, blink_level = levels
 
-            for name, _detail in recognizer.update(emg_level, blink_level, now):
+            for name, _detail in recognizer.update(levels, now):
                 if name != "CLENCH_START":
                     continue  # blinks, and the later release-edge CLENCH, are ignored
                 if cursor == target:
@@ -114,7 +113,7 @@ def play(board, rows, fs, window_samples, calibration, args):
                     outcome = "MISS"
                 break
 
-            print(CR + render(args.cells, cursor, target, emg_level, threshold),
+            print(CR + render(args.cells, cursor, target, levels.emg, threshold),
                   end="", flush=True)
             time.sleep(TICK_SECONDS)
 

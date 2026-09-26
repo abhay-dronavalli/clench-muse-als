@@ -173,13 +173,31 @@ The single biggest factor in whether any of this looks like brain activity:
 `clench_detect.py` is where this stops being a signal viewer and starts being a
 controller. Two different physiological signals, deliberately kept apart:
 
-| Gesture | What it really is | Where it shows up | Band |
-|---|---|---|---|
-| Jaw clench | **EMG** — masseter muscle firing | TP9 / TP10 (ears) | 20–110 Hz |
-| Blink | **EOG** — eyelid movement artifact | AF7 / AF8 (forehead) | 1–10 Hz |
+| Gesture | What it really is | Where it shows up | Band | Measured as |
+|---|---|---|---|---|
+| Jaw clench | **EMG** — masseter muscle firing | TP9 / TP10 (ears) | 20–110 Hz | RMS over 200 ms |
+| Blink | **EOG** — eyelid movement artifact | AF7 / AF8 (forehead) | 1–10 Hz | peak-to-peak over 300 ms, **both channels** |
 
 Neither is brainwaves, and that is exactly why they are good input: they are huge,
 fast, and voluntary, where real EEG intent is small, slow and unreliable.
+
+**Why the two are measured differently.** A clench is a sustained buzz, so "how
+loud on average, just now" (RMS) is the right question. A blink is one quick
+swoop, and averaging over a window mixes the swoop with the quiet either side of
+it, which makes blinks look smaller than they are. Peak-to-peak measures the
+event itself.
+
+**Why a blink needs both channels.** AF7 and AF8 sit above one eye each. A real
+blink moves both eyelids, so both channels spike within a few tens of
+milliseconds. A loose electrode or a stray movement usually hits one channel, or
+hits both but far apart in time. Demanding agreement discards most false blinks
+for free. The detector ticks at 20 Hz, so the 60 ms coincidence window means
+"same tick, or one tick apart".
+
+**Mains hum.** The 50/60 Hz notch runs *before* the 20–110 Hz bandpass, not
+after — the hum sits inside the EMG band, so notching afterwards leaves it in the
+number being measured. A venue has far more electrical hum than a bedroom, so
+**recalibrate on site** before it matters.
 
 ### Profiles: one headband, several people
 
@@ -206,10 +224,21 @@ threshold from yesterday is meaningless today. Calibration takes about 30 second
 python clench_detect.py
 ```
 
-1. **Rest** (10 s) — sit still, jaw relaxed and slightly open, try not to blink.
-   Measures your noise floor.
+1. **Rest** (10 s) — sit still, jaw relaxed and slightly open, **stare at one
+   fixed spot and do not talk**. Eye movement lands on the forehead sensors and
+   would inflate the blink noise floor. Measures your noise floor.
 2. **Clench** (3 × 2 s) — clench hard on each prompt. Measures your ceiling.
-3. **Blink** (5 s) — blink hard about once a second.
+3. **Blink** (6 s) — separate, deliberate blinks about once a second, not
+   fluttering. Each blink is detected and sized individually.
+
+The blink threshold lands halfway between the resting noise (`rest + 4σ`) and
+your **smallest** blink of the session — under your weakest one, so none get
+missed, but clear of the noise. The ratio between those two is printed as
+**separation**: 3x or better is good, 2x is usable, below 2x means fix forehead
+contact or fall back to double-clench for BACK.
+
+Calibration also warns when a forehead channel is noisy at rest, which is the
+single most common cause of unreliable blinks.
 
 The threshold lands 30% of the way from rest up to your real peak, which is far
 more reliable than a fixed multiple of the noise. It is saved to `calibration.json`;

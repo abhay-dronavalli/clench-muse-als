@@ -357,10 +357,9 @@ def main():
             levels = read_levels(board, rows, fs, window_samples)
             if levels is None:
                 return False, 0.0
-            emg_level, blink_level = levels
-            events = recognizer.update(emg_level, blink_level, time.monotonic())
+            events = recognizer.update(levels, time.monotonic())
             flapped = any(name == "CLENCH_START" for name, _ in events)
-            return flapped, emg_level
+            return flapped, levels.emg
 
         game = Flappy()
         scene = Scene(plt, calibration["emg_threshold"])
