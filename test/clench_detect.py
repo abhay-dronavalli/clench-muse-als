@@ -71,23 +71,24 @@ def list_profiles():
     return sorted(names)
 
 
-def load_calibration(board, profile="default"):
+def load_calibration(board, profile="default", ui=None):
     """Read a profile's calibration, or None if it is missing or from another board."""
+    ui = ui or ConsoleUI()
     path = calibration_file(board, profile)
     if not path.exists():
         known = list_profiles()
-        print(f"  no saved calibration for profile '{profile}'"
-              + (f" (known profiles: {', '.join(known)})" if known else ""))
+        ui.log(f"  no saved calibration for profile '{profile}'"
+               + (f" (known profiles: {', '.join(known)})" if known else ""))
         return None
     data = json.loads(path.read_text())
     if data.get("blink_method") != "p2p_coincidence":
-        print(f"  ignoring {path.name}: recorded with the old blink measurement.")
-        print("  Blinks are now measured peak-to-peak with both forehead channels")
-        print("  agreeing, so the old numbers are in different units. Recalibrate.")
+        ui.log(f"  ignoring {path.name}: recorded with the old blink measurement.")
+        ui.log("  Blinks are now measured peak-to-peak with both forehead channels")
+        ui.log("  agreeing, so the old numbers are in different units. Recalibrate.")
         return None
     if data.get("board") != board_label(board):
-        print(f"  ignoring {path.name}: recorded on {data.get('board')}, "
-              f"this is {board_label(board)}")
+        ui.log(f"  ignoring {path.name}: recorded on {data.get('board')}, "
+               f"this is {board_label(board)}")
         return None
     return data
 
@@ -112,6 +113,55 @@ FOREHEAD_NOISY_UV = 120.0   # resting peak-to-peak above this means poor contact
 CR = "\r"                   # keeps the live meter redrawing on one line
 LINE_WIDTH = 120            # event lines pad to this so they fully erase the
                             # meter line underneath; a fixed 20 left fragments.
+
+
+# ================================================================ output target
+
+class Cancelled(Exception):
+    """Raised inside a loop below when the UI asks it to stop early."""
+
+
+class ConsoleUI:
+    """Where calibration and detection send their output and get their prompts.
+
+    These loops used to print straight to the terminal, which meant the only way
+    to reuse the threshold maths from a window was to copy it -- and two copies
+    of a threshold formula drift. So every print and every prompt goes through
+    one of these instead. The terminal scripts use this class; muse_station.py
+    passes its own, posting to the Tk event queue rather than stdout, and the
+    arithmetic in between stays in exactly one place.
+    """
+
+    def log(self, message=""):
+        print(message)
+
+    def wait(self, prompt):
+        wait_for_enter(prompt)
+
+    def progress(self, label, remaining, levels):
+        """Called every tick of a timed collection phase."""
+        print(f"{CR}  {label}  {remaining:4.1f}s   emg {levels.emg:7.1f} uV   "
+              f"blink L{levels.blink_left:6.0f} R{levels.blink_right:6.0f} uV ",
+              end="", flush=True)
+
+    def progress_done(self):
+        print()
+
+    def event(self, name, detail, elapsed):
+        """One recognised gesture."""
+        print(CR + f"  [{elapsed:6.1f}s]  {name:<13} {detail}".ljust(LINE_WIDTH))
+
+    def tick(self, levels, recognizer, recent):
+        """Every detector tick, gesture or not: the live meter."""
+        status = (f"  {meter(levels.emg, recognizer.clench.threshold)} emg {levels.emg:6.1f}   "
+                  f"{meter(levels.blink, recognizer.blink.threshold)} blink "
+                  f"L{levels.blink_left:5.0f} R{levels.blink_right:5.0f}   "
+                  f"{' '.join(list(recent)[-3:])}")
+        print(CR + status.ljust(LINE_WIDTH), end="", flush=True)
+
+    def should_stop(self):
+        """True to abandon the current phase. The terminal uses Ctrl-C instead."""
+        return False
 
 
 # ============================================================ signal processing
@@ -205,11 +255,14 @@ def wait_for_enter(prompt):
         print("  (non-interactive stdin, continuing)")
 
 
-def collect(board, rows, fs, window_samples, seconds, label):
+def collect(board, rows, fs, window_samples, seconds, label, ui=None):
     """Sample for `seconds` with a countdown. Returns a list of (timestamp, Levels)."""
+    ui = ui or ConsoleUI()
     samples = []
     started = time.monotonic()
     while True:
+        if ui.should_stop():
+            raise Cancelled()
         now = time.monotonic()
         remaining = seconds - (now - started)
         if remaining <= 0:
@@ -217,11 +270,9 @@ def collect(board, rows, fs, window_samples, seconds, label):
         levels = read_levels(board, rows, fs, window_samples)
         if levels:
             samples.append((now, levels))
-            print(f"{CR}  {label}  {remaining:4.1f}s   emg {levels.emg:7.1f} uV   "
-                  f"blink L{levels.blink_left:6.0f} R{levels.blink_right:6.0f} uV ",
-                  end="", flush=True)
+            ui.progress(label, remaining, levels)
         time.sleep(TICK_SECONDS)
-    print()
+    ui.progress_done()
     return samples
 
 
@@ -264,7 +315,7 @@ def robust_baseline(values):
     return median, max(sigma, 1e-6)
 
 
-def calibrate(board, rows, fs, window_samples, args):
+def calibrate(board, rows, fs, window_samples, args, ui=None):
     """Measure rest, then real clenches, then real blinks.
 
     Clench threshold sits 30% of the way from your resting floor up to your
@@ -272,13 +323,14 @@ def calibrate(board, rows, fs, window_samples, args):
     (rest + 4 sigma) and the SMALLEST blink you produced -- under your weakest
     blink so none get missed, but clear of the noise.
     """
-    print("")
-    print("--- CALIBRATION ---")
-    print("1) REST: sit still, jaw relaxed and slightly open.")
-    print("   Stare at one fixed spot and do not talk. Eye movement shows up on")
-    print("   the forehead sensors and would inflate the blink noise floor.")
-    wait_for_enter("   Press Enter when ready...")
-    rest = collect(board, rows, fs, window_samples, args.baseline_seconds, "resting")
+    ui = ui or ConsoleUI()
+    ui.log("")
+    ui.log("--- CALIBRATION ---")
+    ui.log("1) REST: sit still, jaw relaxed and slightly open.")
+    ui.log("   Stare at one fixed spot and do not talk. Eye movement shows up on")
+    ui.log("   the forehead sensors and would inflate the blink noise floor.")
+    ui.wait("   Press Enter when ready...")
+    rest = collect(board, rows, fs, window_samples, args.baseline_seconds, "resting", ui)
 
     emg_rest, emg_sigma = robust_baseline([lv.emg for _t, lv in rest])
     # The blink noise floor is the WORSE of the two forehead channels: one
@@ -288,15 +340,15 @@ def calibrate(board, rows, fs, window_samples, args):
     left_rest = float(np.median([lv.blink_left for _t, lv in rest])) if rest else 0.0
     right_rest = float(np.median([lv.blink_right for _t, lv in rest])) if rest else 0.0
 
-    print(f"   rest:  clench {emg_rest:.1f} +/- {emg_sigma:.1f} uV")
-    print(f"          forehead peak-to-peak  AF7 {left_rest:.0f}  AF8 {right_rest:.0f} uV")
+    ui.log(f"   rest:  clench {emg_rest:.1f} +/- {emg_sigma:.1f} uV")
+    ui.log(f"          forehead peak-to-peak  AF7 {left_rest:.0f}  AF8 {right_rest:.0f} uV")
 
     # --- contact check on the forehead pair -------------------------------
     for label, value in (("AF7", left_rest), ("AF8", right_rest)):
         if value > FOREHEAD_NOISY_UV:
-            print(f"   !! {label} is noisy at rest ({value:.0f} uV peak-to-peak).")
-            print("      That is poor skin contact. Wipe the forehead, sit the band")
-            print("      snug just above the eyebrows, and clear any hair underneath.")
+            ui.log(f"   !! {label} is noisy at rest ({value:.0f} uV peak-to-peak).")
+            ui.log("      That is poor skin contact. Wipe the forehead, sit the band")
+            ui.log("      snug just above the eyebrows, and clear any hair underneath.")
 
     emg_threshold = emg_rest + args.k * emg_sigma
     blink_floor = blink_rest + BLINK_SIGMA_FLOOR * blink_sigma
@@ -310,71 +362,70 @@ def calibrate(board, rows, fs, window_samples, args):
     # the clench thresholds were measured against that exact electrode placement.
     reuse = None
     if getattr(args, "blink_only", False):
-        reuse = load_calibration(board, getattr(args, "profile", "default"))
+        reuse = load_calibration(board, getattr(args, "profile", "default"), ui)
         if not reuse or reuse.get("emg_peak") is None:
-            print("")
-            print("   !! --blink-only needs an existing profile with clench data.")
-            print("      Run a full calibration first.")
+            ui.log("")
+            ui.log("   !! --blink-only needs an existing profile with clench data.")
+            ui.log("      Run a full calibration first.")
             return None
         emg_rest = reuse["emg_rest"]
         emg_sigma = reuse["emg_sigma"]
         emg_peak = reuse["emg_peak"]
         emg_threshold = reuse["emg_threshold"]
         emg_trials = reuse.get("emg_trials", [])
-        print("")
-        print(f"2) CLENCH: skipped, reusing {reuse['saved_at']} "
-              f"(peak {emg_peak:.0f} uV, fires at {emg_threshold:.1f} uV)")
+        ui.log("")
+        ui.log(f"2) CLENCH: skipped, reusing {reuse['saved_at']} "
+               f"(peak {emg_peak:.0f} uV, fires at {emg_threshold:.1f} uV)")
 
     if not args.no_clench_cal and reuse is None:
         # ---------------- clench ----------------
-        print("")
-        print("2) CLENCH: clench your jaw HARD for the whole 2 seconds, three times.")
+        ui.log("")
+        ui.log("2) CLENCH: clench your jaw HARD for the whole 2 seconds, three times.")
         for rep in range(1, 4):
-            wait_for_enter(f"   Press Enter, then clench for 2 s  (rep {rep}/3)...")
-            samples = collect(board, rows, fs, window_samples, 2.0, f"clench {rep}")
+            ui.wait(f"   Press Enter, then clench for 2 s  (rep {rep}/3)...")
+            samples = collect(board, rows, fs, window_samples, 2.0, f"clench {rep}", ui)
             if samples:
                 emg_trials.append(float(max(lv.emg for _t, lv in samples)))
-                print(f"   peak {emg_trials[-1]:.1f} uV")
+                ui.log(f"   peak {emg_trials[-1]:.1f} uV")
         if emg_trials:
             emg_peak = float(np.median(emg_trials))  # one bad rep cannot skew it
             if emg_peak > emg_rest * 1.5:
                 emg_threshold = emg_rest + 0.30 * (emg_peak - emg_rest)
             elif emg_peak > emg_rest:
-                print("   !! clench barely rose above rest -- check the ear-tips.")
-                print("      Falling back to the statistical threshold.")
+                ui.log("   !! clench barely rose above rest -- check the ear-tips.")
+                ui.log("      Falling back to the statistical threshold.")
             if emg_peak < emg_rest * 4:
-                print(f"   !! WEAK CLENCH: peak {emg_peak:.0f} uV is only "
-                      f"{emg_peak / emg_rest:.1f}x your resting {emg_rest:.0f} uV.")
-                print("      Redo this: clench HARD the instant the countdown starts,")
-                print("      and hold it for the whole 2 seconds. Check the ear-tips too.")
-
+                ui.log(f"   !! WEAK CLENCH: peak {emg_peak:.0f} uV is only "
+                       f"{emg_peak / emg_rest:.1f}x your resting {emg_rest:.0f} uV.")
+                ui.log("      Redo this: clench HARD the instant the countdown starts,")
+                ui.log("      and hold it for the whole 2 seconds. Check the ear-tips too.")
 
     if not args.no_clench_cal:
         # ---------------- blink ----------------
-        print("")
-        print("3) BLINK: blink hard and deliberately, once a second, for 6 seconds.")
-        print("   Separate, distinct blinks -- not fluttering.")
-        wait_for_enter("   Press Enter when ready...")
-        samples = collect(board, rows, fs, window_samples, 6.0, "blinking")
+        ui.log("")
+        ui.log("3) BLINK: blink hard and deliberately, once a second, for 6 seconds.")
+        ui.log("   Separate, distinct blinks -- not fluttering.")
+        ui.wait("   Press Enter when ready...")
+        samples = collect(board, rows, fs, window_samples, 6.0, "blinking", ui)
         blink_trials = blink_sizes(samples, blink_floor)
 
         if len(blink_trials) >= 2:
             blink_peak = float(min(blink_trials))   # the SMALLEST blink, on purpose
             separation = blink_peak / blink_floor if blink_floor else 0.0
             sizes = ", ".join(f"{v:.0f}" for v in blink_trials)
-            print(f"   {len(blink_trials)} blinks detected: {sizes} uV")
-            print(f"   smallest {blink_peak:.0f} uV vs noise floor {blink_floor:.0f} uV"
-                  f"  ({separation:.1f}x separation)")
+            ui.log(f"   {len(blink_trials)} blinks detected: {sizes} uV")
+            ui.log(f"   smallest {blink_peak:.0f} uV vs noise floor {blink_floor:.0f} uV"
+                   f"  ({separation:.1f}x separation)")
             # Halfway between the noise floor and the weakest blink.
             blink_threshold = blink_floor + 0.5 * (blink_peak - blink_floor)
             if separation < 2.0:
-                print("   !! WEAK SEPARATION: blinks are close to the noise.")
-                print("      Improve forehead contact and redo, or fall back to")
-                print("      double-clench for BACK instead of double-blink.")
+                ui.log("   !! WEAK SEPARATION: blinks are close to the noise.")
+                ui.log("      Improve forehead contact and redo, or fall back to")
+                ui.log("      double-clench for BACK instead of double-blink.")
         else:
-            print(f"   !! only {len(blink_trials)} blink(s) detected -- cannot set a")
-            print("      blink threshold this way. Using the statistical floor, which")
-            print("      is far less reliable. Check forehead contact and redo.")
+            ui.log(f"   !! only {len(blink_trials)} blink(s) detected -- cannot set a")
+            ui.log("      blink threshold this way. Using the statistical floor, which")
+            ui.log("      is far less reliable. Check forehead contact and redo.")
 
     calibration = {
         "board": board_label(board),
@@ -393,14 +444,16 @@ def calibrate(board, rows, fs, window_samples, args):
     }
     path = calibration_file(board, getattr(args, "profile", "default"))
     path.write_text(json.dumps(calibration, indent=2))
-    print("")
-    print(f"Saved to {path.name}. Reuse it with --load "
-          "(only valid while the band stays on your head).")
+    ui.log("")
+    ui.log(f"Saved to {path.name}. Reuse it with --load "
+           "(only valid while the band stays on your head).")
     return calibration
 
 
-def describe(calibration):
-    print("\n--- THRESHOLDS ---")
+def describe(calibration, ui=None):
+    ui = ui or ConsoleUI()
+    ui.log("")
+    ui.log("--- THRESHOLDS ---")
     for kind in ("emg", "blink"):
         rest = calibration[f"{kind}_rest"]
         peak = calibration[f"{kind}_peak"]
@@ -410,13 +463,13 @@ def describe(calibration):
         headroom = f" ({peak / threshold:.1f}x headroom)" if peak and threshold else ""
         label = ("clench (EMG, ears)" if kind == "emg"
                  else "blink (p2p, forehead)")
-        print(f"  {label:<22} rest {rest:6.1f} -> fires at {threshold:6.1f} uV"
-              f"{measured}{headroom}")
+        ui.log(f"  {label:<22} rest {rest:6.1f} -> fires at {threshold:6.1f} uV"
+               f"{measured}{headroom}")
     separation = calibration.get("blink_separation")
     if separation:
         verdict = "good" if separation >= 3 else ("usable" if separation >= 2 else "WEAK")
-        print(f"  blink separation       {separation:.1f}x above the noise floor "
-              f"({verdict})")
+        ui.log(f"  blink separation       {separation:.1f}x above the noise floor "
+               f"({verdict})")
 
 
 # ==================================================================== detection
@@ -581,34 +634,32 @@ class GestureRecognizer:
         return events
 
 
-def detect_loop(board, rows, fs, window_samples, calibration, args):
-    """The input loop: read envelopes, recognise gestures, print them."""
+def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None):
+    """The input loop: read envelopes, recognise gestures, report them."""
+    ui = ui or ConsoleUI()
     recognizer = GestureRecognizer(calibration["emg_threshold"],
                                    calibration["blink_threshold"],
                                    args.long_ms, args.double_ms)
     recent = deque(maxlen=6)
 
-    print("\n--- LISTENING ---  clench = CLENCH, hold = LONG_CLENCH, "
-          "two blinks = DOUBLE_BLINK.   Ctrl-C to stop.\n")
+    ui.log("")
+    ui.log("--- LISTENING ---  clench = CLENCH, hold = LONG_CLENCH, "
+           "two blinks = DOUBLE_BLINK.   Ctrl-C to stop.")
+    ui.log("")
     started = time.monotonic()
 
-    while True:
+    while not ui.should_stop():
         now = time.monotonic()
         levels = read_levels(board, rows, fs, window_samples)
         if levels is None:
             time.sleep(TICK_SECONDS)
             continue
         for name, detail in recognizer.update(levels, now):
-            line = f"  [{now - started:6.1f}s]  {name:<13} {detail}"
-            print(CR + line.ljust(LINE_WIDTH))
+            ui.event(name, detail, now - started)
             recent.append(name)
 
         # Live meter: bar fills as you approach the threshold, | marks the line.
-        status = (f"  {meter(levels.emg, recognizer.clench.threshold)} emg {levels.emg:6.1f}   "
-                  f"{meter(levels.blink, recognizer.blink.threshold)} blink "
-                  f"L{levels.blink_left:5.0f} R{levels.blink_right:5.0f}   "
-                  f"{' '.join(list(recent)[-3:])}")
-        print(CR + status.ljust(LINE_WIDTH), end="", flush=True)
+        ui.tick(levels, recognizer, recent)
         time.sleep(TICK_SECONDS)
 
 
