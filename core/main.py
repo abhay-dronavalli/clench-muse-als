@@ -37,6 +37,7 @@ from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
+from core.rank.jev import JevRanker, build_jev
 from core.session import Session, voice_lines
 from core.suggest import build_provider
 from core.suggest.provider import LLMProvider
@@ -89,6 +90,7 @@ def create_app(
     audio_dir: Path = AUDIO_DIR,
     tts: TTS | None = None,
     provider: LLMProvider | None = None,
+    jev: JevRanker | None = None,
 ) -> FastAPI:
     """Build the app. Defaults are safe for tests: an in-memory database and no keys, so actions
     only dry-run, speech uses the browser voice and there is no AI (fixed phrases). The real app
@@ -114,6 +116,8 @@ def create_app(
             off_reason=off_reason,
         )
         app.state.suggester = suggester
+        ranker_jev, jev_off = (jev, "") if jev is not None else build_jev(env)
+        app.state.jev = ranker_jev
         session = Session(
             menu,
             hub.broadcast,
@@ -125,6 +129,7 @@ def create_app(
             db=db,
             scan_ms=scan_ms,
             lang=lang,
+            jev=ranker_jev,
         )
         app.state.session = session
         session.start()
@@ -135,6 +140,8 @@ def create_app(
             log.warning("ACTIONS_DRY_RUN is off: confirmed messages and calls are REALLY sent")
         log.info("voice: %s", voice.describe())
         log.info("AI: %s", suggester.describe())
+        log.info("ranking: %s, %s", "learning on" if session.learning else "Day 1 mode (learning off)",
+                 ranker_jev.describe() if ranker_jev else f"no Jev ({jev_off}): history and time of day only")
         prewarm: asyncio.Task[object] | None = None
         if voice.tts.voice_id is not None and prewarm_enabled(env):
             # Background only: the board works (browser speech for anything not cached) meanwhile.
@@ -144,6 +151,8 @@ def create_app(
             prewarm.cancel()
         session.stop()
         await suggester.aclose()
+        if ranker_jev is not None:
+            await ranker_jev.aclose()
         await voice.aclose()
         db.close()
 
@@ -220,6 +229,8 @@ def create_app(
             "speak_picks": session.speak_picks,
             "ai": suggester.describe(),
             "ai_calls": suggester.calls,
+            "learning": session.learning,
+            "jev": app.state.jev.describe() if app.state.jev else "off",
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),

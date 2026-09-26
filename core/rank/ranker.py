@@ -41,7 +41,7 @@ LANG_NAMES: dict[Lang, str] = {"en": "English", "es": "Spanish"}
 class RankHistory(Protocol):
     """What the Ranker reads from the database (core.db.Db implements it)."""
 
-    def last_event_id(self) -> int: ...
+    def last_outcome_id(self) -> int: ...
 
     def outcomes(self, since: float) -> Sequence[Mapping[str, object]]: ...
 
@@ -88,18 +88,18 @@ class Ranker:
 
     # --- history --------------------------------------------------------------
 
-    def last_event_id(self) -> int:
+    def last_outcome_id(self) -> int:
         if self._history is None:
             return 0
         try:
-            return self._history.last_event_id()
+            return self._history.last_outcome_id()
         except Exception:
             log.exception("could not read the history; ranking without it")
             return 0
 
     def index(self) -> HistoryIndex:
         """The history, re-read only when a new event was logged."""
-        last = self.last_event_id()
+        last = self.last_outcome_id()
         if self._index is None or last != self._index_id:
             outcomes: list[Outcome] = []
             if self._history is not None:

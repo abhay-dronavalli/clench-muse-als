@@ -154,8 +154,8 @@ def profile(menu):
 
 
 @pytest.fixture
-def db(tmp_path):
-    d = Db(tmp_path / "t.db")
+def db():
+    d = Db(":memory:")
     d.sync_profile("Luis", "en", [])
     yield d
     d.close()

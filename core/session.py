@@ -82,6 +82,7 @@ from core.pointer import DEFAULT_SCAN_MS, make_pointer
 from core.profile import Profile
 from core.rank import Entry, Ranker
 from core.rank.history import Sentence, leaf_path
+from core.rank.jev import JevAnswer, JevRanker
 from core.suggest.provider import MAX_SENTENCES, Option, drop_known, text_key
 from core.suggest.service import Pending, Suggester
 from core.voice import Voice
@@ -243,6 +244,7 @@ class Session:
         speak_picks: bool | None = None,
         learning: bool | None = None,
         ranker: Ranker | None = None,
+        jev: JevRanker | None = None,
     ) -> None:
         self._menu = menu
         self._emit = emit
@@ -262,7 +264,9 @@ class Session:
         self.speak_picks = profile.speak_picks if speak_picks is None else speak_picks
         self.learning = profile.learning if learning is None else learning
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
+        self.jev = jev  # None = no Jev: the AI prior is 0
         self.state_level: BodyStateLevel | None = None  # from STATE; only reorders (PRD D10)
+        self._moves = 0  # gestures so far; a late Jev answer only re-ranks if this has not changed
         self.suggester.use_history = self.learning
         self.state = SessionState.SCANNING
         self._stack: list[Frame] = [self._home()]
@@ -326,6 +330,8 @@ class Session:
         )
 
     def handle(self, msg: Message) -> None:
+        if isinstance(msg, (Clench, DoubleBlink, LongClench)):
+            self._moves += 1
         match msg:
             case Clench():
                 self._on_clench()
@@ -664,6 +670,45 @@ class Session:
             return Entry(item.id, text=item.phrase(self.lang), urgent=urgent)
         return Entry(item.id, path=path, urgent=urgent)
 
+    def _jev_on(self) -> bool:
+        return self.learning and self.jev is not None and self.jev.available
+
+    def _jev_request(self, items: list[Item]) -> Pending[JevAnswer]:
+        """Jev's probabilities for `items` right now (cached on ids, hour, last outcome, language)."""
+        assert self.jev is not None
+        key = (tuple(i.id for i in items), self.ranker.hour(), self.ranker.last_outcome_id(), self.lang)
+        criteria = {i.id: i.phrase(self.lang) if i.kind == "suggestion" else i.label(self.lang) for i in items}
+        return self.jev.rank(key, criteria, self.ranker.jev_state(self.lang, self._crumbs(), self.state_level))
+
+    def _ask_jev(self, frame: Frame) -> None:
+        """Ask Jev about this frame's candidates, in the background. The scanner never waits: the
+        screen shows the history ranking now, and Jev's answer re-ranks it quietly (same highlight
+        position, no echo) only if the person has not done anything since. A cached answer is used at
+        once, before the screen is drawn."""
+        if not self._jev_on() or frame.rank == "none" or len(frame.pool) < 2:
+            return
+        pending = self._jev_request(frame.pool)
+        if pending.done:
+            if pending.result is not None:
+                frame.priors = dict(pending.result.probabilities)
+                self._rank(frame)
+            return
+        moves = self._moves
+
+        def arrived(answer: JevAnswer | None) -> None:
+            if answer is None:
+                return
+            frame.priors = dict(answer.probabilities)  # kept for when the person comes back here
+            if self.frame is not frame or self.state is not SessionState.SCANNING or self._moves != moves:
+                return
+            before = [i.id for i in frame.items]
+            self._rank(frame)
+            if [i.id for i in frame.items] != before:
+                log.info("Jev re-ranked %s", " > ".join(self._crumbs()) or "home")
+                self._emit(self._screen())
+
+        pending.on_done(arrived)
+
     def _urgent(self, path: str) -> bool:
         """Urgent (pain, bathroom, help): the item, a level above it, or something below it says so."""
         nodes = self._menu.chain(path)
@@ -672,6 +717,7 @@ class Session:
     def _enter_frame(self) -> None:
         """Show the top frame from its first tile and prefetch what could be picked next."""
         self.state = SessionState.SCANNING
+        self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
         self.pointer.on_tiles_changed(len(self.frame.items) + 1)
         self.pointer.start()
         self._emit(self._screen())

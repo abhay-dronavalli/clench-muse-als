@@ -244,9 +244,12 @@ class Db:
 
     # --- learning (core/rank) ----------------------------------------------------------
 
-    def last_event_id(self) -> int:
-        """Id of the newest events row, 0 when there is none. The ranking caches on it."""
-        row = self._conn.execute("SELECT MAX(id) AS id FROM events WHERE profile_id = ?", (PROFILE_ID,)).fetchone()
+    def last_outcome_id(self) -> int:
+        """Id of the newest confirmed send or cancelled confirm, 0 when there is none. The ranking and
+        Jev cache on it: plain picks do not change what they learn from."""
+        row = self._conn.execute(
+            "SELECT MAX(id) AS id FROM events WHERE profile_id = ? AND (confirmed = 1 OR rejected = 1)", (PROFILE_ID,)
+        ).fetchone()
         return int(row["id"] or 0)
 
     def outcomes(self, since: float) -> list[sqlite3.Row]:
