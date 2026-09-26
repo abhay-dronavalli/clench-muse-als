@@ -13,6 +13,7 @@ from core.contracts import (
 )
 from core.menu import load_menu
 from core.pointer import ScanPointer
+from core.profile import load_profile
 from core.session import CLENCH_DEBOUNCE_S, SPEAK_TIMEOUT_S, Session, SessionState
 
 SCAN_S = 1.0
@@ -33,9 +34,14 @@ def sent():
     return []
 
 
+@pytest.fixture(scope="module")
+def profile(menu):
+    return load_profile(menu.contacts)
+
+
 @pytest.fixture
-def session(menu, sched, sent):
-    s = Session(menu, sent.append, sched, scan_ms=int(SCAN_S * 1000))
+def session(menu, profile, sched, sent):
+    s = Session(menu, sent.append, sched, profile=profile, lang="en", scan_ms=int(SCAN_S * 1000))
     s.start()
     return s
 

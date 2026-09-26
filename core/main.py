@@ -18,15 +18,18 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from core.clock import AsyncioScheduler, Scheduler
 from core.contracts import Lang, Message, Ready, parse_message
+from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
+from core.profile import Profile, load_profile
 from core.session import Session
 
 logging.basicConfig(format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
@@ -66,21 +69,37 @@ def decode(text: str, role: Role) -> Message | None:
 def create_app(
     *,
     menu: Menu | None = None,
+    profile: Profile | None = None,
     scheduler: Scheduler | None = None,
     scan_ms: int = DEFAULT_SCAN_MS,
-    lang: Lang = "en",
+    lang: Lang | None = None,
+    db_path: str | Path = ":memory:",
 ) -> FastAPI:
+    """Build the app. Defaults are safe for tests: an in-memory database. The real app (bottom of
+    this file) passes the database file."""
     menu = menu or load_menu()  # fails loudly at startup on a bad tree
+    profile = profile or load_profile(menu.contacts)
     hub = Hub()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        session = Session(menu, hub.broadcast, scheduler or AsyncioScheduler(), scan_ms=scan_ms, lang=lang)
+        db = Db(db_path)
+        db.sync_profile(profile.name, profile.lang, menu.contacts.values())
+        session = Session(
+            menu,
+            hub.broadcast,
+            scheduler or AsyncioScheduler(),
+            profile=profile,
+            db=db,
+            scan_ms=scan_ms,
+            lang=lang,
+        )
         app.state.session = session
         session.start()
-        log.info("core ready: scanning home, %d ms per tile, lang %s", scan_ms, lang)
+        log.info("core ready: scanning home, %d ms per tile, lang %s, patient %s", scan_ms, session.lang, profile.name)
         yield
         session.stop()
+        db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
     app.state.hub = hub
@@ -145,4 +164,4 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(db_path=DB_PATH)

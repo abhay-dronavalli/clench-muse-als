@@ -1,0 +1,9 @@
+# The person using Clench (PRD A7 `profile`). Loaded by the core at startup.
+#
+#   name          used in messages and calls ("Luis: ...", "Mensaje de Luis: ...")
+#   lang          language the board starts in: en | es (switchable live)
+#   help_contact  contact id from contacts.yaml called and messaged by the long-clench help alert
+
+name: Luis
+lang: es
+help_contact: maria

@@ -1,8 +1,11 @@
 # Contacts for the "People" menu (PRD sections 5 and 8). Each becomes a branch with
-# Call / Text / Say out loud. Phrases are what is spoken (and, for text, sent) after confirming.
+# Call / Text / Say out loud. Phrases are what is spoken after confirming, and for Call and Text
+# also what the contact hears on the call or reads in the message.
 #
-# Phone numbers are NOT stored here (no personal data in git). Real numbers are wired up with the
-# Twilio actions in chunk 4.
+# Phone numbers and Telegram chat ids are NOT stored here (no personal data in git). Each contact
+# names the .env variables that hold them:
+#   phone_env          E.164 number for Twilio voice calls, e.g. CONTACT_MARIA_PHONE=+13055550123
+#   telegram_chat_env  chat id the Telegram bot messages, e.g. TELEGRAM_CHAT_ID_MARIA=123456789
 
 contacts:
   - id: maria
@@ -10,10 +13,12 @@ contacts:
     label_es: María
     relation: daughter
     language: es
+    phone_env: CONTACT_MARIA_PHONE
+    telegram_chat_env: TELEGRAM_CHAT_ID_MARIA
     phrases:
       call:
-        en: "I'm calling Maria."
-        es: "Estoy llamando a María."
+        en: "Honey, I'd like to see you. Please come by when you can."
+        es: "Mija, quiero verte. Por favor ven cuando puedas."
       text:
         en: "Honey, I'm okay, call me at six."
         es: "Mija, estoy bien, llámame a las seis."
@@ -26,10 +31,12 @@ contacts:
     label_es: Carlos
     relation: son
     language: es
+    phone_env: CONTACT_CARLOS_PHONE
+    telegram_chat_env: TELEGRAM_CHAT_ID_CARLOS
     phrases:
       call:
-        en: "I'm calling Carlos."
-        es: "Estoy llamando a Carlos."
+        en: "Carlos, I'd like to see you. Please come by today."
+        es: "Carlos, quiero verte. Por favor ven hoy."
       text:
         en: "Carlos, I'm fine. Come visit me when you can."
         es: "Carlos, estoy bien. Ven a verme cuando puedas."
@@ -42,10 +49,12 @@ contacts:
     label_es: Enfermera
     relation: nurse
     language: en
+    phone_env: CONTACT_NURSE_PHONE
+    telegram_chat_env: TELEGRAM_CHAT_ID_NURSE
     phrases:
       call:
-        en: "I'm calling the nurse."
-        es: "Estoy llamando a la enfermera."
+        en: "Please come to my room. I need help."
+        es: "Por favor venga a mi cuarto. Necesito ayuda."
       text:
         en: "Please come when you can. I need help."
         es: "Por favor, venga cuando pueda. Necesito ayuda."

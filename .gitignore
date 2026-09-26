@@ -21,6 +21,7 @@ dist/
 data/recordings/*.csv
 *.sqlite3
 *.db
+data/clench.db*
 
 # Editors / OS
 .vscode/

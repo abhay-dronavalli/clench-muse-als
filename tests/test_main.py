@@ -16,7 +16,7 @@ class FakeClock:
 
 def make_client(clock: FakeClock) -> TestClient:
     # A very slow scan so the highlight never moves during the test.
-    return TestClient(create_app(scheduler=AsyncioScheduler(clock=clock), scan_ms=600_000))
+    return TestClient(create_app(scheduler=AsyncioScheduler(clock=clock), scan_ms=600_000, lang="en"))
 
 
 def test_board_gets_confirm_then_speak():

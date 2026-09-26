@@ -27,8 +27,10 @@ from core.contracts import (
     Speak,
     Tile,
 )
+from core.db import Db
 from core.menu import Menu, MenuNode
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
+from core.profile import Profile
 
 log = logging.getLogger("clench.session")
 
@@ -54,14 +56,18 @@ class Session:
         emit: Emit,
         scheduler: Scheduler,
         *,
-        lang: Lang = "en",
+        profile: Profile,
+        db: Db | None = None,
+        lang: Lang | None = None,
         scan_ms: int = DEFAULT_SCAN_MS,
         pointing_mode: PointingMode = "auto",
     ) -> None:
         self._menu = menu
         self._emit = emit
         self._scheduler = scheduler
-        self.lang: Lang = lang
+        self.profile = profile
+        self._db = db  # None = nothing is recorded (some tests)
+        self.lang: Lang = lang or profile.lang
         self.scan_ms = scan_ms
         self.pointing_mode: PointingMode = pointing_mode
         self.state = SessionState.SCANNING
@@ -141,7 +147,10 @@ class Session:
             else:
                 log.info("DOUBLE_BLINK at home: nothing to go back to")
         elif self.state is SessionState.CONFIRMING:
-            log.info("cancelled: %r", self._pending.phrase(self.lang) if self._pending else None)
+            node = self._pending
+            assert node is not None
+            log.info("cancelled: %r", node.phrase(self.lang))
+            self._record(node, rejected=True, text=node.phrase(self.lang))
             self._pending = None
             self._enter_level()  # back to the level the leaf was on
         else:
@@ -156,6 +165,7 @@ class Session:
             log.warning("CLENCH with highlight %d outside %d tiles", index, len(children))
             return
         node = children[index]
+        self._record(node)
         if node.is_leaf:
             self._pending = node
             self.state = SessionState.CONFIRMING
@@ -172,6 +182,8 @@ class Session:
         text = node.phrase(self.lang)
         self._emit(Speak(text=text, lang=self.lang))
         self._log_action(node, text)
+        self._record(node, confirmed=True, text=text)
+        self._use_phrase(text)
         self._cancel_speak_timer()
         self._speak_timer = self._scheduler.call_later(
             SPEAK_TIMEOUT_S, lambda: self._finish_speaking("timeout")
@@ -237,6 +249,36 @@ class Session:
         contact = self._menu.contacts.get(node.contact) if node.contact else None
         target = f" to {contact.label_en} ({contact.relation})" if contact else ""
         log.info("would %s%s: %r (spoken only in this chunk)", node.action, target, text)
+
+    # --- storage --------------------------------------------------------------
+
+    def _record(self, node: MenuNode, *, confirmed: bool = False, rejected: bool = False, text: str | None = None) -> None:
+        """Log a pick, confirm or cancel of `node`, a child of the current level. Never raises."""
+        if self._db is None:
+            return
+        ids = [n.id for n in self._path[1:]] + [node.id]
+        labels = [n.label(self.lang) for n in self._path[1:]] + [node.label(self.lang)]
+        try:
+            self._db.log_event(
+                node_id=".".join(ids),
+                path=labels,
+                action=node.action,
+                lang=self.lang,
+                confirmed=confirmed,
+                rejected=rejected,
+                text=text,
+                contact=node.contact,
+            )
+        except Exception:
+            log.exception("could not record event for %s", ".".join(ids))
+
+    def _use_phrase(self, text: str) -> None:
+        if self._db is None:
+            return
+        try:
+            self._db.use_phrase(text, self.lang)
+        except Exception:
+            log.exception("could not record phrase %r", text)
 
     def _cancel_speak_timer(self) -> None:
         if self._speak_timer is not None:

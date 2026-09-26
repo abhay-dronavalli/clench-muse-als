@@ -22,6 +22,7 @@ MAX_TILES = 6  # PRD D8
 MenuAction = Literal["speak", "send_message", "place_call", "room_control"]
 NodeId = Annotated[str, Field(pattern=r"^[a-z0-9_]+$")]
 Text = Annotated[str, Field(min_length=1)]
+EnvName = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$")]
 
 
 class MenuError(ValueError):
@@ -92,7 +93,13 @@ class Contact(BaseModel):
     label_es: Text
     relation: str
     language: Lang
+    # Names of the .env variables holding the phone number / Telegram chat id (values never in git).
+    phone_env: EnvName | None = None
+    telegram_chat_env: EnvName | None = None
     phrases: ContactPhrases
+
+    def label(self, lang: Lang) -> str:
+        return self.label_es if lang == "es" else self.label_en
 
 
 class _MenuFile(BaseModel):
