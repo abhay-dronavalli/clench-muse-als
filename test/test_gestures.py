@@ -8,7 +8,7 @@ you put the band on.
     python test_gestures.py
 """
 
-from clench_detect import GestureRecognizer, Levels
+from clench_detect import GestureRecognizer, Levels, hold_runs
 
 TICK = 0.05          # same 20 Hz tick the real loop runs at
 EMG_THRESHOLD = 30.0
@@ -254,6 +254,57 @@ def main():
     results.append(check(
         "30 s of rest with the hold detector on -> nothing",
         run([quiet(30.0)], hold_threshold=HOLD_THRESHOLD),
+        []))
+
+    # =============== hold_runs: what the calibration measures ===============
+    # Calibration decides the long-blink threshold from how high AND how long the
+    # holds were. On synthetic data there are no eyelid steps to find, so only the
+    # "no holds detected" branch ever runs there -- these drive the other one.
+
+    def samples(*steps):
+        """(duration_s, left, right) steps -> the (time, Levels) list collect returns."""
+        out = []
+        now = 0.0
+        for duration, left, right in steps:
+            for _ in range(int(round(duration / TICK))):
+                out.append((now, Levels(QUIET_EMG, QUIET_BLINK, QUIET_BLINK,
+                                        left, right)))
+                now += TICK
+        return out
+
+    FLOOR = 20.0
+
+    runs = hold_runs(samples((0.5, 2.0, 2.0), (0.8, 80.0, 75.0), (0.5, 2.0, 2.0)),
+                     FLOOR)
+    results.append(check(
+        "hold_runs finds one hold and times it",
+        [(round(peak), round(ms / 50) * 50) for peak, ms in runs],
+        [(75, 750)]))
+
+    # Both lids move together, so one channel offset alone is a bad electrode.
+    results.append(check(
+        "hold_runs ignores a single channel drifting",
+        hold_runs(samples((0.5, 2.0, 2.0), (0.8, 80.0, 2.0), (0.5, 2.0, 2.0)), FLOOR),
+        []))
+
+    # Two holds in one recording: calibration takes the longest as the deliberate
+    # one, so both have to be found separately rather than merged.
+    runs = hold_runs(samples((0.3, 2.0, 2.0), (0.2, 70.0, 70.0), (0.3, 2.0, 2.0),
+                             (0.8, 90.0, 90.0), (0.3, 2.0, 2.0)), FLOOR)
+    results.append(check(
+        "hold_runs separates two holds",
+        [round(ms / 50) * 50 for _peak, ms in runs],
+        [150, 750]))
+
+    # A hold still going when the recording stops must not be dropped.
+    runs = hold_runs(samples((0.3, 2.0, 2.0), (0.5, 60.0, 60.0)), FLOOR)
+    results.append(check(
+        "hold_runs keeps a hold that runs to the end of the recording",
+        len(runs), 1))
+
+    results.append(check(
+        "hold_runs finds nothing in a quiet recording",
+        hold_runs(samples((2.0, 2.0, 2.0)), FLOOR),
         []))
 
     passed = sum(results)

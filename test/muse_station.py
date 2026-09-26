@@ -37,17 +37,19 @@ over native code and makes no thread-safety promises.
 """
 
 import queue
+import re
 import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import simpledialog, ttk
 from types import SimpleNamespace
 
 import numpy as np
 from brainflow.board_shim import BoardShim, BrainFlowPresets
 
 import clench_detect as cd
+import station_activities as sa
 from config import (CONNECT_HELP, board_label, build_parser,
                     eeg_channels_and_names, enable_ppg, get_board,
                     warn_about_platform)
@@ -64,6 +66,10 @@ UI_TICK_MS = 50             # how often the main thread drains the queue
 FLAT_UV = 1.0
 NOISY_UV = 200.0
 FIT_BAR_FULL_UV = 150.0     # a full bar means "plenty of signal", not "good"
+
+# Profile names become filenames (calibration.<name>.json), so they are kept to
+# characters that cannot turn into a path or a second extension.
+PROFILE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 OFF, CONNECTING, CONNECTED, LOST = "off", "connecting", "connected", "lost"
 DOT = {OFF: "#6b7280", CONNECTING: "#f59e0b", CONNECTED: "#22c55e", LOST: "#ef4444"}
@@ -383,8 +389,9 @@ class StationUI:
         self.post(("event", name, detail, elapsed))
 
     def tick(self, levels, recognizer, recent):
-        self.post(("tick", levels,
-                   recognizer.clench.threshold, recognizer.blink.threshold))
+        hold = recognizer.long_blink.threshold if recognizer.long_blink else None
+        self.post(("tick", levels, recognizer.clench.threshold,
+                   recognizer.blink.threshold, hold))
 
     def should_stop(self):
         return self.stop_event.is_set()
@@ -406,6 +413,7 @@ class Station(tk.Tk):
         self.stop_event = threading.Event()
         self.ready_event = threading.Event()
         self.activity_name = None
+        self.activity_window = None
 
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -509,24 +517,33 @@ class Station(tk.Tk):
         self.profile_box = ttk.Combobox(activity, textvariable=self.profile_var,
                                         width=14, values=cd.list_profiles())
         self.profile_box.grid(row=0, column=1, sticky="w")
+        self.new_profile_button = ttk.Button(activity, text="New...", width=7,
+                                            command=self._on_new_profile)
+        self.new_profile_button.grid(row=0, column=2, padx=(4, 10))
 
         self.calibrate_button = ttk.Button(activity, text="Calibrate",
                                            command=self._on_calibrate)
-        self.calibrate_button.grid(row=0, column=2, padx=6)
+        self.calibrate_button.grid(row=0, column=3, padx=4)
         self.listen_button = ttk.Button(activity, text="Listen",
                                         command=self._on_listen)
-        self.listen_button.grid(row=0, column=3, padx=6)
+        self.listen_button.grid(row=0, column=4, padx=4)
+        self.flappy_button = ttk.Button(activity, text="Flappy",
+                                       command=self._on_flappy)
+        self.flappy_button.grid(row=0, column=5, padx=4)
+        self.drill_button = ttk.Button(activity, text="Drill",
+                                       command=self._on_drill)
+        self.drill_button.grid(row=0, column=6, padx=4)
         self.stop_button = ttk.Button(activity, text="Stop", command=self._on_stop)
-        self.stop_button.grid(row=0, column=4, padx=6)
+        self.stop_button.grid(row=0, column=7, padx=4)
 
         self.quick_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(activity, text="quick (rest only, no clench/blink reps)",
-                        variable=self.quick_var).grid(row=1, column=0, columnspan=5,
+                        variable=self.quick_var).grid(row=1, column=0, columnspan=8,
                                                       sticky="w", pady=(6, 0))
         self.blink_only_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(activity, text="blink only (keep saved clench numbers)",
                         variable=self.blink_only_var).grid(row=2, column=0,
-                                                           columnspan=5, sticky="w")
+                                                           columnspan=8, sticky="w")
 
         # --- the prompt, when an activity is waiting on you -----------------
         self.prompt_frame = ttk.Frame(root, padding=(0, 8))
@@ -574,8 +591,79 @@ class Station(tk.Tk):
     def _on_listen(self):
         self._start_activity("listen", self._listen)
 
+    def _on_flappy(self):
+        self._start_activity("flappy", self._interactive,
+                             window=lambda: sa.FlappyWindow(self,
+                                                            self._on_window_closed))
+
+    def _on_drill(self):
+        # Which inputs the drill can ask for depends on the profile, and that is a
+        # cheap file read, so it happens here rather than in the worker: the window
+        # has to know what it is drilling before it opens.
+        inputs = [sa.CLENCH]
+        calibration = self._peek_calibration()
+        if calibration and calibration.get("hold_threshold"):
+            inputs.append(sa.LONG_BLINK)
+        else:
+            self._log("!! this profile has no long-blink calibration, so the drill "
+                      "can only test the clench.")
+            self._log("   Recalibrate to enable the second input.")
+        self._start_activity("drill", self._interactive,
+                             window=lambda: sa.DrillWindow(self,
+                                                           self._on_window_closed,
+                                                           inputs=inputs))
+
+    def _peek_calibration(self):
+        """Read the selected profile's calibration on the Tk thread, quietly."""
+        board = self.link.board
+        if board is None:
+            return None
+        try:
+            return cd.load_calibration(board, self._profile_name(),
+                                       StationUI(self.queue.put, self.stop_event,
+                                                 self.ready_event))
+        except Exception as exc:
+            self._log(f"!! could not read the profile: {exc}")
+            return None
+
+    def _profile_name(self):
+        return self.profile_var.get().strip() or "default"
+
+    def _on_new_profile(self):
+        """Claim a new profile name. It becomes a file when calibration saves it."""
+        name = simpledialog.askstring(
+            "New profile",
+            "Name for the new profile\n(letters, digits, - and _):",
+            parent=self)
+        if name is None:
+            return
+        name = name.strip()
+        if not PROFILE_NAME.match(name):
+            self._log(f"!! '{name}' is not a usable profile name. Use letters, "
+                      "digits, - or _, up to 32 characters.")
+            return
+        if name in cd.list_profiles():
+            self._log(f"profile '{name}' already exists -- selected it.")
+        else:
+            self._log(f"profile '{name}' selected. It is empty until you press "
+                      "Calibrate.")
+        values = sorted(set(cd.list_profiles()) | {name})
+        self.profile_box.configure(values=values)
+        self.profile_var.set(name)
+
+    def _on_window_closed(self):
+        """The game window was closed by the user: that ends the activity."""
+        self.activity_window = None
+        self._stop_activity()
+
+    def _close_activity_window(self):
+        window, self.activity_window = self.activity_window, None
+        if window is not None and window.alive:
+            window.close()
+
     def _on_close(self):
         self._log("closing: stopping work and releasing the headband ...")
+        self._close_activity_window()
         self._stop_activity()
         self.update_idletasks()
         self.link.close()
@@ -591,22 +679,27 @@ class Station(tk.Tk):
         a BooleanVar from the worker raises "main thread is not in main loop".
         """
         return SimpleNamespace(
-            profile=self.profile_var.get().strip() or "default",
+            profile=self._profile_name(),
             baseline_seconds=10.0,
             k=6.0,
             no_clench_cal=self.quick_var.get(),
             blink_only=self.blink_only_var.get(),
             long_ms=1500,
             double_ms=700,
+            long_blink_ms=cd.LONG_BLINK_MS,
         )
 
-    def _start_activity(self, name, target):
+    def _start_activity(self, name, target, window=None):
         if self.link.state != CONNECTED:
             self._log("!! connect first.")
             return
         if self.work_thread and self.work_thread.is_alive():
             self._log("!! something is already running -- press Stop.")
             return
+        if window is not None:
+            # Created here because this runs on the Tk thread; a worker must never
+            # build a widget.
+            self.activity_window = window()
         self.stop_event.clear()
         self.ready_event.clear()
         self.activity_name = name
@@ -641,6 +734,13 @@ class Station(tk.Tk):
             self.queue.put(("profiles", cd.list_profiles()))
 
     def _listen(self, ui, args):
+        self._detect(ui, args, emit_start=False)
+
+    def _interactive(self, ui, args):
+        """Flappy and the drill: same loop, but clenches report on the rising edge."""
+        self._detect(ui, args, emit_start=True)
+
+    def _detect(self, ui, args, emit_start):
         board = self.link.board
         if board is None:
             raise cd.Cancelled()
@@ -653,7 +753,7 @@ class Station(tk.Tk):
         cd.describe(calibration, ui)
         window = int(self.link.fs * cd.WINDOW_SECONDS)
         cd.detect_loop(board, self.link.rows, self.link.fs, window,
-                       calibration, args, ui)
+                       calibration, args, ui, emit_start=emit_start)
 
     def _stop_activity(self):
         """Ask the activity to stop. Safe from any thread, and safe if idle."""
@@ -720,13 +820,17 @@ class Station(tk.Tk):
                 self._show_levels(levels, None, None)
 
         elif kind == "tick":
-            _, levels, emg_threshold, blink_threshold = message
+            _, levels, emg_threshold, blink_threshold, hold_threshold = message
             self._show_levels(levels, emg_threshold, blink_threshold)
+            if self.activity_window is not None:
+                self.activity_window.on_levels(levels, emg_threshold, hold_threshold)
 
         elif kind == "event":
             _, name, detail, elapsed = message
             self.last_event.configure(text=f"{name}    {detail}")
             self._log(f"  [{elapsed:6.1f}s]  {name:<13} {detail}")
+            if self.activity_window is not None:
+                self.activity_window.on_gesture(name, detail)
 
         elif kind == "prompt":
             prompt = message[1]
@@ -741,6 +845,8 @@ class Station(tk.Tk):
 
         elif kind == "done":
             self.activity_name = None
+            # Gestures have stopped arriving, so a game window would be dead.
+            self._close_activity_window()
             self.prompt_frame.pack_forget()
             self.last_event.configure(text="")
             self._refresh_buttons()
@@ -798,6 +904,9 @@ class Station(tk.Tk):
         runnable = "normal" if (connected and not busy) else "disabled"
         self.calibrate_button.configure(state=runnable)
         self.listen_button.configure(state=runnable)
+        self.flappy_button.configure(state=runnable)
+        self.drill_button.configure(state=runnable)
+        self.new_profile_button.configure(state="disabled" if busy else "normal")
         self.stop_button.configure(state="normal" if busy else "disabled")
         self.profile_box.configure(state="readonly" if not busy else "disabled")
 

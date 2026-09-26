@@ -808,13 +808,20 @@ class GestureRecognizer:
         return events
 
 
-def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None):
-    """The input loop: read envelopes, recognise gestures, report them."""
+def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None,
+                emit_start=False):
+    """The input loop: read envelopes, recognise gestures, report them.
+
+    emit_start makes a clench report on its rising edge instead of its release.
+    Anything interactive needs it: waiting for the release adds the whole length
+    of the clench to the latency.
+    """
     ui = ui or ConsoleUI()
     hold_threshold = calibration.get("hold_threshold")
     recognizer = GestureRecognizer(calibration["emg_threshold"],
                                    calibration["blink_threshold"],
                                    args.long_ms, args.double_ms,
+                                   emit_start=emit_start,
                                    hold_threshold=hold_threshold,
                                    long_blink_ms=getattr(args, "long_blink_ms",
                                                          LONG_BLINK_MS))

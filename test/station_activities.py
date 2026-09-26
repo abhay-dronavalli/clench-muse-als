@@ -1,0 +1,411 @@
+"""The two windows the station can open on top of a live connection.
+
+Both exist to answer questions a log cannot:
+
+  FlappyWindow  does the input feel immediate? Flappy punishes latency visibly,
+                so if this feels fair, clench-as-a-button works.
+  DrillWindow   are the two inputs reliably told apart? Prompts one at random,
+                times the response, and counts every way it can go wrong.
+
+Both are Toplevels driven by `after()` on the Tk thread. They never read the
+board: the station's work thread already does that and posts gestures onto the
+queue, so by the time anything arrives here it is a plain event name on the right
+thread. That is the only reason these can be this simple.
+
+Physics for the game comes from clench_flappy.Flappy unchanged -- it is pure
+state with no matplotlib in it, which is exactly why it was written that way.
+"""
+
+import random
+import time
+import tkinter as tk
+from tkinter import ttk
+
+from clench_flappy import (BIRD_R, BIRD_X, GAP_HEIGHT, GROUND_Y, PIPE_WIDTH,
+                           WORLD_H, WORLD_W, Flappy)
+
+FRAME_MS = 20               # 50 fps; the physics are dt-based so this is cosmetic
+CLENCH = "CLENCH_START"     # the rising edge, not the release: see clench_flappy
+LONG_BLINK = "LONG_BLINK"
+
+INK = "#0f172a"
+PAPER = "#f8fafc"
+BIRD = "#f59e0b"
+PIPE = "#16a34a"
+DEAD = "#dc2626"
+HINT = "#64748b"
+LIVE = "#2563eb"
+
+
+class ActivityWindow(tk.Toplevel):
+    """A Toplevel with a canvas and a frame clock. Subclasses fill in the rest."""
+
+    def __init__(self, parent, title, width, height, on_close):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self._on_close = on_close
+        self.alive = True
+        self.width, self.height = width, height
+
+        self.canvas = tk.Canvas(self, width=width, height=height, bg=PAPER,
+                                highlightthickness=0)
+        self.canvas.pack()
+        self.status = ttk.Label(self, text="", foreground=HINT)
+        self.status.pack(fill="x", padx=8, pady=4)
+
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.bind("<KeyPress>", self.on_key)
+        self.focus_set()
+
+        self._last = time.monotonic()
+        self.after(FRAME_MS, self._frame)
+
+    # -------------------------------------------------------------- the clock
+
+    def _frame(self):
+        if not self.alive:
+            return
+        now = time.monotonic()
+        # Clamped: a stalled frame must not teleport anything.
+        dt = min(now - self._last, 0.1)
+        self._last = now
+        try:
+            self.update_frame(dt)
+        except tk.TclError:
+            return          # window went away mid-frame
+        self.after(FRAME_MS, self._frame)
+
+    def close(self):
+        if not self.alive:
+            return
+        self.alive = False
+        self._on_close()
+        self.destroy()
+
+    # ------------------------------------------------- for subclasses to fill
+
+    def update_frame(self, dt):
+        raise NotImplementedError
+
+    def on_gesture(self, name, detail):
+        """A gesture fired. Called on the Tk thread."""
+
+    def on_levels(self, levels, emg_threshold, hold_threshold):
+        """One detector tick, for live meters."""
+
+    def on_key(self, event):
+        if event.keysym in ("q", "Escape"):
+            self.close()
+
+
+# ============================================================ flappy, for feel
+
+class FlappyWindow(ActivityWindow):
+    """Flappy Bird, flapped on the rising edge of a clench.
+
+    The point is latency, not fun. Waiting for the clench to release would add the
+    whole length of the clench to the lag, which in the scanning game read as
+    being exactly one cell late every time -- so this flaps on CLENCH_START.
+    """
+
+    SCALE = 58
+
+    def __init__(self, parent, on_close):
+        width = int(WORLD_W * self.SCALE)
+        height = int(WORLD_H * self.SCALE)
+        super().__init__(parent, "Clench Flappy", width, height, on_close)
+        self.game = Flappy()
+        self.emg = 0.0
+        self.emg_threshold = None
+        self.status.configure(text="Clench to flap.  Space also flaps, R restarts, "
+                                  "Q closes.")
+
+    # -------------------------------------------------------------- the input
+
+    def on_gesture(self, name, detail):
+        if name == CLENCH:
+            self.flap()
+
+    def on_levels(self, levels, emg_threshold, hold_threshold):
+        self.emg = levels.emg
+        self.emg_threshold = emg_threshold
+
+    def on_key(self, event):
+        if event.keysym == "space":
+            self.flap()
+        elif event.keysym in ("r", "R"):
+            self.game.reset()
+        else:
+            super().on_key(event)
+
+    def flap(self):
+        if self.game.alive:
+            self.game.flap()
+        elif self.game.elapsed > 0.4:
+            # A flap on the game-over screen restarts, but not the same clench
+            # that just killed you.
+            self.game.reset()
+
+    # ------------------------------------------------------------- the drawing
+
+    def update_frame(self, dt):
+        if self.game.alive:
+            self.game.step(dt)
+        self.draw()
+
+    def _xy(self, x, y):
+        """World coordinates to canvas pixels, with y flipped."""
+        return x * self.SCALE, self.height - y * self.SCALE
+
+    def draw(self):
+        canvas = self.canvas
+        canvas.delete("all")
+        game = self.game
+
+        # ground
+        gx, gy = self._xy(0, GROUND_Y)
+        canvas.create_rectangle(0, gy, self.width, self.height,
+                                fill="#e2e8f0", outline="")
+
+        for pipe in game.pipes:
+            left, _ = self._xy(pipe["x"], 0)
+            right, _ = self._xy(pipe["x"] + PIPE_WIDTH, 0)
+            gap_top = pipe["gap_center"] + GAP_HEIGHT / 2
+            gap_bottom = pipe["gap_center"] - GAP_HEIGHT / 2
+            _, top_y = self._xy(0, gap_top)
+            _, bottom_y = self._xy(0, gap_bottom)
+            canvas.create_rectangle(left, 0, right, top_y, fill=PIPE, outline="")
+            canvas.create_rectangle(left, bottom_y, right, gy, fill=PIPE, outline="")
+
+        bx, by = self._xy(BIRD_X, game.y)
+        radius = BIRD_R * self.SCALE
+        canvas.create_oval(bx - radius, by - radius, bx + radius, by + radius,
+                           fill=BIRD if game.alive else DEAD, outline="")
+
+        canvas.create_text(12, 12, anchor="nw", text=str(game.score),
+                           font=("Segoe UI", 22, "bold"), fill=INK)
+
+        # A clench meter in the corner: when a flap does not happen, this says
+        # whether the clench was too weak or the detector missed it.
+        if self.emg_threshold:
+            bar_w = 120
+            fraction = min(1.0, self.emg / (self.emg_threshold * 1.5))
+            canvas.create_rectangle(self.width - bar_w - 12, 14,
+                                    self.width - 12, 26,
+                                    fill="#e2e8f0", outline="")
+            canvas.create_rectangle(self.width - bar_w - 12, 14,
+                                    self.width - bar_w - 12 + bar_w * fraction, 26,
+                                    fill=LIVE if self.emg < self.emg_threshold
+                                    else "#22c55e", outline="")
+            mark = self.width - bar_w - 12 + bar_w * (2 / 3)
+            canvas.create_line(mark, 12, mark, 28, fill=INK)
+
+        if not game.alive:
+            canvas.create_text(self.width / 2, self.height / 2 - 20,
+                               text="dead", font=("Segoe UI", 30, "bold"),
+                               fill=DEAD)
+            canvas.create_text(self.width / 2, self.height / 2 + 20,
+                               text="clench (or Space) to try again",
+                               font=("Segoe UI", 13), fill=HINT)
+
+
+# ====================================================== the drill, for the truth
+
+class Round:
+    """One prompt and what came of it."""
+
+    def __init__(self, want):
+        self.want = want
+        self.shown_at = time.monotonic()
+        self.outcome = None            # "hit" | "wrong" | "miss"
+        self.latency_ms = None
+        self.got = None
+
+
+class DrillWindow(ActivityWindow):
+    """Prompts one of the two inputs at random and records what actually fired.
+
+    Reliability and latency are different questions and this answers both, but
+    only one of them cleanly. Reliability is exact: over N rounds, how often did
+    the right input fire, how often did the other one fire instead, how often did
+    nothing happen. Latency is not -- the number below is your reaction time plus
+    the system's, and nothing here can separate those. What IS ours is the
+    difference between the two inputs: a clench fires on its rising edge, while a
+    long blink cannot fire until the hold completes, so expect a gap of roughly
+    the hold length. If the clench column is much slower than your own reaction
+    time, that is real lag and worth chasing.
+    """
+
+    ROUNDS = 20
+    TIMEOUT_S = 4.0
+    GAP_S = 1.2                 # quiet time between rounds, to catch stray fires
+
+    PROMPT = {CLENCH: "CLENCH", LONG_BLINK: "CLOSE AND HOLD"}
+
+    def __init__(self, parent, on_close, rounds=ROUNDS, inputs=(CLENCH, LONG_BLINK),
+                 seed=None):
+        super().__init__(parent, "Two-input drill", 620, 340, on_close)
+        self.total_rounds = rounds
+        self.inputs = list(inputs)
+        self.rng = random.Random(seed)
+        self.rounds = []
+        self.current = None
+        self.waiting_until = time.monotonic() + 1.5   # a beat before the first prompt
+        self.other_events = {}
+        self.stray = 0
+        self.flash_until = 0.0
+        self.finished = False
+        self.status.configure(text="Do only what the prompt asks. Q closes.")
+
+    # -------------------------------------------------------------- the input
+
+    def on_gesture(self, name, detail):
+        if self.finished:
+            return
+        if name not in self.inputs:
+            # BLINK and DOUBLE_BLINK happen involuntarily; they are worth counting
+            # but they are not failures of this drill.
+            self.other_events[name] = self.other_events.get(name, 0) + 1
+            return
+
+        self.flash_until = time.monotonic() + 0.12
+        if self.current is None:
+            # Fired while nothing was asked for. This is the number that decides
+            # whether an input is safe to leave switched on.
+            self.stray += 1
+            return
+
+        self.current.got = name
+        self.current.latency_ms = (time.monotonic() - self.current.shown_at) * 1000
+        self.current.outcome = "hit" if name == self.current.want else "wrong"
+        self._finish_round()
+
+    # ---------------------------------------------------------------- the state
+
+    def update_frame(self, dt):
+        now = time.monotonic()
+        if self.finished:
+            self.draw()
+            return
+
+        if self.current is None:
+            if now >= self.waiting_until:
+                self._next_round()
+        elif now - self.current.shown_at > self.TIMEOUT_S:
+            self.current.outcome = "miss"
+            self._finish_round()
+        self.draw()
+
+    def _next_round(self):
+        if len(self.rounds) >= self.total_rounds:
+            self.finished = True
+            return
+        self.current = Round(self.rng.choice(self.inputs))
+
+    def _finish_round(self):
+        self.rounds.append(self.current)
+        self.current = None
+        if len(self.rounds) >= self.total_rounds:
+            # Finish the moment the last round lands. Waiting out the
+            # between-rounds gap first left the summary a second late, staring at
+            # "wait" after the drill was already over.
+            self.finished = True
+        else:
+            self.waiting_until = time.monotonic() + self.GAP_S
+
+    # ------------------------------------------------------------ the reporting
+
+    def tally(self):
+        """Per-input counts and latencies. Also used by the self-test."""
+        result = {}
+        for name in self.inputs:
+            mine = [r for r in self.rounds if r.want == name]
+            hits = [r for r in mine if r.outcome == "hit"]
+            latencies = sorted(r.latency_ms for r in hits)
+            result[name] = {
+                "asked": len(mine),
+                "hit": len(hits),
+                "wrong": sum(1 for r in mine if r.outcome == "wrong"),
+                "miss": sum(1 for r in mine if r.outcome == "miss"),
+                "median_ms": latencies[len(latencies) // 2] if latencies else None,
+                "worst_ms": latencies[-1] if latencies else None,
+            }
+        return result
+
+    def summary_lines(self):
+        lines = []
+        for name, row in self.tally().items():
+            median = f"{row['median_ms']:.0f} ms" if row["median_ms"] else "--"
+            worst = f"{row['worst_ms']:.0f} ms" if row["worst_ms"] else "--"
+            lines.append(f"{self.PROMPT[name]:<16} {row['hit']}/{row['asked']} hit"
+                         f"   {row['wrong']} wrong input   {row['miss']} missed"
+                         f"   median {median}, worst {worst}")
+        lines.append(f"fired when nothing was asked: {self.stray}")
+        if self.other_events:
+            spare = ", ".join(f"{k} x{v}" for k, v in sorted(self.other_events.items()))
+            lines.append(f"other events seen: {spare}")
+        return lines
+
+    # ------------------------------------------------------------- the drawing
+
+    def draw(self):
+        canvas = self.canvas
+        canvas.delete("all")
+        now = time.monotonic()
+
+        if now < self.flash_until:
+            canvas.create_rectangle(0, 0, self.width, self.height,
+                                    fill="#dbeafe", outline="")
+
+        if self.finished:
+            canvas.create_text(self.width / 2, 40, text="drill complete",
+                               font=("Segoe UI", 20, "bold"), fill=INK)
+            y = 95
+            for line in self.summary_lines():
+                canvas.create_text(30, y, anchor="w", text=line,
+                                   font=("Consolas", 10), fill=INK)
+                y += 24
+            canvas.create_text(self.width / 2, self.height - 30,
+                               text="the latency above is your reaction plus the "
+                                    "system's; the gap between the two is ours",
+                               font=("Segoe UI", 9), fill=HINT)
+            return
+
+        done = len(self.rounds)
+        canvas.create_text(self.width - 20, 18, anchor="ne",
+                           text=f"round {min(done + 1, self.total_rounds)} "
+                                f"/ {self.total_rounds}",
+                           font=("Segoe UI", 11), fill=HINT)
+
+        if self.current is None:
+            canvas.create_text(self.width / 2, self.height / 2, text="wait",
+                               font=("Segoe UI", 28, "bold"), fill=HINT)
+        else:
+            elapsed = now - self.current.shown_at
+            canvas.create_text(self.width / 2, self.height / 2 - 30,
+                               text=self.PROMPT[self.current.want],
+                               font=("Segoe UI", 34, "bold"), fill=INK)
+            # A draining bar, because a number you read after the fact does not
+            # let you feel lag but a bar you are racing does.
+            full = self.width - 120
+            left = 60
+            remaining = max(0.0, 1.0 - elapsed / self.TIMEOUT_S)
+            bar_y = self.height / 2 + 40
+            canvas.create_rectangle(left, bar_y, left + full, bar_y + 16,
+                                    fill="#e2e8f0", outline="")
+            canvas.create_rectangle(left, bar_y, left + full * remaining,
+                                    bar_y + 16, fill=LIVE, outline="")
+            canvas.create_text(self.width / 2, bar_y + 44,
+                               text=f"{elapsed * 1000:.0f} ms",
+                               font=("Consolas", 12), fill=HINT)
+
+        # A running scoreboard, so a drill going badly is obvious before the end.
+        tally = self.tally()
+        y = self.height - 26
+        for name in self.inputs:
+            row = tally[name]
+            canvas.create_text(20, y, anchor="w",
+                               text=f"{self.PROMPT[name]}  {row['hit']}/{row['asked']}",
+                               font=("Consolas", 9), fill=HINT)
+            y -= 16

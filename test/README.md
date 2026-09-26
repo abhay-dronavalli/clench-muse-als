@@ -68,8 +68,11 @@ slipped) it reconnects on its own, because a drop is not you asking to stop.
 |---|---|
 | **Connect** / **Disconnect** | The only two things that change whether the headband is held. Board choice and device name are frozen while connected. |
 | **Electrode fit** | Per-channel spread in µV, refreshed twice a second, with the same `FLAT?` / `NOISY?` verdicts `check_connection.py` gives. Watch these while seating the band. |
-| **Calibrate** | The guided rest / clench / blink calibration, with **Ready** buttons instead of pressing Enter. Saves to the selected profile. |
-| **Listen** | The live detector: meters, and CLENCH / LONG_CLENCH / BLINK / DOUBLE_BLINK as they fire. |
+| **New...** | Claims a new calibration profile name. The profile is empty until you press Calibrate; the name has to be letters, digits, `-` or `_`, because it becomes a filename. |
+| **Calibrate** | The guided rest / clench / blink / long-blink calibration, with **Ready** buttons instead of pressing Enter. Saves to the selected profile. |
+| **Listen** | The live detector: meters, and CLENCH / LONG_CLENCH / BLINK / DOUBLE_BLINK / LONG_BLINK as they fire. |
+| **Flappy** | Flappy Bird, flapped on the rising edge of a clench. The latency instrument: if this feels fair, clench-as-a-button works. |
+| **Drill** | The reliability instrument. See below. |
 | **Stop** | Ends whatever is running. Keeps the connection. |
 
 Because only one program may hold a Muse, **the scripts below cannot run while
@@ -82,6 +85,51 @@ Self-test, no headband needed:
 ```powershell
 python test_station.py    # ~90 s, drives the window end to end on synthetic data
 ```
+
+### Two inputs, and how we know they work
+
+The board needs at least two inputs that can be told apart. Clench is the first.
+The second is a **long blink** — eyes deliberately held shut, default 400 ms.
+
+Why not a double blink: it has a latency floor you cannot engineer away. A
+DOUBLE_BLINK may not fire until the 700 ms pairing window proves a second blink
+arrived, and a *single* blink is only confirmed once that same window expires. So
+every blink-based decision costs ~700 ms before the system even knows what you
+did. A held blink fires the instant the hold passes threshold, exactly as
+LONG_CLENCH fires at its 1500 ms mark, which makes the latency a number we choose.
+
+Separation is structural rather than statistical:
+
+| Input | What it is | Electrodes | Band | Measured as |
+|---|---|---|---|---|
+| CLENCH | masseter muscle (EMG) | TP9 / TP10 (ears) | 20–110 Hz | RMS over 200 ms |
+| LONG_BLINK | eyelid held down (EOG step) | AF7 / AF8 (forehead) | 0.5–8 Hz | mean of a 250 ms tail, held past `--long-blink-ms` |
+
+Different electrodes *and* different bands, so neither can easily masquerade as
+the other. The subtle part: an ordinary blink's hold level (~66 µV simulated) is
+about as high as a held one's (~56–83 µV), so **level cannot separate them —
+only duration can.** That is why the measure feeds a duration detector instead of
+a bare threshold, and why an ordinary blink never becomes a LONG_BLINK.
+
+One consequence: because the hold level rises on ordinary blinks too, the BLINK
+verdict now waits for the lid to come back up. Calling something a short blink
+while the eyes are still shut would be wrong, and it also raced LONG_BLINK.
+
+**The drill** answers the two questions a log cannot. Over 20 prompted rounds it
+reports, per input: hits, how often the *other* input fired instead, how often
+nothing fired, and median and worst response times — plus how often an input
+fired when nothing was asked for, which is the number that decides whether a
+gesture is safe to leave switched on. Involuntary BLINKs are counted separately,
+because people blink and that is not a failure.
+
+Read the latency honestly: the drill measures *your* reaction plus the system's
+and cannot separate them. What is ours is the **gap between the two inputs** — a
+clench fires on its rising edge, a long blink cannot fire until the hold
+completes, so expect roughly the hold length between the two columns. If the
+clench column is much slower than your own reaction time, that is real lag.
+
+Profiles calibrated before the long blink existed keep working; they just cannot
+fire LONG_BLINK until recalibrated, and both the log and the drill say so.
 
 ---
 
@@ -138,6 +186,14 @@ calibration and detection on it in a worker thread, so a session survives across
 many activities. Three threads, one rule: only the Tk thread touches a widget;
 the link and work threads post messages onto a queue. `test_station.py` drives it
 end to end on the synthetic board.
+
+**`station_activities.py`** — the two windows the station can open on a live
+connection: `FlappyWindow` (feel the latency) and `DrillWindow` (measure the
+reliability). Both are Toplevels driven by `after()` on the Tk thread and never
+touch the board — the station's work thread posts gestures onto the queue, so a
+plain event name arrives on the right thread. Flappy reuses `clench_flappy.Flappy`
+unchanged, which is possible only because that class is pure state with no
+matplotlib in it.
 
 **`config.py`** — shared setup. `get_board(args)` returns a `BoardShim` for either
 the Muse or the synthetic board; `available_presets()`, `enable_ppg()` and
@@ -305,7 +361,8 @@ your measured peak with a **headroom** figure. Headroom is peak ÷ threshold:
 | `--long-ms 1500` | LONG_CLENCH (the help signal) fires too fast or too slow |
 | `--double-ms 700` | Your two blinks are not being caught as one DOUBLE_BLINK — raise it |
 | `--k 6` | Only affects the fallback threshold when you skip active calibration. Raise it if resting noise causes false CLENCHes |
-| `--no-clench-cal` | Quick start with a purely statistical threshold, no prompts |
+| `--no-clench-cal` | Quick start with a purely statistical threshold, no prompts. Also skips the long-blink phase, so LONG_BLINK stays off |
+| `--long-blink-ms 400` | How long the eyes must stay shut for LONG_BLINK. Lower it if your holds are not registering, raise it if ordinary blinks are |
 
 If you get false CLENCHes while sitting still, the cause is almost always a loose
 ear-tip rather than a bad threshold — check `live_plot.py` first.

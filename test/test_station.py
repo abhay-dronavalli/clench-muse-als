@@ -17,12 +17,15 @@ writes is calibration.station-selftest.synthetic.json, which it deletes on the
 way out.
 """
 
+import json
 import pathlib
 import sys
 import time
 import types
+from tkinter import simpledialog
 
 import muse_station as ms
+import station_activities as sa
 from config import build_parser
 
 PROFILE = "station-selftest"
@@ -161,8 +164,175 @@ def main():
           station.activity_name)
     check("Listen usable again after a drop", driver.button("listen_button") == "normal")
 
+    # ================================================= new calibration profiles
+    # The dialog is the one thing a test cannot click, so it is replaced by a
+    # function that returns what a person would have typed.
+    typed = {"value": "second-self"}
+    simpledialog.askstring = lambda *a, **k: typed["value"]
+
+    station._on_new_profile()
+    check("a new profile is selected once named",
+          station.profile_var.get() == "second-self", station.profile_var.get())
+    check("the new profile appears in the list",
+          "second-self" in station.profile_box.cget("values"),
+          station.profile_box.cget("values"))
+    check("the new profile has no file yet (it is empty until calibrated)",
+          "second-self" not in cd_profiles(), cd_profiles())
+
+    # Names become filenames, so a name that could escape the directory or add a
+    # second extension has to be refused.
+    for bad in ("../escape", "has space", "dot.ted", ""):
+        typed["value"] = bad
+        before = station.profile_var.get()
+        station._on_new_profile()
+        check(f"profile name {bad!r} is refused",
+              station.profile_var.get() == before, station.profile_var.get())
+
+    typed["value"] = None            # the user pressed Cancel
+    before = station.profile_var.get()
+    station._on_new_profile()
+    check("cancelling the dialog changes nothing",
+          station.profile_var.get() == before)
+
+    station.profile_var.set(PROFILE)  # back to the calibrated one
+
+    # ============================================================ flappy window
+    station._on_flappy()
+    driver.pump(1)
+    flappy = station.activity_window
+    check("Flappy opens a window", isinstance(flappy, sa.FlappyWindow))
+    if flappy:
+        flappy.withdraw()            # keep the screen clean during the test
+        check("flappy waits for the first pipe", flappy.game.score == 0)
+        # A gesture goes in the way a real one does: through the queue, as the
+        # work thread would post it.
+        station.queue.put(("event", sa.CLENCH, "peak 90 uV", 1.0))
+        driver.pump(0.3)
+        check("a clench flaps the bird", flappy.game.velocity > 0,
+              f"velocity {flappy.game.velocity:.2f}")
+        y_after_flap = flappy.game.y
+        driver.pump(1.0)
+        check("physics advance between frames", flappy.game.y != y_after_flap)
+
+        # Closing the game window must end the activity, not leave it streaming.
+        flappy.close()
+        check("closing flappy stops the activity", driver.pump(6, until=driver.idle),
+              station.activity_name)
+        check("the station forgot the closed window", station.activity_window is None)
+
+    # ================================================================= the drill
+    # This profile was calibrated quick, so it has no hold threshold and the drill
+    # must notice that rather than asking for an input that cannot fire.
+    station._on_drill()
+    driver.pump(1)
+    drill = station.activity_window
+    check("Drill opens a window", isinstance(drill, sa.DrillWindow))
+    if drill:
+        drill.withdraw()
+        check("without hold calibration the drill only tests the clench",
+              drill.inputs == [sa.CLENCH], drill.inputs)
+        drill.close()
+        driver.pump(6, until=driver.idle)
+
+    # Give the profile a hold threshold, as a real long-blink calibration would,
+    # and the drill should now offer both inputs.
+    add_hold_threshold(station)
+    station._on_drill()
+    driver.pump(1)
+    drill = station.activity_window
+    if drill:
+        drill.withdraw()
+        check("with hold calibration the drill tests both inputs",
+              drill.inputs == [sa.CLENCH, sa.LONG_BLINK], drill.inputs)
+        drill.close()
+        driver.pump(6, until=driver.idle)
+
+    # --- the drill's own bookkeeping, driven deterministically ---------------
+    # Built directly rather than through the button: the outcomes under test are
+    # hit / wrong / miss / stray, and provoking all four through a live detector
+    # would mean faking four EEG traces.
+    bench = sa.DrillWindow(station, lambda: None, rounds=3,
+                           inputs=(sa.CLENCH, sa.LONG_BLINK), seed=4)
+    bench.withdraw()
+
+    def wait_for_prompt():
+        deadline = time.monotonic() + 6
+        while time.monotonic() < deadline:
+            station.update()
+            bench.update()
+            if bench.current is not None:
+                return True
+            time.sleep(0.02)
+        return False
+
+    check("the drill prompts for something", wait_for_prompt())
+    asked = bench.current.want
+    bench.on_gesture(asked, "")                      # round 1: do as asked
+    check("doing as asked scores a hit",
+          bench.rounds[-1].outcome == "hit", bench.rounds[-1].outcome)
+    check("a hit records a latency", bench.rounds[-1].latency_ms is not None)
+
+    # Between rounds nothing is being asked for, so anything that fires now is the
+    # number that decides whether an input is safe to leave switched on.
+    bench.on_gesture(sa.CLENCH, "")
+    check("firing between rounds counts as a stray", bench.stray == 1, bench.stray)
+
+    # A blink nobody asked for is not a drill failure -- people blink. It is only a
+    # problem if it becomes a LONG_BLINK, so it is counted separately.
+    check("involuntary blinks are not one of the drilled inputs",
+          "BLINK" not in bench.inputs)
+    bench.on_gesture("BLINK", "")
+    check("a stray BLINK is counted apart from drill failures",
+          bench.other_events.get("BLINK") == 1 and bench.stray == 1,
+          f"other={bench.other_events} stray={bench.stray}")
+
+    check("the drill prompts again", wait_for_prompt())
+    other = [i for i in bench.inputs if i != bench.current.want][0]
+    bench.on_gesture(other, "")                      # round 2: the wrong input
+    check("the wrong input is recorded as wrong, not a miss",
+          bench.rounds[-1].outcome == "wrong", bench.rounds[-1].outcome)
+
+    check("the drill prompts a third time", wait_for_prompt())
+    deadline = time.monotonic() + bench.TIMEOUT_S + 3
+    while time.monotonic() < deadline and len(bench.rounds) < 3:
+        station.update()
+        bench.update()
+        time.sleep(0.02)
+    check("doing nothing times out as a miss",
+          bench.rounds[-1].outcome == "miss", bench.rounds[-1].outcome)
+    check("the drill finishes after its last round", bench.finished)
+
+    tally = bench.tally()
+    check("every round is accounted for in the tally",
+          sum(row["asked"] for row in tally.values()) == 3, tally)
+    check("the summary renders", bool(bench.summary_lines()))
+    bench.close()
+
     station._on_close()
     return 0
+
+
+def cd_profiles():
+    import clench_detect as cd
+    return cd.list_profiles()
+
+
+def add_hold_threshold(station):
+    """Bolt a plausible hold threshold onto the saved profile.
+
+    A real long-blink calibration writes these; the quick calibration this test
+    runs does not, and sitting through the full one would add a minute of holding
+    your eyes shut to an automated test.
+    """
+    import clench_detect as cd
+    path = cd.calibration_file(station.link.board, PROFILE)
+    data = json.loads(path.read_text())
+    data.update({"hold_rest": 1.0, "hold_sigma": 0.5, "hold_floor": 3.5,
+                 "hold_peak": 80.0, "hold_threshold": 41.0,
+                 "hold_trials": [80.0, 85.0, 82.0],
+                 "hold_durations_ms": [900.0, 950.0, 880.0],
+                 "long_blink_ms": cd.LONG_BLINK_MS})
+    path.write_text(json.dumps(data, indent=2))
 
 
 def cleanup():
