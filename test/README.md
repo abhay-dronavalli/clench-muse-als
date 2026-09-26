@@ -69,7 +69,7 @@ slipped) it reconnects on its own, because a drop is not you asking to stop.
 | **Connect** / **Disconnect** | The only two things that change whether the headband is held. Board choice and device name are frozen while connected. |
 | **Electrode fit** | Per-channel spread in µV, refreshed twice a second, with the same `FLAT?` / `NOISY?` verdicts `check_connection.py` gives. Watch these while seating the band. |
 | **New...** | Claims a new calibration profile name. The profile is empty until you press Calibrate; the name has to be letters, digits, `-` or `_`, because it becomes a filename. |
-| **Calibrate** | The guided rest / clench / blink / long-blink calibration, with **Ready** buttons instead of pressing Enter. Saves to the selected profile. |
+| **Calibrate** | The guided rest / clench / blink / long-blink calibration. Opens a **screen-filling window showing one instruction and one timer, both enormous** — you take your glasses off to put the band on, which is exactly when small text stops working. **Enter** is the only control. Esc cancels. Saves to the selected profile. |
 | **Listen** | The live detector: meters, and CLENCH / LONG_CLENCH / BLINK / DOUBLE_BLINK / LONG_BLINK as they fire. |
 | **Flappy** | Flappy Bird, flapped on the rising edge of a clench. The latency instrument: if this feels fair, clench-as-a-button works. |
 | **Drill** | The reliability instrument. See below. |

@@ -57,10 +57,15 @@ class Driver:
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             self.station.update()
-            # A withdrawn window reports nothing as mapped, so the prompt is
-            # detected by its text rather than by its visibility.
-            if click_ready and self.station.prompt_label.cget("text"):
-                self.station._on_ready()
+            if click_ready:
+                window = self.station.activity_window
+                if window is not None and getattr(window, "awaiting_enter", False):
+                    # What a person does: press Enter on the calibration screen.
+                    window._on_enter(None)
+                elif self.station.prompt_label.cget("text"):
+                    # A withdrawn window reports nothing as mapped, so the prompt
+                    # is detected by its text rather than by its visibility.
+                    self.station._on_ready()
             if until and until():
                 return True
             time.sleep(0.02)
@@ -107,8 +112,41 @@ def main():
         **{**vars(full_args()), "baseline_seconds": 2.0})
 
     station._on_calibrate()
-    check("calibrate finishes", driver.pump(40, until=driver.idle, click_ready=True),
-          station.activity_name)
+    big = station.activity_window
+    check("calibrate opens the big instruction window",
+          isinstance(big, sa.CalibrationWindow), type(big).__name__)
+    if big:
+        big.withdraw()          # it is a zoomed, screen-filling window otherwise
+        # Enter has to be the control: hunting for a small Ready button has the
+        # same problem as reading small text.
+        check("Enter is bound on the calibration window",
+              bool(big.bind("<Return>")))
+        check("the instruction is set before anything is asked",
+              bool(big.headline), big.headline)
+        check("the instruction is sized off the screen, not a fixed 12pt",
+              big.headline_font[1] >= 28, big.headline_font)
+        check("a stray keypress cannot close the calibration window",
+              (big.on_key(types.SimpleNamespace(keysym="x")) is None) and big.alive)
+
+        saw = {"countdown": False, "rest_headline": False}
+        def watch():
+            if big.countdown is not None:
+                saw["countdown"] = True
+            if "STILL" in big.headline.upper():
+                saw["rest_headline"] = True
+            return driver.idle()
+
+        check("calibrate finishes", driver.pump(40, until=watch, click_ready=True),
+              station.activity_name)
+        check("the big screen showed the rest instruction", saw["rest_headline"],
+              big.headline)
+        check("the big screen showed a countdown", saw["countdown"])
+        check("the calibration window closes when calibration ends",
+              station.activity_window is None and not big.alive)
+    else:
+        check("calibrate finishes",
+              driver.pump(40, until=driver.idle, click_ready=True),
+              station.activity_name)
     log = station.log_text.get("1.0", "end")
     check("calibrate reports thresholds", "--- THRESHOLDS ---" in log)
     check("calibrate saves the profile", f"Saved to calibration.{PROFILE}" in log)

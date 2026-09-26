@@ -369,6 +369,9 @@ class StationUI:
     def log(self, message=""):
         self.post(("log", message))
 
+    def instruct(self, headline, detail=""):
+        self.post(("instruct", headline, detail))
+
     def wait(self, prompt):
         """Block the activity until the user clicks Ready (or presses Stop)."""
         self.ready_event.clear()
@@ -416,6 +419,7 @@ class Station(tk.Tk):
         self.activity_window = None
 
         self._build()
+        self.bind("<Return>", lambda _event: self._on_ready())
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.link.start()
         self.after(UI_TICK_MS, self._drain)
@@ -586,7 +590,11 @@ class Station(tk.Tk):
         self._stop_activity()
 
     def _on_calibrate(self):
-        self._start_activity("calibrate", self._calibrate)
+        # Calibration gets its own full-screen window: you take your glasses off
+        # to put the band on, which is exactly when the small text stops working.
+        self._start_activity("calibrate", self._calibrate,
+                             window=lambda: sa.CalibrationWindow(
+                                 self, self._on_window_closed, self._on_ready))
 
     def _on_listen(self):
         self._start_activity("listen", self._listen)
@@ -811,6 +819,11 @@ class Station(tk.Tk):
                     text=verdict,
                     foreground="#16a34a" if verdict == "ok" else "#b45309")
 
+        elif kind == "instruct":
+            _, headline, detail = message
+            if self.activity_window is not None:
+                self.activity_window.instruct(headline, detail)
+
         elif kind == "progress":
             _, label, remaining, levels = message
             if label is None:
@@ -818,6 +831,9 @@ class Station(tk.Tk):
             else:
                 self.last_event.configure(text=f"{label}   {remaining:4.1f}s left")
                 self._show_levels(levels, None, None)
+            if self.activity_window is not None:
+                self.activity_window.set_countdown(None if label is None
+                                                   else remaining)
 
         elif kind == "tick":
             _, levels, emg_threshold, blink_threshold, hold_threshold = message
@@ -839,6 +855,8 @@ class Station(tk.Tk):
                 self.prompt_frame.pack(fill="x", after=self.meta_label)
             else:
                 self.prompt_frame.pack_forget()
+            if self.activity_window is not None:
+                self.activity_window.set_prompt(prompt)
 
         elif kind == "profiles":
             self.profile_box.configure(values=message[1])

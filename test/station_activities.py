@@ -35,6 +35,7 @@ PIPE = "#16a34a"
 DEAD = "#dc2626"
 HINT = "#64748b"
 LIVE = "#2563eb"
+READY = "#b45309"
 
 
 class ActivityWindow(tk.Toplevel):
@@ -94,9 +95,124 @@ class ActivityWindow(tk.Toplevel):
     def on_levels(self, levels, emg_threshold, hold_threshold):
         """One detector tick, for live meters."""
 
+    def instruct(self, headline, detail=""):
+        """The one thing the person should be doing right now."""
+
+    def set_prompt(self, text):
+        """Waiting on the person: text to show, or None once they have gone."""
+
+    def set_countdown(self, remaining):
+        """Seconds left in a timed phase, or None when nothing is being timed."""
+
     def on_key(self, event):
         if event.keysym in ("q", "Escape"):
             self.close()
+
+
+# ================================================ calibration, big enough to read
+
+class CalibrationWindow(ActivityWindow):
+    """Calibration instructions at a size you can read without your glasses.
+
+    You take your glasses off to put the headband on, which made the ordinary
+    calibration log unreadable exactly when you needed it. So this shows one
+    instruction and one number, both enormous, and nothing else. Enter is the only
+    control -- hunting for a small Ready button has the same problem as reading
+    small text.
+
+    Everything it displays arrives as messages from the calibration running on the
+    work thread; it holds no state of its own beyond what is currently on screen.
+    """
+
+    def __init__(self, parent, on_close, on_ready):
+        screen_w = parent.winfo_screenwidth()
+        screen_h = parent.winfo_screenheight()
+        super().__init__(parent, "Calibration", screen_w, screen_h, on_close)
+        self._on_ready = on_ready
+
+        # Zoomed rather than true fullscreen: it fills the screen but keeps the
+        # title bar, so there is always an obvious way out.
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            pass
+
+        # Sized off the screen so it stays readable on any monitor.
+        self.headline_font = ("Segoe UI", max(28, int(screen_h * 0.070)), "bold")
+        self.detail_font = ("Segoe UI", max(14, int(screen_h * 0.026)))
+        self.timer_font = ("Consolas", max(32, int(screen_h * 0.110)), "bold")
+        self.wrap = int(screen_w * 0.88)
+
+        self.headline = "GET READY"
+        self.detail = ""
+        self.countdown = None
+        self.awaiting_enter = False
+
+        for sequence in ("<Return>", "<KP_Enter>"):
+            self.bind(sequence, self._on_enter)
+        # Enter is the only control, so the focus has to be here and stay here.
+        self.focus_force()
+        self.status.configure(text="Press Enter when the screen says to.  "
+                                  "Esc cancels.")
+
+    # -------------------------------------------------------------- the input
+
+    def _on_enter(self, _event=None):
+        if self.awaiting_enter and self._on_ready:
+            self._on_ready()
+
+    def on_key(self, event):
+        # Enter is handled by its own binding; only let Escape through, so a
+        # stray keypress during calibration cannot close the window.
+        if event.keysym == "Escape":
+            self.close()
+
+    # ------------------------------------------------------- what to display
+
+    def instruct(self, headline, detail=""):
+        self.headline = headline
+        self.detail = detail
+
+    def set_prompt(self, text):
+        waiting = text is not None
+        if waiting and not self.awaiting_enter:
+            try:
+                self.focus_force()
+            except tk.TclError:
+                pass        # withdrawn (the self-test does this) or already gone
+        self.awaiting_enter = waiting
+
+    def set_countdown(self, remaining):
+        self.countdown = remaining
+
+    # ------------------------------------------------------------- the drawing
+
+    def update_frame(self, dt):
+        self.draw()
+
+    def draw(self):
+        canvas = self.canvas
+        canvas.delete("all")
+        width = canvas.winfo_width() or self.width
+        height = canvas.winfo_height() or self.height
+
+        canvas.create_text(width / 2, height * 0.34, text=self.headline,
+                           font=self.headline_font, fill=INK,
+                           width=self.wrap, justify="center")
+        if self.detail:
+            canvas.create_text(width / 2, height * 0.50, text=self.detail,
+                               font=self.detail_font, fill=HINT,
+                               width=self.wrap, justify="center")
+
+        # The timer and the Enter prompt occupy the same spot: exactly one of them
+        # is true at a time, and two big things competing would defeat the point.
+        if self.countdown is not None:
+            canvas.create_text(width / 2, height * 0.72,
+                               text=f"{max(0.0, self.countdown):.1f}",
+                               font=self.timer_font, fill=LIVE)
+        elif self.awaiting_enter:
+            canvas.create_text(width / 2, height * 0.72, text="PRESS ENTER",
+                               font=self.headline_font, fill=READY)
 
 
 # ============================================================ flappy, for feel

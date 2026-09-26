@@ -154,6 +154,14 @@ class ConsoleUI:
     def log(self, message=""):
         print(message)
 
+    def instruct(self, headline, detail=""):
+        """The single thing to do right now, for a UI that shows one at a time.
+
+        Deliberately silent here: the terminal already prints the long form
+        through log(), so repeating a shouted version of it would only add noise.
+        A big-screen UI overrides this and shows nothing BUT these.
+        """
+
     def wait(self, prompt):
         wait_for_enter(prompt)
 
@@ -405,6 +413,8 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     ui = ui or ConsoleUI()
     ui.log("")
     ui.log("--- CALIBRATION ---")
+    ui.instruct("SIT STILL", "jaw relaxed and slightly open\n"
+                             "stare at one spot, do not talk")
     ui.log("1) REST: sit still, jaw relaxed and slightly open.")
     ui.log("   Stare at one fixed spot and do not talk. Eye movement shows up on")
     ui.log("   the forehead sensors and would inflate the blink noise floor.")
@@ -467,6 +477,8 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         ui.log("")
         ui.log("2) CLENCH: clench your jaw HARD for the whole 2 seconds, three times.")
         for rep in range(1, 4):
+            ui.instruct("CLENCH HARD", f"rep {rep} of 3\n"
+                                       f"hold it for the whole 2 seconds")
             ui.wait(f"   Press Enter, then clench for 2 s  (rep {rep}/3)...")
             samples = collect(board, rows, fs, window_samples, 2.0, f"clench {rep}", ui)
             if samples:
@@ -488,6 +500,8 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     if not args.no_clench_cal:
         # ---------------- blink ----------------
         ui.log("")
+        ui.instruct("BLINK HARD", "once a second, for 6 seconds\n"
+                                  "separate, distinct blinks")
         ui.log("3) BLINK: blink hard and deliberately, once a second, for 6 seconds.")
         ui.log("   Separate, distinct blinks -- not fluttering.")
         ui.wait("   Press Enter when ready...")
@@ -517,6 +531,8 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         ui.log("4) LONG BLINK: close your eyes and HOLD them shut for a full second,")
         ui.log("   three times. Not a hard squeeze -- just closed and still.")
         for rep in range(1, 4):
+            ui.instruct("CLOSE AND HOLD", f"rep {rep} of 3\n"
+                                          f"eyes shut and still, about a second")
             ui.wait(f"   Press Enter, then close and hold  (rep {rep}/3)...")
             samples = collect(board, rows, fs, window_samples, 2.0,
                               f"holding {rep}", ui)
@@ -570,6 +586,7 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     }
     path = calibration_file(board, getattr(args, "profile", "default"))
     path.write_text(json.dumps(calibration, indent=2))
+    ui.instruct("DONE", "you can put your glasses back on")
     ui.log("")
     ui.log(f"Saved to {path.name}. Reuse it with --load "
            "(only valid while the band stays on your head).")
