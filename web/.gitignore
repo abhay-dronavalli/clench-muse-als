@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# MediaPipe wasm and model, copied / downloaded by scripts/mediapipe-assets.mjs
+public/mediapipe/
