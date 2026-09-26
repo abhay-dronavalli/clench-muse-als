@@ -1,15 +1,18 @@
 """Webcam mode: the highlight follows the board's POINT messages (PRD D2, A3.3a). No timer.
 
-The board runs MediaPipe face tracking in the browser, turns the head pose into a point on the
-screen and sends POINT only when the tile under it changes (and once per new SCREEN). The Core
-still owns the highlight: this pointer just moves it to the tile the board reports.
+The board turns the head pose (MediaPipe face tracking in the browser) into a point on the screen
+and sends POINT only when the tile under it changes (and once per new SCREEN). The Core still owns
+the highlight: this pointer just moves it to the tile the board reports. Gaze mode (gaze.py) is the
+same pointer for an eye tracker's POINTs.
 """
 
 from __future__ import annotations
 
 import logging
 
-from core.contracts import Point
+from collections.abc import Collection
+
+from core.contracts import Point, PointSource
 from core.pointer.base import OnHighlight, OnSource, Pointer
 
 log = logging.getLogger("clench.pointer")
@@ -18,9 +21,16 @@ log = logging.getLogger("clench.pointer")
 class WebcamPointer(Pointer):
     source = "webcam"
 
-    def __init__(self, on_highlight: OnHighlight, on_source: OnSource | None = None) -> None:
+    def __init__(
+        self,
+        on_highlight: OnHighlight,
+        on_source: OnSource | None = None,
+        accepts: Collection[PointSource] | None = None,
+    ) -> None:
         super().__init__(on_highlight, on_source)
         self._running = False
+        # The POINT sources this pointer follows: its own by default (Auto follows webcam and gaze).
+        self.accepts: frozenset[str] = frozenset(accepts or (self.source,))
 
     def start(self) -> None:
         self._running = True
@@ -34,7 +44,7 @@ class WebcamPointer(Pointer):
         self.place(count, self._highlight)
 
     def on_point(self, msg: Point) -> None:
-        if msg.source != "webcam" or not self._running:
+        if msg.source not in self.accepts or not self._running:
             return
         self.follow(msg.tile)
 

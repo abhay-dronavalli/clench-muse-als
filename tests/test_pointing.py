@@ -11,7 +11,15 @@ from core.clock import AsyncioScheduler, ManualScheduler
 from core.contracts import Clench, DoubleBlink, FaceOk, Point, Screen, Settings
 from core.main import create_app
 from core.menu import load_menu
-from core.pointer import FACE_LOST_S, AutoPointer, HeadTiltPointer, ScanPointer, WebcamPointer, make_pointer
+from core.pointer import (
+    FACE_LOST_S,
+    AutoPointer,
+    GazePointer,
+    HeadTiltPointer,
+    ScanPointer,
+    WebcamPointer,
+    make_pointer,
+)
 from core.profile import load_profile
 from core.session import CLENCH_DEBOUNCE_S, Session, SessionState
 
@@ -56,8 +64,8 @@ def last_screen(sent) -> Screen:
     return screens(sent)[-1]
 
 
-def point(session: Session, tile: int, seq: int | None = None) -> None:
-    session.handle(Point(source="webcam", tile=tile, seq=session.seq if seq is None else seq, t=0.0))
+def point(session: Session, tile: int, seq: int | None = None, source: str = "webcam") -> None:
+    session.handle(Point(source=source, tile=tile, seq=session.seq if seq is None else seq, t=0.0))
 
 
 def clench(session: Session, sched: ManualScheduler) -> None:
@@ -69,8 +77,11 @@ def clench(session: Session, sched: ManualScheduler) -> None:
 
 
 def test_each_mode_gets_its_pointer(sched):
-    kinds = {mode: type(make_pointer(mode, sched, lambda i: None)) for mode in ("scan", "webcam", "auto", "headtilt")}
-    assert kinds == {"scan": ScanPointer, "webcam": WebcamPointer, "auto": AutoPointer, "headtilt": HeadTiltPointer}
+    modes = ("scan", "webcam", "gaze", "auto", "headtilt")
+    kinds = {mode: type(make_pointer(mode, sched, lambda i: None)) for mode in modes}
+    assert kinds == {
+        "scan": ScanPointer, "webcam": WebcamPointer, "gaze": GazePointer, "auto": AutoPointer, "headtilt": HeadTiltPointer,
+    }
 
 
 # --- SCREEN seq and stale POINTs ----------------------------------------------------------
@@ -373,3 +384,50 @@ def test_last_board_leaving_counts_as_face_lost():
         health = client.get("/health").json()
         assert health["face_ok"] is False
         assert health["pointing_mode"] == "auto" and health["pointer"] == "scan"
+
+
+# --- Gaze -------------------------------------------------------------------------------
+
+
+def test_gaze_follows_gaze_points_only(menu, profile, sched, sent):
+    session = make_session(menu, profile, sched, sent, mode="gaze")
+    assert last_screen(sent).pointer == "gaze"
+    point(session, 3, source="gaze")
+    assert last_screen(sent).highlight == 3
+    point(session, 1, source="webcam")  # the head does not drive Gaze mode
+    assert session.highlight == 3
+    n = len(screens(sent))
+    sched.advance(SCAN_S * 5)
+    assert len(screens(sent)) == n  # no scan timer
+
+
+def test_gaze_clench_looks_back_like_webcam(menu, profile, sched, sent):
+    session = make_session(menu, profile, sched, sent, mode="gaze")
+    point(session, 2, source="gaze")
+    sched.advance(1.0)
+    point(session, 3, source="gaze")  # the eyes moved as the jaw clenched
+    session.handle(Clench(t=0.0, strength=1.0))
+    assert last_screen(sent).path == ["People"]  # tile 2, highlighted 250 ms before
+
+
+def test_auto_follows_gaze_and_switches_between_gaze_and_head(menu, profile, sched, sent):
+    session = make_session(menu, profile, sched, sent)
+    session.handle(FaceOk(ok=True))
+    point(session, 3, source="gaze")
+    assert session.pointer.source == "gaze" and last_screen(sent).pointer == "gaze"
+    assert last_screen(sent).highlight == 3
+    point(session, 4, source="webcam")  # the eye tracker lost the eyes: the head takes over
+    assert session.pointer.source == "webcam"
+    assert last_screen(sent).pointer == "webcam" and last_screen(sent).highlight == 4
+    point(session, 2, source="gaze")
+    assert last_screen(sent).pointer == "gaze" and last_screen(sent).highlight == 2
+    session.handle(FaceOk(ok=False))
+    sched.advance(FACE_LOST_S + 0.1)
+    assert session.pointer.source == "scan"  # neither: scanning
+
+
+def test_gaze_mode_from_settings(menu, profile, sched, sent):
+    session = make_session(menu, profile, sched, sent, mode="scan")
+    session.handle(Settings(pointing_mode="gaze", scan_ms=1000))
+    assert isinstance(session.pointer, GazePointer) and session.settings().pointing_mode == "gaze"
+    assert last_screen(sent).pointer == "gaze"

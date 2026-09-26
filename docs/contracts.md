@@ -137,12 +137,13 @@ Thinned copy of the signal, for the caregiver chart only. Never used for decisio
 
 The person is facing a tile. Sent when the tile changes, and once for every new SCREEN (so the Core
 knows the tile under the head on the new tiles). The Core still decides what is highlighted (PRD
-A3.3): it only uses a POINT while scanning in Webcam mode, or in Auto mode on webcam, and ignores
+A3.3): it only uses a POINT while scanning in Webcam mode (source webcam), Gaze mode (source
+gaze) or Auto mode (either, once it follows the board), and ignores
 any POINT whose `seq` is not the current screen's.
 
 | Field | Type | Notes |
 |---|---|---|
-| `source` | `"webcam"` \| `"headtilt"` | webcam comes from the board, headtilt from the Sensor Service |
+| `source` | `"webcam"` \| `"gaze"` \| `"headtilt"` | webcam (head pose) and gaze (an eye tracker, `docs/eye-tracking.md`) come from the board, headtilt from the Sensor Service |
 | `tile` | int | 0-based, >= 0, into the tiles of SCREEN `seq` |
 | `seq` | int | >= 0, the `seq` of the SCREEN the board measured the tile on |
 | `t` | float | seconds |
@@ -153,8 +154,10 @@ any POINT whose `seq` is not the current screen's.
 
 ### FACE_OK
 
-Webcam face tracking status, sent by the board when it changes (after about 300 ms steady), when
-the board connects, and as `false` when the camera stops or fails. In Auto mode the Core falls back
+Can the board see the person: the face for head pointing, the eyes when an eye tracker drives the
+highlight (gaze). Sent by the board when it changes (after about 300 ms steady), when the board
+connects, and as `false` when the camera stops or fails (or the eye tracker stops feeding points in
+Gaze mode). In Auto mode the Core falls back
 to Scan when the face has been lost for 3 s, and switches back to webcam when a face is seen again
 and a POINT arrives. The Core also treats the last board disconnecting as `false`. Only POINT and
 FACE_OK leave the browser; video never does (PRD section 11).
@@ -228,7 +231,7 @@ included). Screens show these values instead of assuming defaults.
 
 | Field | Type | Notes |
 |---|---|---|
-| `pointing_mode` | `"auto"` \| `"scan"` \| `"webcam"` \| `"headtilt"` | Auto is the default |
+| `pointing_mode` | `"auto"` \| `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` | Auto is the default |
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
@@ -258,7 +261,7 @@ pointing mode change), and once a second during the help countdown.
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
 | `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
 | `loading` | bool | optional, default false. True while the Core waits for AI options after a pick (at most 4 s); scanning is paused and the board shows "Finding options..." / "Buscando opciones..." |
-| `pointer` | `"scan"` \| `"webcam"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
+| `pointer` | `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
 
 Tiles:
 
@@ -305,10 +308,11 @@ para cancelar." (kind `system`). System lines never change the session state.
 |---|---|---|
 | `scan` | the Core's scan timer, one tile every `scan_ms` | `"scan"` |
 | `webcam` | the board's POINT messages (head turns); no timer. On new tiles the highlight stays at the same index until the board's POINT for the new `seq` arrives | `"webcam"` |
-| `auto` | starts scanning; switches to webcam when FACE_OK is true and a POINT arrives; back to scanning after 3 s without a face | `"scan"` or `"webcam"` |
+| `gaze` | the board's POINT messages from an eye tracker (`docs/eye-tracking.md`); otherwise like `webcam` | `"gaze"` |
+| `auto` | starts scanning; follows the board when FACE_OK is true and a POINT arrives; back to scanning after 3 s without a face. The board sends gaze POINTs while an eye tracker sees the eyes, head (webcam) POINTs otherwise: gaze if available, else head, else scan | `"scan"`, `"gaze"` or `"webcam"` |
 | `headtilt` | not built yet (needs the headband motion data): scans, and logs that it does | `"scan"` |
 
-Picking is always a CLENCH on the highlighted tile. When the highlight follows the head, the Core
+Picking is always a CLENCH on the highlighted tile. When the highlight follows the head or the eyes, the Core
 picks the tile that was highlighted about 250 ms before the CLENCH arrived (`clench_lookback_ms` in
 `data/profile.yaml`), because clenching the jaw can move the head slightly (PRD 3a "freeze on clench").
 

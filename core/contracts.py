@@ -11,11 +11,13 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-PointingMode = Literal["auto", "scan", "webcam", "headtilt"]
-PointSource = Literal["webcam", "headtilt"]
-# Where the highlight is coming from right now: Auto shows "scan" after falling back, and Head tilt
-# shows "scan" until it is built.
-ActivePointer = Literal["scan", "webcam", "headtilt"]
+PointingMode = Literal["auto", "scan", "webcam", "gaze", "headtilt"]
+# webcam = the board's head pose; gaze = an eye tracker plugged into the board (docs/eye-tracking.md);
+# headtilt = the headband's motion sensor (Sensor Service).
+PointSource = Literal["webcam", "gaze", "headtilt"]
+# Where the highlight is coming from right now: Auto shows "scan" after falling back (and "gaze" or
+# "webcam" while following), and Head tilt shows "scan" until it is built.
+ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
@@ -93,7 +95,8 @@ class Point(_Msg):
 
 
 class FaceOk(_Msg):
-    """Webcam face tracking status. Auto mode falls back to Scan when false for ~3 s."""
+    """Can the board see the person (the head for webcam pointing, the eyes for gaze)? Auto mode
+    falls back to Scan when false for ~3 s."""
 
     type: Literal["FACE_OK"] = "FACE_OK"
     ok: bool

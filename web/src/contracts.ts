@@ -6,14 +6,18 @@
 // field that names it. Timestamps `t` are float seconds since the Unix epoch.
 // Tile indexes (`tile`, `highlight`) are 0-based positions in the current SCREEN's `tiles`.
 
-export const POINTING_MODES = ['auto', 'scan', 'webcam', 'headtilt'] as const
+export const POINTING_MODES = ['auto', 'scan', 'webcam', 'gaze', 'headtilt'] as const
 export type PointingMode = (typeof POINTING_MODES)[number]
-export type PointSource = 'webcam' | 'headtilt'
 /**
- * Where the highlight is coming from right now: Auto shows 'scan' after falling back, and Head tilt
- * shows 'scan' until it is built.
+ * webcam = the board's head pose; gaze = an eye tracker plugged into the board
+ * (docs/eye-tracking.md); headtilt = the headband's motion sensor (Sensor Service).
  */
-export type ActivePointer = 'scan' | 'webcam' | 'headtilt'
+export type PointSource = 'webcam' | 'gaze' | 'headtilt'
+/**
+ * Where the highlight is coming from right now: Auto shows 'scan' after falling back (and 'gaze' or
+ * 'webcam' while following), and Head tilt shows 'scan' until it is built.
+ */
+export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
@@ -88,7 +92,10 @@ export interface Point {
   t: number
 }
 
-/** Webcam face tracking status. Auto mode falls back to Scan when false for ~3 s. */
+/**
+ * Can the board see the person (the head for webcam pointing, the eyes for gaze)? Auto mode falls
+ * back to Scan when false for ~3 s.
+ */
 export interface FaceOk {
   type: 'FACE_OK'
   ok: boolean

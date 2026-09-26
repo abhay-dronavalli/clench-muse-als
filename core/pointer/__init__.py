@@ -1,9 +1,10 @@
-"""Pointing modes: scan, webcam, headtilt, auto (PRD A3.3a)."""
+"""Pointing modes: scan, webcam, gaze, headtilt, auto (PRD A3.3a)."""
 
 from core.clock import Scheduler
 from core.contracts import PointingMode
 from core.pointer.auto import FACE_LOST_S, AutoPointer
 from core.pointer.base import OnHighlight, OnSource, Pointer
+from core.pointer.gaze import GazePointer
 from core.pointer.headtilt import HeadTiltPointer
 from core.pointer.scan import DEFAULT_SCAN_MS, ScanPointer
 from core.pointer.webcam import WebcamPointer
@@ -12,6 +13,7 @@ __all__ = [
     "DEFAULT_SCAN_MS",
     "FACE_LOST_S",
     "AutoPointer",
+    "GazePointer",
     "HeadTiltPointer",
     "Pointer",
     "ScanPointer",
@@ -31,6 +33,8 @@ def make_pointer(
     match mode:
         case "webcam":
             return WebcamPointer(on_highlight, on_source)
+        case "gaze":
+            return GazePointer(on_highlight, on_source)
         case "auto":
             return AutoPointer(scheduler, on_highlight, scan_ms, on_source)
         case "headtilt":
