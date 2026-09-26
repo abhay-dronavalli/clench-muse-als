@@ -14,7 +14,7 @@ from core.contracts import ActionResult, Clench, Confirm, DoubleBlink, LongClenc
 from core.db import Db
 from core.menu import load_menu
 from core.profile import load_profile
-from core.session import CLENCH_DEBOUNCE_S, LOADING_MAX_S, Session, SessionState
+from core.session import CLENCH_DEBOUNCE_S, LOADING_MAX_S, OTHER_PAGES, Session, SessionState
 from core.suggest.fake import FakeProvider
 from core.suggest.provider import Bundle, Options, Sentences
 from core.suggest.service import Suggester
@@ -191,15 +191,12 @@ def test_no_key_mode_end_to_end(plain, sched, sent):
     pick(plain, sched, sent, "Other...")
     assert labels(sent) == ["Yes", "No", "Good morning", "Wait a moment", "Other..."]
     assert last_screen(sent).path == ["Other"]
-    # Second "Other..." in a row: nothing new without AI, so the tile becomes "Spell it".
+    # Second "Other..." in a row: nothing new without AI, so it loops back to home's own options.
     pick(plain, sched, sent, "Other...")
-    assert labels(sent)[-1] == "Spell it"
-    assert plain.highlight == 4  # same screen, the highlight stays on the tile that changed
-    confirm(plain, sched)  # a clench right away picks "Spell it"
-    assert said(sent, "system") == ["Spelling is coming soon."]
-    assert plain.state is SessionState.SCANNING  # nothing opens
-    plain.handle(DoubleBlink(t=0.0))
-    plain.handle(DoubleBlink(t=0.0))
+    assert labels(sent) == ["Suggested", "I need", "People", "How I feel", "Room", "Other..."]
+    assert last_screen(sent).path == []
+    assert plain.highlight == 0
+    assert said(sent, "system") == []  # no "Spelling is coming soon"
     # A leaf goes straight to the confirm screen with its fixed phrase (no suggestions screen).
     for tile in ["I need", "Pain", "Back", "A lot"]:
         pick(plain, sched, sent, tile)
@@ -223,57 +220,51 @@ def test_no_key_suggested_shows_the_fixed_list(plain, sched, sent):
     assert labels(sent) == ["I'm hungry", "Water, please", "Turn me over", "Thank you, I love you", "How are you?", "Other..."]
 
 
-def test_two_others_in_a_row_become_spell_it(session, sched, sent, loop):
+def test_other_pages_then_loop_back_to_the_level(session, sched, sent, loop):
     loop.run()
+    home = labels(sent)
+    pages = []
+    for n in range(1, OTHER_PAGES + 1):
+        pick(session, sched, sent, "Other...")
+        loop.run()
+        pages.append(labels(sent))
+        assert pages[-1][-1] == "Other..."  # never "Spell it"
+        assert last_screen(sent).path == ["Other"] * n
+        assert session.highlight == 0
+    for a in range(len(pages)):
+        for b in range(a):
+            assert not set(pages[a][:-1]) & set(pages[b][:-1])  # every page is new
+    # After 3 AI pages the next "Other..." loops back to home's own options.
     pick(session, sched, sent, "Other...")
-    first = labels(sent)
-    assert first[-1] == "Other..." and len(first) == 6
-    loop.run()
-    pick(session, sched, sent, "Other...")
-    second = labels(sent)
-    assert second[-1] == "Spell it"
-    assert not set(first[:-1]) & set(second[:-1])  # the second batch repeats nothing
-    assert last_screen(sent).path == ["Other", "Other"]
-    # A double blink leaves both "Other..." pages at once: they belong to the home level.
-    session.handle(DoubleBlink(t=0.0))
+    assert labels(sent) == home
     assert last_screen(sent).path == []
-    assert labels(sent)[-1] == "Other..."
-
-
-def test_double_blink_after_other_pages_goes_up_one_menu_level(session, sched, sent, loop):
-    loop.run()
-    pick(session, sched, sent, "I need")
-    loop.run()
-    pick(session, sched, sent, "Other...")
-    loop.run()
-    pick(session, sched, sent, "Other...")
-    assert last_screen(sent).path == ["I need", "Other", "Other"]
-    session.handle(DoubleBlink(t=0.0))
-    # Home, not the first "I need" page: the "Other..." pages are the same level as "I need".
-    assert last_screen(sent).path == []
-    assert [t.id for t in last_screen(sent).tiles][:2] == ["suggested", "need"]
     assert session.highlight == 0
+    # ...and the loop starts again.
+    pick(session, sched, sent, "Other...")
+    assert last_screen(sent).path == ["Other"]
 
 
-def test_double_blink_from_a_submenu_other_page_goes_to_its_parent(session, sched, sent, loop):
+def test_other_loops_back_when_the_ai_has_nothing_new(menu, profile, sched, sent, loop):
+    class Empty(FakeProvider):
+        async def more_options(self, ctx):
+            return Options(options=[])
+
+        async def level_bundle(self, ctx):
+            return Bundle()
+
+    s = make_session(menu, profile, sched, sent, loop, Empty())
     loop.run()
     for tile in ["I need", "Pain"]:
-        pick(session, sched, sent, tile)
+        pick(s, sched, sent, tile)
         loop.run()
-    pick(session, sched, sent, "Other...")
-    assert last_screen(sent).path == ["I need", "Pain", "Other"]
-    session.handle(DoubleBlink(t=0.0))
-    assert last_screen(sent).path == ["I need"]
-
-
-def test_spanish_spell_it(menu, profile, sched, sent, loop):
-    s = make_session(menu, profile, sched, sent, loop, lang="es")
+    pick(s, sched, sent, "Other...")
     loop.run()
-    pick(s, sched, sent, "Otro...")
+    assert labels(sent) == ["Arms", "Other..."]  # the AI had nothing: the fixed `more` list
+    pick(s, sched, sent, "Other...")
     loop.run()
-    pick(s, sched, sent, "Otro...")
-    pick(s, sched, sent, "Deletrear")
-    assert said(sent, "system") == ["Deletrear llegará pronto."]
+    assert last_screen(sent).path == ["I need", "Pain"]  # nothing new: back to Pain's own options
+    assert labels(sent)[0] == "Head"
+    assert said(sent, "system") == []
 
 
 # --- prefetch and loading ---------------------------------------------------------------

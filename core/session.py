@@ -16,9 +16,10 @@ AI (PRD section 5 step 6, D6, decisions.md #5 and #7):
   - Picking a leaf opens the suggestions screen: up to 3 AI sentences, then the leaf's fixed phrase,
     then "Other...". A clench on a sentence opens CONFIRMING with exactly that sentence. With no AI
     (no key, offline, slow, error) the leaf goes straight to CONFIRMING with its fixed phrase.
-  - Every level ends with "Other..." ("Otro..."): new options for the same path from the AI (or the
-    level's fixed `more` list from menu.yaml when the AI has nothing). After 2 "Other..." picks in a
-    row the tile reads "Spell it" ("Deletrear"), which for now only says spelling is coming soon.
+  - Every level ends with "Other..." ("Otro..."): each pick shows the next page of new options for
+    the same path from the AI (or the level's fixed `more` list from menu.yaml when the AI has
+    nothing). After 3 pages, or when there is nothing new (or no AI), the next pick loops back to the
+    level's own options.
   - The home "Suggested" branch shows the AI's sentences for right now first, then its fixed phrases.
   - The AI only writes labels and text. The action and contact always come from the path: an AI
     option inherits them from its level (MenuNode.inherited), an AI sentence from its leaf.
@@ -107,7 +108,7 @@ CLENCH_DEBOUNCE_S = 0.3  # a CLENCH within 300 ms of the last accepted one is ig
 SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
 HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
-SPELL_AFTER = 2  # "Other..." picks in a row before the tile becomes "Spell it"
+OTHER_PAGES = 3  # "Other..." pages in a row before the next pick loops back to the level's own options
 JEV_SHORTCUT = 0.8  # Jev confidence needed for the one-clench shortcut
 TRAIL_S = 2.0  # how much highlight history the clench look-back keeps
 
@@ -120,8 +121,6 @@ HELP_START: dict[Lang, str] = {
 }
 OTHER_LABEL: dict[Lang, str] = {"en": "Other...", "es": "Otro..."}
 OTHER_WORD: dict[Lang, str] = {"en": "Other", "es": "Otro"}  # the echo and the breadcrumb
-SPELL_LABEL: dict[Lang, str] = {"en": "Spell it", "es": "Deletrear"}
-SPELL_SOON: dict[Lang, str] = {"en": "Spelling is coming soon.", "es": "Deletrear llegará pronto."}
 
 Emit = Callable[[Message], None]
 Spawn = Callable[[Coroutine[Any, Any, None]], None]
@@ -146,7 +145,6 @@ def voice_lines(menu: Menu, profile: Profile) -> list[tuple[str, Lang]]:
     contact = menu.contacts[profile.help_contact]
     system = [(HELP_START[lang], lang) for lang in LANGS]
     system += [(HELP_SPEECH[lang].format(contact=contact.label(lang)), lang) for lang in LANGS]
-    system += [(SPELL_SOON[lang], lang) for lang in LANGS]
     return list(dict.fromkeys(labels + system + phrases))
 
 
@@ -203,7 +201,7 @@ class Frame:
     items: list[Item]  # the tiles, in the order shown
     crumb: Item | None = None  # the pick that opened this frame; None at home and for "Other..."
     via_other: bool = False  # opened by "Other...": breadcrumb "Other", left out of the AI path
-    others: int = 0  # "Other..." picks in a row that led here; SPELL_AFTER = "Spell it"
+    others: int = 0  # "Other..." pages in a row that led here; OTHER_PAGES = the next pick loops back
     shown: tuple[str, ...] = ()  # labels / sentences already on screen in this chain (never repeated)
     leaf: Item | None = None  # suggestions screen: the leaf the sentences are for
     ai: bool = False  # holds AI text (one language): dropped when the language changes
@@ -496,15 +494,11 @@ class Session:
             self._confirm(item)  # no AI: straight to the fixed phrase, as before
 
     def _pick_other(self, frame: Frame) -> None:
-        crumbs = self._crumbs()
-        if frame.others >= SPELL_AFTER:
-            log.info("Spell it picked: not built yet")
-            self._log_event(node_id=_join(frame.prefix, "spell"), path=crumbs + [SPELL_LABEL[self.lang]], action=None)
-            self._voice.speak(SPELL_SOON[self.lang], self.lang, "system")
-            return  # nothing opens; scanning goes on
-        self._log_event(node_id=_join(frame.prefix, "other"), path=crumbs + [OTHER_WORD[self.lang]], action=None)
+        self._log_event(node_id=_join(frame.prefix, "other"), path=self._crumbs() + [OTHER_WORD[self.lang]], action=None)
         self._echo(OTHER_WORD[self.lang])
-        if self.suggester.available:
+        if frame.others >= OTHER_PAGES:
+            self._loop_back(f"after {OTHER_PAGES} pages")
+        elif self.suggester.available:
             self._wait(self._other_request(frame), lambda result: self._open_other(frame, result))
         else:
             self._open_other(frame, None)
@@ -685,7 +679,8 @@ class Session:
         self._voice.warm(frame.items[0].phrase(self.lang), self.lang)
 
     def _open_other(self, frame: Frame, result: list[Any] | None) -> None:
-        """The next "Other..." batch for `frame`, or "Spell it" when there is nothing new."""
+        """The next "Other..." page for `frame`, or back to the level's own options when there is
+        nothing new."""
         items: list[Item] = []
         if frame.kind == "suggestions":
             leaf = frame.leaf
@@ -704,9 +699,7 @@ class Session:
                 ]
         items = items[:MAX_ITEMS]
         if not items:
-            log.info("Other...: nothing new here; the tile now offers Spell it")
-            frame.others = SPELL_AFTER
-            self._resume()  # same screen, the last tile now reads "Spell it"
+            self._loop_back("nothing new")
             return
         self._push(
             Frame(
@@ -736,6 +729,14 @@ class Session:
 
     def _push(self, frame: Frame) -> None:
         self._stack.append(frame)
+        self._enter_frame()
+
+    def _loop_back(self, reason: str) -> None:
+        """"Other..." has shown all it has: back to the level's own options (the page the first
+        "Other..." was picked on), from its first tile."""
+        while len(self._stack) > 1 and self.frame.via_other:
+            self._stack.pop()
+        log.info("Other... (%s): back to the options of %s", reason, " > ".join(self._crumbs()) or "home")
         self._enter_frame()
 
     def _up_one_level(self) -> None:
@@ -935,7 +936,7 @@ class Session:
             return
         frame = self.frame
         if frame.kind == "suggestions":
-            if frame.others < SPELL_AFTER:
+            if frame.others < OTHER_PAGES:
                 self._other_request(frame)  # more sentences: one request
             return
         self.suggester.level_bundle(
@@ -943,7 +944,7 @@ class Session:
             self.lang,
             leaves=tuple((i.label(self.lang), i.phrase(self.lang)) for i in frame.items if i.kind == "leaf"),
             now=self.learning and any(i.kind == "branch" and i.node is not None and i.node.ai_now for i in frame.items),
-            other_shown=frame.shown if frame.others < SPELL_AFTER else None,
+            other_shown=frame.shown if frame.others < OTHER_PAGES else None,
         )
 
     def _wait(self, pending: Pending[Any], then: Callable[[Any], None]) -> None:
@@ -1146,8 +1147,6 @@ class Session:
         ]
 
     def _other_tile(self, frame: Frame) -> Tile:
-        if frame.others >= SPELL_AFTER:
-            return Tile(id=_join(frame.prefix, "spell"), label=SPELL_LABEL[self.lang], kind="other")
         return Tile(id=_join(frame.prefix, "other"), label=OTHER_LABEL[self.lang], kind="other")
 
     def _screen(self) -> Screen:

@@ -25,7 +25,7 @@ CONTACTS_PATH = DATA_DIR / "contacts.yaml"
 
 MAX_TILES = 6  # PRD D8: tiles on one screen
 MAX_ITEMS = 5  # items per menu level; the session adds "Other..." as the sixth tile
-RESERVED_IDS = frozenset({"other", "spell"})  # tile ids the session uses for its own tiles
+RESERVED_IDS = frozenset({"other"})  # tile id the session uses for its own "Other..." tile
 MenuAction = Literal["speak", "send_message", "place_call", "room_control"]
 NodeId = Annotated[str, Field(pattern=r"^[a-z0-9_]+$")]
 ActionContact = tuple[MenuAction, str | None]

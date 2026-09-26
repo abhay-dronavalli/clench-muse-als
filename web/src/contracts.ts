@@ -25,7 +25,7 @@ export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control
 export type UtteranceKind = 'phrase' | 'echo' | 'system'
 /**
  * branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
- * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." / "Spell it".
+ * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
 export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other'
 

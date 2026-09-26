@@ -24,7 +24,7 @@ ActionName = Literal["speak", "send_message", "place_call", "room_control", "hel
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
-# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." / "Spell it".
+# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
 TileKind = Literal["branch", "leaf", "suggestion", "other"]
 
 

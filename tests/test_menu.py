@@ -104,7 +104,7 @@ def leaf(i: int | str = 0, **overrides) -> dict:
         [leaf(more=[leaf(1)])],  # a leaf cannot have `more`
         [leaf(ai_now=True)],
         [leaf(id="other")],  # reserved for the session's own tile
-        [{"id": "spell", "label_en": "A", "label_es": "B", "children": [leaf()]}],
+        [{"id": "other", "label_en": "A", "label_es": "B", "children": [leaf()]}],
         [leaf(label_es="")],  # empty label
         [{"id": "x", "label_en": "A", "phrase_en": "a", "phrase_es": "b", "action": "speak"}],  # missing label
         [leaf(phrase_es=None)],  # leaf without phrase

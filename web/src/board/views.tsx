@@ -28,16 +28,6 @@ function RefreshIcon() {
   )
 }
 
-/** Pencil: "Spell it". */
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-[0.9em] w-[0.9em] shrink-0" fill="none" stroke="currentColor"
-      strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  )
-}
-
 const TEXT: Record<Tile['kind'], string> = {
   branch: 'text-5xl leading-tight xl:text-6xl',
   leaf: 'text-5xl leading-tight xl:text-6xl',
@@ -72,7 +62,6 @@ export function TileGrid({ screen }: { screen: Screen }) {
       <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8">
         {screen.tiles.map((tile, i) => {
           const on = i === screen.highlight
-          const spell = tile.kind === 'other' && tile.id.endsWith('spell')
           return (
             <div
               key={tile.id}
@@ -87,7 +76,7 @@ export function TileGrid({ screen }: { screen: Screen }) {
                 on && loading ? 'animate-pulse' : '',
               ].join(' ')}
             >
-              {tile.kind === 'other' && (spell ? <PencilIcon /> : <RefreshIcon />)}
+              {tile.kind === 'other' && <RefreshIcon />}
               <span>{tile.label}</span>
             </div>
           )

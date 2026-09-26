@@ -245,10 +245,10 @@ Tiles:
 | `branch` | a menu category | opens the next level (the home "Suggested" opens the AI's sentences for right now, then its fixed phrases) |
 | `leaf` | an option that leads to a sentence, from `data/menu.yaml` or made by the AI | opens the suggestions screen, or the CONFIRM screen with the fixed phrase when there is no AI |
 | `suggestion` | a full sentence; `label` is the exact text | opens the CONFIRM screen with exactly that sentence |
-| `other` | always the last tile: "Other..." / "Otro...", or "Spell it" / "Deletrear" after two "Other..." picks in a row | "Other...": new options for the same path (AI, else the level's fixed `more` list); "Spell it": says "Spelling is coming soon." for now |
+| `other` | always the last tile: "Other..." / "Otro..." | the next page of new options for the same path (AI, else the level's fixed `more` list). After 3 pages, or when there is nothing new (or no AI), the next pick loops back to the level's own options |
 
-`id` is the dotted menu path (`need.pain.back`). The Core's own tiles end in `.other` / `.spell`
-(`other` / `spell` at home). Anything written by the AI starts with `ai:`: an AI option
+`id` is the dotted menu path (`need.pain.back`). The Core's own tile ends in `.other`
+(`other` at home). Anything written by the AI starts with `ai:`: an AI option
 `ai:need.pain.brazos`, an AI sentence `ai:need.pain.back.a_lot.s1`. The fixed phrase on a
 suggestions screen keeps its leaf's id. The AI never chooses the action or the contact: an AI option
 takes them from its level, an AI sentence from its leaf.
@@ -312,7 +312,7 @@ Everything the board says is one utterance with an `id` and a `kind`:
 |---|---|---|---|---|
 | `phrase` | the confirmed sentence | only after a confirming CLENCH on a CONFIRM screen (PRD D5); the Core is SPEAKING until its AUDIO_DONE | 100% | yes |
 | `echo` | the label of the tile just picked ("Other" / "Otro" for "Other...") | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK, the confirm clench or a `suggestion` tile (the confirm step says the sentence) | 70% | no |
-| `system` | a fixed line from the Core | help countdown start, help alert fired, "Spell it" picked | 100% | yes (ignored by the Core) |
+| `system` | a fixed line from the Core | help countdown start, help alert fired | 100% | yes (ignored by the Core) |
 
 The Core sends PLAY_AUDIO when it has (or can make in time) ElevenLabs audio for the text, and
 SPEAK when it cannot (no key, no internet, too slow, service errors): the board then uses browser
