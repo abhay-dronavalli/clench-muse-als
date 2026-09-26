@@ -272,14 +272,21 @@ class GestureRecognizer:
     anyone having to put the headband on.
     """
 
-    def __init__(self, emg_threshold, blink_threshold, long_ms=1500, double_ms=700):
+    def __init__(self, emg_threshold, blink_threshold, long_ms=1500, double_ms=700,
+                 emit_start=False):
         self.clench = EdgeDetector(emg_threshold, MIN_EVENT_MS, REFRACTORY_MS)
         self.blink = EdgeDetector(blink_threshold, 40, 150)
         self.long_ms = long_ms
         self.double_ms = double_ms
+        # emit_start: fire CLENCH_START the instant the envelope crosses the
+        # threshold, instead of waiting for the release. Anything interactive --
+        # a game, a scanning board -- must use this: waiting for release adds the
+        # whole length of the clench to the latency, which reads as "one cell late".
+        self.emit_start = emit_start
         self.long_fired = False      # one held clench emits LONG_CLENCH only once
         self.pending_blink = None    # a blink waiting to see if a second follows
-        self.counts = {"CLENCH": 0, "LONG_CLENCH": 0, "BLINK": 0, "DOUBLE_BLINK": 0}
+        self.counts = {"CLENCH": 0, "CLENCH_START": 0, "LONG_CLENCH": 0,
+                       "BLINK": 0, "DOUBLE_BLINK": 0}
 
     def update(self, emg_level, blink_level, now):
         """Feed one tick. Returns a list of (NAME, detail) fired on this tick."""
@@ -289,6 +296,8 @@ class GestureRecognizer:
         edge = self.clench.update(emg_level, now)
         if edge and edge[0] == "rise":
             self.long_fired = False
+            if self.emit_start:
+                events.append(("CLENCH_START", f"peak so far {edge[2]:6.1f} uV"))
         elif edge and edge[0] == "fall" and not self.long_fired:
             events.append(("CLENCH", f"{edge[1]:5.0f} ms   peak {edge[2]:6.1f} uV"))
         # Fire the long clench while it is still held, not on release: someone

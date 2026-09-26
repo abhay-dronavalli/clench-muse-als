@@ -55,6 +55,7 @@ python record.py --seconds 60  # 3. save a session to recordings/*.csv
 python live_plot.py            # 4. (optional) scope view of the 4 EEG channels
 python clench_detect.py        # 5. calibrate, then emit CLENCH / BLINK input events
 python clench_game.py          # 6. play the scan-and-clench game
+python clench_flappy.py --load # 7. fly Flappy Bird with your jaw
 ```
 
 Add `--synthetic` to any of them for fake data with no hardware:
@@ -66,6 +67,8 @@ python record.py --synthetic --seconds 10 --label smoke
 python live_plot.py --synthetic
 python clench_detect.py --synthetic --no-clench-cal
 python clench_game.py --synthetic --no-clench-cal --rounds 3
+python clench_flappy.py --bot          # autopilot, no headband
+python clench_flappy.py --keyboard     # Space to flap
 ```
 
 Or set it once for the whole shell:
@@ -118,6 +121,10 @@ can see how close to the threshold you are. See "Using it as input" below.
 **`clench_game.py`** — a cursor scans a row of cells, you clench on the target.
 Scores hits, misses and timeouts, and reports your reaction time so you can pick a
 scan speed. Same interaction a scanning communication board uses.
+
+**`clench_flappy.py`** — Flappy Bird in a matplotlib window, flown by clenching.
+Slow gravity, wide gaps, unhurried pipes. `--bot` flies itself, `--keyboard` uses
+Space, so both work with no headband.
 
 **`test_gestures.py`** — feeds made-up envelope traces through the gesture logic and
 asserts the right events come out. Run it after changing any threshold or timing;
@@ -243,6 +250,20 @@ Reaction time includes the detector's own lag — about one 200 ms envelope wind
 so it is the honest end-to-end number, not just your reflexes.
 
 Options: `--rounds`, `--cells`, `--scan-ms`, `--max-sweeps`.
+
+## Latency: rising edge vs release
+
+Worth knowing if you build on this. `CLENCH` fires on the **release** edge — it has
+to, because the duration is what separates a clench from a LONG_CLENCH. But that
+means the event lands after your whole clench is over, plus the ~200 ms envelope
+window. In the scanning game that showed up as missing by exactly one cell, every
+single round.
+
+For anything interactive, pass `emit_start=True` to `GestureRecognizer` and act on
+`CLENCH_START`, which fires the instant the envelope crosses the threshold. That is
+what `clench_flappy.py` does, and it cuts the lag to roughly the envelope window
+alone. Use release-edge `CLENCH` when you need to tell short from long; use
+`CLENCH_START` when you need it to feel immediate.
 
 ## Troubleshooting a real Muse
 
