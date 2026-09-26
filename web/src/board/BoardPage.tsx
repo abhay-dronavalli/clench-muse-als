@@ -5,13 +5,16 @@ import { StatusDot } from '../lib/StatusDot'
 import { useSocket, type Send } from '../lib/useSocket'
 import { playAudio, speak, unlockSpeech } from './speech'
 import { STRINGS } from './strings'
-import { Breadcrumb, ConfirmView, SpeakingView, StartOverlay, TileGrid } from './views'
+import { toastFor, useToasts } from './toast'
+import { ToastStack } from './ToastStack'
+import { Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
 type View =
   | { kind: 'waiting' }
   | { kind: 'menu'; screen: Screen }
   | { kind: 'confirm'; confirm: Confirm }
   | { kind: 'speaking'; text: string }
+  | { kind: 'help'; countdown: number }
 
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
@@ -21,13 +24,15 @@ export default function BoardPage() {
   const [started, setStarted] = useState(false)
   const [view, setView] = useState<View>({ kind: 'waiting' })
   const [lang, setLang] = useState<Lang>('en')
+  const { toasts, push } = useToasts()
 
   const onMessage = (msg: Message, send: Send) => {
     const done = () => send({ type: 'AUDIO_DONE' })
     switch (msg.type) {
       case 'SCREEN':
         setLang(msg.lang)
-        setView({ kind: 'menu', screen: msg })
+        if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
+        else setView({ kind: 'menu', screen: msg })
         break
       case 'CONFIRM':
         setView({ kind: 'confirm', confirm: msg })
@@ -39,6 +44,9 @@ export default function BoardPage() {
         break
       case 'PLAY_AUDIO':
         playAudio(msg.url, done)
+        break
+      case 'ACTION_RESULT':
+        push(toastFor(msg, lang))
         break
       default:
         console.warn('board ignored', msg.type)
@@ -78,6 +86,8 @@ export default function BoardPage() {
       )}
       {status === 'open' && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
       {status === 'open' && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
+      {status === 'open' && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
+      <ToastStack toasts={toasts} />
 
       <DevPanel lang={lang} />
     </div>

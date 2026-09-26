@@ -74,6 +74,21 @@ export function SpeakingView({ text, lang }: { text: string; lang: Lang }) {
   )
 }
 
+/** Full-screen red help countdown (PRD D3): a huge number and how to cancel. */
+export function HelpCountdownView({ countdown, lang }: { countdown: number; lang: Lang }) {
+  const s = STRINGS[lang].help
+  return (
+    <div
+      role="alert"
+      className="fixed inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-red-700 p-12 text-center text-white"
+    >
+      <p className="text-6xl font-bold">{s.title}</p>
+      <p className="text-[18rem] font-black leading-none tabular-nums">{countdown}</p>
+      <p className="text-5xl font-semibold">{s.cancel}</p>
+    </div>
+  )
+}
+
 export function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
     <button
