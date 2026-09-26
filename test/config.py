@@ -21,6 +21,7 @@ without a headset can export it once and forget about it.
 import argparse
 import os
 import platform
+import time
 
 from brainflow.board_shim import BoardIds, BoardShim, BrainFlowInputParams, BrainFlowPresets
 
@@ -94,23 +95,36 @@ CONNECT_HELP = [
 ]
 
 
-def prepare_or_explain(board):
-    """prepare_session() with a readable failure instead of a raw traceback.
+def prepare_or_explain(board, attempts=3, wait_seconds=5.0):
+    """prepare_session() that retries, then explains instead of raising.
 
-    Returns True if the session is open. Every script that connects should go
-    through this: a stack trace tells you nothing you can act on, and the real
-    cause is nearly always one of the six things listed above.
+    The single most common failure is not a broken headband: it is a handoff
+    race. BLE needs a few seconds after one process releases the Muse before it
+    advertises again, so a script started right after another one exits finds
+    nothing. Retrying a couple of times with a pause makes that disappear.
+
+    Returns True if the session is open.
     """
-    try:
-        board.prepare_session()
-        return True
-    except Exception as exc:
-        print()
-        print(f"CANNOT CONNECT: {type(exc).__name__}: {exc}")
-        print()
-        for line in CONNECT_HELP:
-            print(line)
-        return False
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            board.prepare_session()
+            return True
+        except Exception as exc:
+            last_error = exc
+            if attempt < attempts:
+                print(f"  connect attempt {attempt}/{attempts} failed, "
+                      f"retrying in {wait_seconds:.0f}s "
+                      f"(the headband may still be releasing)...")
+                time.sleep(wait_seconds)
+
+    print()
+    print(f"CANNOT CONNECT after {attempts} attempts: "
+          f"{type(last_error).__name__}: {last_error}")
+    print()
+    for line in CONNECT_HELP:
+        print(line)
+    return False
 
 
 def board_label(board: BoardShim) -> str:
