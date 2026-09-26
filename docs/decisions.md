@@ -64,11 +64,32 @@ Status: **done** = built, **planned** = agreed, not built yet.
   With no AI and no `more` list, "Other..." turns straight into "Spell it" on the same screen.
 - Why: one fixed way out on every screen, instead of a category the person has to remember to visit.
 
-## 6. Ranking with TypeSafe Jev (planned)
+## 6. Ranking with TypeSafe Jev as the AI prior (chunk 6, done)
 
-- PRD: section 9 local scoring formula.
-- Plan: ranking uses TypeSafe Jev (a structured choice model) when available, with the local scoring
-  formula as the fallback. Gemini writes new options and full sentences.
+- PRD: section 9 score, whose "AI's guess for this moment" part is left open.
+- Now: the local score (`core/rank/score.py`) always runs; TypeSafe Jev, a structured-choice model,
+  is its optional AI prior (`core/rank/jev.py`). Each ranking asks Jev ONE Choice question ("Which
+  option does the patient most likely want right now?"), criteria = tile ids -> labels or sentences
+  (up to 255), state = a short plain summary: time and weekday, language, menu path, body state, the
+  last 5 confirmed messages with times, the top 10 phrases with counts and their usual hour. Jev's
+  probabilities are the score's AI part (weight 0.3). Gemini still writes new options and sentences.
+- Access path, first configured wins, both plain REST through httpx (no SDK needed):
+  a) TypeSafe API (`TYPESAFE_API_KEY`): `POST https://api.typesafe.ai/v1/systemone`,
+     `Authorization: Bearer <key>`, body `{"model": "jev-latest", "state": ..., "questions": {...}}`,
+     reply `{"answers": {"next": {"choice", "probabilities", "confidence"}}}`.
+  b) Cloudflare Workers AI (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`):
+     `POST https://api.cloudflare.com/client/v4/accounts/<account>/ai/run`, `Authorization: Bearer
+     <token>`, body `{"model": "typesafe/jev", "input": {"state": ..., "questions": {...}}}` (from the
+     Cloudflare model page, developers.cloudflare.com/ai/models/typesafe/jev, 2026-09-26). The reply
+     is read as `{"answers": ...}`, also inside Cloudflare's `{"result": ..., "success": ...}` envelope.
+  c) neither: no Jev, AI prior 0.
+  Used in this build: the TypeSafe API. `scripts/test_jev.py --send` on 2026-09-26 answered in
+  0.4 to 0.5 s (well inside the 1.5 s timeout) and picked the María text for the sample evening.
+- Never blocks: the screen shows the history ranking at once. Jev's answer re-ranks it quietly (same
+  highlight position, no echo) only if the person has done nothing since; otherwise it is kept for
+  when they come back to that screen. Cached 10 minutes on (candidate ids, hour, last outcome id,
+  language); circuit breaker as for the voice (off 5 min after 401/402/403 or 3 failures in a row).
+  Day 1 mode never calls Jev.
 
 ## 7. AI layer: Gemini writes sentences and new options (chunk 5, done)
 
@@ -157,7 +178,7 @@ Status: **done** = built, **planned** = agreed, not built yet.
   with no key.
 - Prefetch asks, per level, for each leaf's sentences, the level's "Other..." batch and (at home)
   the Suggested sentences. That is up to 6 requests per level; see "Problems" in the chunk 5 report
-  about free-tier rate limits.
+  about free-tier rate limits. (Chunk 6: now one request per level, see "Smaller choices (chunk 6)".)
 - The loading wait uses the session timer (4 s) on top of the Suggester's own 4 s limit. Clenches are
   ignored while loading; a double blink stops waiting and resumes scanning; a long clench starts the
   help countdown.
@@ -178,3 +199,81 @@ Status: **done** = built, **planned** = agreed, not built yet.
   menu level below it. A sentence already on the confirm screen stays as it is.
 - After "Spell it" appears in place (nothing new to show), the highlight stays on it, so one clench
   picks it.
+
+## 8. Learning: ranking, stability rule, shortcut and Day 1 mode (chunk 6, done)
+
+- PRD: section 9 layer 2 (score, weights 0.4 / 0.2 / 0.1 / 0.3), D7 (most likely first), "Showing
+  it in the demo" (Day 1 vs a simulated week).
+- Score (`core/rank/score.py`): use (recency-weighted, half-life 3 days) + time of day (hour
+  histogram, +/- 1 hour at half weight, also recency-weighted) + body state (urgent items when the
+  state is elevated; 0 until the sensor chunk sends STATE) + AI prior (Jev) - recent rejections
+  (confirm screens cancelled in the last 24 h, 1 - 0.5^n). The PRD gives no rejection weight; it is
+  0.3, like the AI's. Weights live in `data/profile.yaml` and are normalized. Each part is scaled to
+  0..1 across the candidates being ranked (use and time divided by the best one), so the weights
+  compare like with like. Evidence is every confirmed send and cancelled confirm of the last 30 days.
+- A branch scores as the sum of its descendants' leaf evidence (a node id without its `ai:` prefix,
+  so an AI sentence confirmed under People > Maria > Text counts for that leaf). Tiles are looked up
+  by path (the same in both languages), sentences by their text in the current language.
+- Stability rule (motor memory matters for AAC users): menu levels keep the menu.yaml order; an item
+  moves above the one before it only when its score is at least 1.5x that one's (`hysteresis` in the
+  profile) and at least 0.02 higher. The anchor is always menu.yaml, not the last order shown, so
+  the same history always gives the same menu. Home Suggested is pinned first, "Other..." is never an
+  item (always last). Full reordering on the suggestions screen and in the Suggested list.
+- Suggested with learning on: the AI's sentences for right now, the patient's 5 most used sentences
+  (each with the action and contact of the menu leaf it was confirmed under, never from the text; a
+  sentence under an AI option takes what its level passes on), then the fixed phrases, one of each
+  sentence, ranked, 5 shown. A history sentence that is its leaf's fixed phrase keeps the leaf's id
+  (`people.maria.text`); others are `ai:<leaf path>.h1`...
+- One-clench shortcut: with learning on, picking Suggested goes straight to the confirm screen with
+  the top learned phrase (history and fixed phrases, no AI sentences, so the guess is the patient's
+  own habit) when it is a confident guess. "History score share" is read as: of everything confirmed
+  around this hour (+/- 1 h, recency-weighted) among the candidates, the share that was this phrase,
+  and the phrase needs at least 3 recency-weighted uses (about 4 days of daily use). A cancel of it in
+  the last 24 h scales the confidence down as it does the score (one cancel halves it). A double blink
+  on the shortcut's confirm screen opens the full Suggested list instead of going home. D5 unchanged.
+- Shortcut with Jev on: the prompt asked for Jev confidence >= 0.8. Measured on the live API with a
+  seeded week, Jev picks the right phrase but its calibrated confidence stays at 0.44 to 0.6, so that
+  rule alone would switch the shortcut off whenever Jev is configured. Now: with Jev on, Jev must pick
+  the same top phrase (a veto), and then Jev confidence >= 0.8 OR the history share >= 0.6 opens the
+  shortcut. Without a Jev answer yet, the history rule alone decides.
+- Jev state: besides the fields the prompt listed, each top phrase carries its usual hour ("(13,
+  around 10:00)"). One short line per phrase, and it raised Jev's confidence in the right phrase in a
+  live check (0.44 -> 0.52).
+- Day 1 mode = SETTINGS `learning: false` (default from `data/profile.yaml`, broadcast like the other
+  settings, a dev panel toggle): menu.yaml order, Suggested is its fixed list (no AI sentences, no
+  history sentences), no shortcut, no Jev, and the AI is told nothing about the history. Switching it
+  while scanning goes back to home, so the before and after show at once. The value is not written
+  back to profile.yaml (like speak picks).
+- The metric: the PRD says "5 steps became 1" (D7, section 13). With the confirm clench required
+  (D5) the best case is 2: Suggested, then confirm. So the demo number is "5 -> 2": People > María >
+  Text > (fixed phrase after the AI's 3 sentences) > confirm is 5 clenches and 6 scan steps in Day 1
+  mode with the AI on (4 clenches, 3 steps without AI), and 2 clenches, 0 steps after the week.
+  METRICS (new message, consoles and dev panel only) reports both after every confirm.
+
+## Smaller choices (chunk 6)
+
+- One Gemini request per level: `level_bundle(ctx)` returns the sentences for every leaf on the level,
+  its "Other..." options and (at home) the Suggested sentences in one structured reply; each part is
+  cached under the key compose() / more_options() use, so picks find it (or share the request in
+  flight). Only missing parts are asked; a single missing part goes as a plain compose /
+  more_options. A leaf the model leaves out is not cached (its pick asks again). The suggestions
+  screen's "Other..." still uses compose (one request). The bundle may use up to 2,048 output tokens.
+  Requests in the last minute are logged at debug level (`clench.suggest`).
+- The history cache and the Jev cache key use the id of the last confirmed send or cancel (not of any
+  event), so plain picks do not invalidate them. A seed loaded while the core runs shows up at the
+  next screen without a restart.
+- `urgent: true` is on I need > Pain, I need > Bathroom and the Nurse contact (help); a branch counts
+  as urgent when anything in it is. There is no "Can't breathe" item yet. STATE's level is stored and
+  used from the next screen on; it only reorders (D10).
+- Metrics: selections count every accepted clench pick since home (a pick undone by a double blink
+  still counts: it was effort), scan steps every highlight move while scanning. The Day 1 cost walks
+  the menu.yaml path of the leaf the message was said under, "Other..." counting as the tile after the
+  level's items for a `more` item. A message Day 1 mode cannot reach the same way (an AI sentence on
+  Suggested, an AI option from "Other...") reports its real numbers for both.
+- `scripts/seed_demo.py` needs no `--send`: it only writes the local database. `--load` writes the
+  same rows the core writes (a pick per level, then the confirmed send and the phrase count), from a
+  fixed random seed (same week every time). `--focus-hour H` sends the María text twice at H every
+  day and moves any other habit within an hour of H two hours away, so the text is the top Suggested
+  phrase and the shortcut is on at H. The seed is Spanish (Luis's language); an English board ranks
+  menu tiles from it but shows no history sentences.
+- The CircuitBreaker from the voice service is shared (it takes a name and fallback text now).

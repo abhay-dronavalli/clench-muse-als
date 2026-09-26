@@ -40,12 +40,18 @@ owns the highlight, help countdown), `core/pointer/` (Pointer interface, ScanPoi
 `core/actions/` (action registry: speak, send_message via Telegram, place_call via Twilio Voice,
 room_control mock), `core/suggest/` (AI layer: `provider.py` LLMProvider protocol and validated
 models, `prompts.py` every prompt, `gemini.py`, `fake.py` offline provider, `stubs.py` claude/openai
-placeholders, `service.py` Suggester with 4 s timeout, 10 min cache and fallback), `core/voice.py` (everything the board says: ElevenLabs TTS, disk audio cache,
+placeholders, `service.py` Suggester with 4 s timeout, 10 min cache, fallback and the one-request-per-level
+`level_bundle`), `core/rank/` (learning: `score.py` the PRD section 9 score and the stability rule,
+`history.py` evidence from the events table, `ranker.py` Ranker and the Jev state summary, `jev.py`
+optional TypeSafe Jev prior), `core/metrics.py` (clenches and scan steps per message, Day 1 cost),
+`core/voice.py` (everything the board says: ElevenLabs TTS, disk audio cache,
 circuit breaker, prewarm, browser-speech fallback), `core/db.py` (SQLite events, phrases, audio_cache), `core/config.py` (.env loading),
 `core/hub.py` (broadcast to boards/consoles), `core/clock.py` (injectable timers for tests),
 `web/src/board/` (patient board, audio player and browser speech in `speech.ts`, toasts, help countdown,
 suggestion / "Other..." / loading tiles in `views.tsx`), `web/src/dev/DevPanel.tsx`
-(keyboard stand-in, shows the settings the Core reports), `web/src/lib/useSocket.ts` (auto-reconnect).
+(keyboard stand-in, shows the settings the Core reports, Day 1 toggle, METRICS line),
+`web/src/lib/useSocket.ts` (auto-reconnect), `scripts/seed_demo.py` + `data/seed_demo_week.json`
+(the simulated demo week).
 
 **Changes from the PRD** are logged in `docs/decisions.md`. The two that shape the code most: the
 keyboard stand-in is a web dev panel (`web/src/dev/`), not a Python `KeyboardSource`, and it sends
@@ -180,10 +186,13 @@ With no key the app works the same with the fixed phrases from `data/menu.yaml` 
 - "Other..." ("Otro...") on every level brings up to 5 new options for the same path (without AI:
   the level's `more` list from `menu.yaml`, if any). After two in a row it reads "Spell it"
   ("Deletrear"), which for now only says "Spelling is coming soon.".
-- Home "Suggested" shows the AI's sentences for right now first, then its fixed phrases.
+- Home "Suggested" shows the AI's sentences for right now, the patient's most used sentences and its
+  fixed phrases, best first (see "Learning" below).
 - The AI never picks the action or the contact; those come from the menu path.
-- Results are fetched in the background as soon as a level opens, so they are usually ready. If
-  not, the board shows "Finding options..." (scan paused) for at most 4 s, then uses the fixed phrase.
+- Results are fetched in the background as soon as a level opens, in ONE request for the whole level
+  (every leaf's sentences, the "Other..." options and, at home, the Suggested sentences; none when it
+  is all cached), so they are usually ready. If not, the board shows "Finding options..." (scan
+  paused) for at most 4 s, then uses the fixed phrase.
 
 Setup:
 
@@ -200,7 +209,55 @@ Setup:
    pauses the AI for 5 min / 1 min (fixed phrases meanwhile).
 
 Only the current path, language, hour, patient name, the leaf's fixed phrase, the 20 most used
-phrases, the last 5 confirmed sentences and the contacts' first names are sent (PRD D14).
+phrases, the last 5 confirmed sentences and the contacts' first names are sent (PRD D14). In Day 1
+mode the phrases and sentences are left out.
+
+### Learning (ranking, Day 1 mode, demo week, Jev)
+
+Every screen is ordered by the PRD section 9 score from the history in `data/clench.db` (confirmed
+sends and cancelled confirms of the last 30 days): recent use (half-life 3 days), time of day
+(+/- 1 hour), body state (later), the Jev prior (optional) and recent cancels. Weights and the
+stability margin are in `data/profile.yaml` (`ranking`).
+
+- Menu levels keep the `menu.yaml` order unless an item's score is clearly higher (1.5x) than the
+  one above it, so tiles do not jump around. Suggested is always first on Home, "Other..." always
+  last. The suggestions screen and the Suggested list are fully reordered.
+- Suggested also offers the sentences the patient confirms most, each with the action and contact of
+  the menu leaf it was said under (María's text is still a Telegram message to María).
+- One-clench shortcut: when the top Suggested phrase is a confident guess (history share of this
+  hour >= 0.6 with at least 3 recent uses; with Jev on, Jev must agree), picking Suggested goes
+  straight to the confirm screen with it. B there opens the full Suggested list instead of going
+  home. The confirm clench is still required.
+- Day 1 mode (`learning: false` in SETTINGS; default `learning` in `data/profile.yaml`, dev panel
+  toggle): `menu.yaml` order, the fixed Suggested list, no shortcut, no Jev, no history for the AI.
+  Switching it while scanning goes back to Home.
+- After every confirm the Core sends METRICS to consoles and the dev panel: "Took 2 clenches, 0 s
+  waiting (Day 1: 5 clenches, 6 s)". The collapsed Dev pill shows "2 vs 5 clenches".
+
+Demo week (the "5 -> 2" moment; say plainly that the week is simulated):
+
+```powershell
+uv run python scripts/seed_demo.py --reset             # Day 1: deletes all events and phrases (asks; --yes skips)
+uv run python scripts/seed_demo.py --load              # 7 days of habits ending now, the María text tied to this hour
+uv run python scripts/seed_demo.py --reset --load --yes --focus-hour 15   # for a demo at 15:xx
+```
+
+`--load` prints what it wrote and the top 3 Suggested phrases at the focus hour. The running core
+uses the new history from its next screen (no restart). The seed is in Spanish, like Luis's board.
+Demo: toggle Day 1 mode on, text María (People › María › Mensaje › fixed phrase › confirm: 5
+clenches with a Gemini key), toggle it off, then Sugerencias › confirm: 2 clenches.
+
+Jev (optional AI prior, TypeSafe): with no key the ranking uses history and time only. In `.env` set
+`TYPESAFE_API_KEY` (TypeSafe API), or `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (Cloudflare
+Workers AI, model `typesafe/jev`); the first one set is used. Check it:
+
+```powershell
+uv run python scripts/test_jev.py --send   # prints the probabilities, confidence and latency
+```
+
+Restart the core: it logs `ranking: learning on, Jev via TypeSafe API` and `/health` shows `learning`
+and `jev`. Jev never blocks the scan: its answer (1.5 s timeout, 10 min cache) re-ranks the screen
+quietly only if the person has not moved yet; after a bad key or 3 failures it is off for 5 minutes.
 
 ### Keyboard stand-in (dev panel on the board page)
 
@@ -212,12 +269,14 @@ phrases, the last 5 confirmed sentences and the contacts' first names are sent (
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
 The expanded panel also has buttons for the same events, a scan speed slider, an EN/ES toggle, a
-Speak picks on/off toggle (all showing the values the Core reports in SETTINGS) and a line showing where the last thing said came from ("ElevenLabs
-(cached)", "ElevenLabs" or "Browser").
+Speak picks on/off toggle, a Day 1 mode on/off toggle (all showing the values the Core reports in
+SETTINGS), a line showing where the last thing said came from ("ElevenLabs (cached)", "ElevenLabs" or
+"Browser") and the last METRICS ("Took 2 clenches, 0 s waiting (Day 1: 5 clenches, 6 s)").
 
 ### Milestone manual test (press Space, pick, confirm, hear it)
 
-1. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
+1. Start from Day 1 (`uv run python scripts/seed_demo.py --reset`) so the menu is in `menu.yaml`
+   order. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
    green, and the home board shows six Spanish tiles (Sugerencias, Necesito, Personas, Cómo me
    siento, Cuarto and the dashed "Otro...") with the highlight moving about once a second.
@@ -241,6 +300,13 @@ Speak picks on/off toggle (all showing the values the Core reports in SETTINGS) 
    "ElevenLabs (cached)" with them. Click Speak picks to Off and pick a tile: nothing is said.
 9. On Home pick "Other...": new options (without a key: Yes, No, Good morning, Wait a moment). Pick
    "Other..." again: the last tile now reads "Spell it"; picking it says "Spelling is coming soon.".
+10. Learning: run `uv run python scripts/seed_demo.py --load` (the core keeps running). Open the dev
+    panel and click Day 1 mode to On: the board goes Home in `menu.yaml` order. Text María as in
+    step 6: the Last message line reads "Took 5 clenches, 6 s waiting" with a Gemini key (4
+    clenches, 3 s without). Click Day 1 mode to Off and pick Suggested (Sugerencias): the confirm
+    screen shows "Mija, estoy bien, llámame a las seis." at once; confirm: "Took 2 clenches, 0 s
+    waiting (Day 1: 5 clenches, 6 s)". Pick Suggested again and press B on the confirm screen: the
+    full Suggested list opens, the María text first.
 
 ## CHUNK REPORT format
 
