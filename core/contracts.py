@@ -193,6 +193,13 @@ class PlayAudio(_Msg):
     cached: bool  # true = the file was already on disk (no request to the TTS service)
 
 
+class Click(_Msg):
+    """Play the short soft click (a picked "Other..."; no word is said for it). It goes into the
+    board's sound queue in order with the echoes. Only sent when speak picks is on."""
+
+    type: Literal["CLICK"] = "CLICK"
+
+
 class ActionResult(_Msg):
     """How a confirmed action that leaves the laptop went (message, call, room control)."""
 
@@ -265,6 +272,7 @@ Message = Annotated[
         Confirm,
         Speak,
         PlayAudio,
+        Click,
         ActionResult,
         Metrics,
     ],

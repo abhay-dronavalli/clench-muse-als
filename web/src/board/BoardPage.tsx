@@ -8,7 +8,7 @@ import { DEFAULT_RANGE } from '../facetrack/pose'
 import { useHeadPointing } from '../facetrack/useHeadPointing'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket, type Send } from '../lib/useSocket'
-import { say, unlockSpeech, type Utterance, type VoiceSource } from './speech'
+import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './speech'
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { ToastStack } from './ToastStack'
@@ -26,8 +26,8 @@ type View =
  * READY, AUDIO_DONE and, in Webcam or Auto mode, POINT and FACE_OK. All decisions, including the
  * highlight, stay in the Core.
  *
- * Speech: only a phrase (the confirmed sentence) shows the speaking screen. Echoes (picked tiles)
- * and system lines play over whatever is on screen. AUDIO_DONE goes back for phrases and system
+ * Speech: only a phrase (the confirmed sentence) shows the speaking screen. Echoes (picked tiles),
+ * the "Other..." click and system lines play over whatever is on screen, through one queue (speech.ts). AUDIO_DONE goes back for phrases and system
  * lines, never for echoes.
  *
  * Webcam pointing (facetrack/): the camera is on only while the pointing mode is Webcam or Auto,
@@ -72,6 +72,9 @@ export default function BoardPage() {
         say(u, onEnd, setVoiceSource)
         break
       }
+      case 'CLICK':
+        click() // a picked "Other...": no word, a soft click in the sound queue
+        break
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break

@@ -10,7 +10,7 @@ import json
 import pytest
 
 from core.clock import ManualScheduler
-from core.contracts import ActionResult, Clench, Confirm, DoubleBlink, LongClench, PlayAudio, Screen, Settings, Speak
+from core.contracts import ActionResult, Clench, Click, Confirm, DoubleBlink, LongClench, PlayAudio, Screen, Settings, Speak
 from core.db import Db
 from core.menu import load_menu
 from core.profile import load_profile
@@ -131,6 +131,15 @@ def labels(sent) -> list[str]:
 
 def said(sent, kind: str) -> list[str]:
     return [m.text for m in sent if isinstance(m, (Speak, PlayAudio)) and m.kind == kind]
+
+
+def sounds(sent) -> list[str]:
+    """Echoes and clicks in the order the board gets them ("CLICK" for a click)."""
+    return [
+        "CLICK" if isinstance(m, Click) else m.text
+        for m in sent
+        if isinstance(m, Click) or (isinstance(m, (Speak, PlayAudio)) and m.kind == "echo")
+    ]
 
 
 def pick(session, sched, sent, label: str) -> None:
@@ -433,7 +442,16 @@ def test_echo_rules(session, sched, sent, loop):
     session.handle(DoubleBlink(t=0.0))  # up one level: I need
     pick(session, sched, sent, "Water")
     pick(session, sched, sent, sentence)
-    assert said(sent, "echo") == ["I need", "Water", "Other", "Water"]  # never the sentence itself
+    assert said(sent, "echo") == ["I need", "Water", "Water"]  # never the sentence itself
+    # "Other..." says no word: a click, in its place among the picked words.
+    assert sounds(sent) == ["I need", "Water", "CLICK", "Water"]
+
+
+def test_no_click_with_speak_picks_off(session, sched, sent, loop):
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000, speak_picks=False))
+    loop.run()
+    pick(session, sched, sent, "Other...")
+    assert sounds(sent) == []
 
 
 def test_only_the_top_sentence_is_made_in_advance(session, sched, sent, loop):

@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS, METRICS |
 
@@ -52,6 +52,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
+| CLICK | Core | Board, Console | Play the short soft click for a picked "Other..." (in order with the echoes) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 
@@ -311,7 +312,7 @@ Everything the board says is one utterance with an `id` and a `kind`:
 | `kind` | What | When | Volume | AUDIO_DONE |
 |---|---|---|---|---|
 | `phrase` | the confirmed sentence | only after a confirming CLENCH on a CONFIRM screen (PRD D5); the Core is SPEAKING until its AUDIO_DONE | 100% | yes |
-| `echo` | the label of the tile just picked ("Other" / "Otro" for "Other...") | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK, the confirm clench or a `suggestion` tile (the confirm step says the sentence) | 70% | no |
+| `echo` | the label of the tile just picked | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK, the confirm clench, a `suggestion` tile (the confirm step says the sentence) or "Other..." (a CLICK instead) | 70% | no |
 | `system` | a fixed line from the Core | help countdown start, help alert fired | 100% | yes (ignored by the Core) |
 
 The Core sends PLAY_AUDIO when it has (or can make in time) ElevenLabs audio for the text, and
@@ -363,6 +364,16 @@ dev server).
 
 ```json
 {"type": "PLAY_AUDIO", "id": "b41e07c9d2aa", "kind": "echo", "url": "/audio/9b1f0e7c5a2d4e6f8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f.mp3", "text": "Dolor", "lang": "es", "cached": true}
+```
+
+### CLICK
+
+A picked "Other..." says no word: the board plays a short soft click instead (made with WebAudio,
+no audio file). It joins the sound queue like an echo, in pick order, at echo volume. Sent only when
+speak picks is on. Never answered with AUDIO_DONE. No fields besides `type`.
+
+```json
+{"type": "CLICK"}
 ```
 
 ### HeadRange (REST body, not a message)

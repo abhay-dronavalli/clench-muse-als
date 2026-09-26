@@ -36,7 +36,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from core.contracts import Lang, Message, PlayAudio, Speak, UtteranceKind
+from core.contracts import Click, Lang, Message, PlayAudio, Speak, UtteranceKind
 from core.db import Db
 from core.menu import DATA_DIR
 
@@ -363,6 +363,10 @@ class Voice:
                     return uid
         self._emit(Speak(id=uid, kind=kind, text=text, lang=lang))
         return uid
+
+    def click(self) -> None:
+        """The short soft click for a picked "Other..." (no word): queued on the board like an echo."""
+        self._emit(Click())
 
     def warm(self, text: str, lang: Lang) -> None:
         """Start making audio for `text` in the background, without saying it, so it plays from the

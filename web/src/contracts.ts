@@ -193,6 +193,14 @@ export interface PlayAudio {
   cached: boolean
 }
 
+/**
+ * Play the short soft click (a picked "Other..."; no word is said for it). It goes into the board's
+ * sound queue in order with the echoes. Only sent when speak picks is on.
+ */
+export interface Click {
+  type: 'CLICK'
+}
+
 /** How a confirmed action that leaves the laptop went (message, call, room control). */
 export interface ActionResult {
   type: 'ACTION_RESULT'
@@ -255,6 +263,7 @@ export type Message =
   | Confirm
   | Speak
   | PlayAudio
+  | Click
   | ActionResult
   | Metrics
 

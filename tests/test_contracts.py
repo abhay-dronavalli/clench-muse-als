@@ -90,6 +90,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "cached": True,
         },
     ),
+    "CLICK": (contracts.Click, {"type": "CLICK"}),
     "ACTION_RESULT": (
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},

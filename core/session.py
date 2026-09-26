@@ -36,8 +36,8 @@ patient confirms most (each with the action and contact of the leaf it was said 
 learning off ("Day 1 mode") everything is in menu.yaml order and Suggested is its fixed list.
 
 Speak picks (decisions.md #4): with speak_picks on, every CLENCH pick while scanning says the picked
-tile's label (an "echo") before the next view shows; "Other..." is said as "Other" / "Otro". Full
-sentences (suggestion tiles) are never echoed: the confirm step speaks them.
+tile's label (an "echo") before the next view shows; "Other..." is a short soft click (CLICK), no
+word. Full sentences (suggestion tiles) are never echoed: the confirm step speaks them.
 
 Pointing (PRD D2, A3.3a): one Pointer slot decides where the highlight is: Scan (timer), Webcam
 (the board's POINT messages), Auto (webcam while the board sees a face, scan after 3 s without one)
@@ -120,7 +120,7 @@ HELP_START: dict[Lang, str] = {
     "es": "Pidiendo ayuda. Parpadea dos veces para cancelar.",
 }
 OTHER_LABEL: dict[Lang, str] = {"en": "Other...", "es": "Otro..."}
-OTHER_WORD: dict[Lang, str] = {"en": "Other", "es": "Otro"}  # the echo and the breadcrumb
+OTHER_WORD: dict[Lang, str] = {"en": "Other", "es": "Otro"}  # the breadcrumb (a pick is a click, no word)
 
 Emit = Callable[[Message], None]
 Spawn = Callable[[Coroutine[Any, Any, None]], None]
@@ -130,7 +130,7 @@ LANGS: tuple[Lang, ...] = ("en", "es")
 def voice_lines(menu: Menu, profile: Profile) -> list[tuple[str, Lang]]:
     """Everything the session can say from the fixed menu, in both languages, for the voice prewarm:
     tile labels first (echoes have the shortest wait), then system lines, then leaf phrases."""
-    labels: list[tuple[str, Lang]] = [(OTHER_WORD[lang], lang) for lang in LANGS]
+    labels: list[tuple[str, Lang]] = []
     phrases: list[tuple[str, Lang]] = []
 
     def walk(node: MenuNode) -> None:
@@ -495,7 +495,8 @@ class Session:
 
     def _pick_other(self, frame: Frame) -> None:
         self._log_event(node_id=_join(frame.prefix, "other"), path=self._crumbs() + [OTHER_WORD[self.lang]], action=None)
-        self._echo(OTHER_WORD[self.lang])
+        if self.speak_picks:
+            self._voice.click()  # a short soft click, no word, in order with the echoes
         if frame.others >= OTHER_PAGES:
             self._loop_back(f"after {OTHER_PAGES} pages")
         elif self.suggester.available:
