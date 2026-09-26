@@ -37,6 +37,14 @@ Speak picks (decisions.md #4): with speak_picks on, every CLENCH pick while scan
 tile's label (an "echo") before the next view shows; "Other..." is said as "Other" / "Otro". Full
 sentences (suggestion tiles) are never echoed: the confirm step speaks them.
 
+Pointing (PRD D2, A3.3a): one Pointer slot decides where the highlight is: Scan (timer), Webcam
+(the board's POINT messages), Auto (webcam while the board sees a face, scan after 3 s without one)
+or Head tilt (scans until the sensor chunk builds it). The pointing mode switches live. Selection is
+the same code for every mode; only where the highlight comes from differs. Every SCREEN has a `seq`
+that goes up when its tiles change, and a POINT for any other `seq` is ignored, so a late POINT
+never lands on a new screen. When the highlight follows the head, a CLENCH picks the tile that was
+highlighted `clench_lookback_ms` (250 ms) before it arrived: clenching can move the head.
+
 Help alert (PRD D3): LONG_CLENCH while SCANNING, LOADING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one
 SCREEN per second, and the board says "Calling for help. Double blink to cancel.". DOUBLE_BLINK
 cancels back to where the person was. At 0 the help contact gets a call and a message (the countdown
@@ -50,6 +58,7 @@ import asyncio
 import logging
 import re
 import unicodedata
+from collections import deque
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -64,6 +73,7 @@ from core.contracts import (
     Clench,
     Confirm,
     DoubleBlink,
+    FaceOk,
     Lang,
     LongClench,
     Message,
@@ -98,6 +108,7 @@ HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
 SPELL_AFTER = 2  # "Other..." picks in a row before the tile becomes "Spell it"
 JEV_SHORTCUT = 0.8  # Jev confidence needed for the one-clench shortcut
+TRAIL_S = 2.0  # how much highlight history the clench look-back keeps
 
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
@@ -287,7 +298,14 @@ class Session:
         self._shortcut_from: Item | None = None
         self._effort = Tracker()  # clenches and scan steps since home (METRICS)
         self._loading_timer: TimerHandle | None = None
-        self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms)
+        # SCREEN seq: goes up whenever the tiles change; POINT must name the current one.
+        self._seq = 0
+        self._tiles_key: tuple[tuple[str, str, str], ...] | None = None
+        # (time, seq, highlight) each time the highlight changed, for the clench look-back.
+        self._trail: deque[tuple[float, int, int]] = deque()
+        self._lookback_s = profile.clench_lookback_ms / 1000
+        self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
+        self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
 
     # --- public ---------------------------------------------------------------
 
@@ -298,6 +316,11 @@ class Session:
     @property
     def highlight(self) -> int:
         return self.pointer.highlight
+
+    @property
+    def seq(self) -> int:
+        """The `seq` of the current tiles (the last SCREEN sent)."""
+        return self._seq
 
     @property
     def speaking_id(self) -> str | None:
@@ -313,7 +336,7 @@ class Session:
         self._go_home()
 
     def stop(self) -> None:
-        self.pointer.stop()
+        self.pointer.close()
         self._cancel_speak_timer()
         self._cancel_help_timer()
         self._cancel_wait()
@@ -361,8 +384,15 @@ class Session:
             case Settings():
                 self._apply_settings(msg)
             case Point():
-                if self.state is SessionState.SCANNING:
+                if msg.seq != self._seq:
+                    log.debug("POINT for screen %d ignored: the board shows screen %d now", msg.seq, self._seq)
+                elif self.state is SessionState.SCANNING:
                     self.pointer.on_point(msg)
+            case FaceOk():
+                if msg.ok != self.face_ok:
+                    log.info("webcam %s", "sees a face" if msg.ok else "lost the face")
+                self.face_ok = msg.ok
+                self.pointer.on_face(msg.ok)
             case State():
                 self.state_level = msg.level  # used from the next screen on; never takes action
             case _:
@@ -415,9 +445,27 @@ class Session:
 
     # --- picking --------------------------------------------------------------
 
+    def _pick_index(self) -> int:
+        """The tile a CLENCH picks. Scanning: the highlighted one. Following the head: the one that was
+        highlighted `clench_lookback_ms` before the clench arrived, on this same screen (the first
+        highlight of the screen when it is newer than that), because clenching can move the head."""
+        index = self.pointer.highlight
+        if self.pointer.source == "scan" or self._lookback_s <= 0:
+            return index
+        target = self._scheduler.now() - self._lookback_s
+        here = [(t, h) for t, seq, h in self._trail if seq == self._seq]
+        before = [h for t, h in here if t <= target]
+        picked = before[-1] if before else here[0][1] if here else index
+        if picked != index:
+            log.info(
+                "clench look-back: tile %d (highlighted %d ms before the clench), not %d",
+                picked, self._lookback_s * 1000, index,
+            )
+        return picked
+
     def _pick(self) -> None:
         frame = self.frame
-        index = self.pointer.highlight
+        index = self._pick_index()
         if index == len(frame.items):
             self._pick_other(frame)
             return
@@ -977,7 +1025,13 @@ class Session:
 
     def _help_screen(self) -> Screen:
         return Screen(
-            screen="help_countdown", tiles=[], highlight=None, lang=self.lang, path=[], countdown=self._help_left
+            screen="help_countdown",
+            seq=self._seq,
+            tiles=[],
+            highlight=None,
+            lang=self.lang,
+            path=[],
+            countdown=self._help_left,
         )
 
     def _cancel_help_timer(self) -> None:
@@ -988,10 +1042,9 @@ class Session:
     # --- settings and pointer -------------------------------------------------
 
     def _apply_settings(self, s: Settings) -> None:
-        if s.pointing_mode != self.pointing_mode:
-            self.pointing_mode = s.pointing_mode
-            if s.pointing_mode not in ("auto", "scan"):
-                log.info("pointing mode %s is not built yet; scanning instead", s.pointing_mode)
+        mode_changed = s.pointing_mode != self.pointing_mode
+        if mode_changed:
+            self._switch_pointer(s.pointing_mode)
         self.scan_ms = s.scan_ms
         if s.speak_picks is not None:
             self.speak_picks = s.speak_picks
@@ -1008,6 +1061,22 @@ class Session:
             self._change_learning()
         elif lang_changed:
             self._change_language()
+        elif mode_changed and self.state is SessionState.SCANNING:
+            self._emit(self._screen())  # same tiles; the highlight's source (and badge) changed
+
+    def _switch_pointer(self, mode: PointingMode) -> None:
+        """Swap the pointer live, mid-screen: the new one takes over the same tiles with the highlight
+        where it was, and runs only if the session is scanning."""
+        old = self.pointer
+        old.close()
+        new = make_pointer(mode, self._scheduler, self._on_highlight, self.scan_ms, self._on_pointer_source)
+        new.place(len(self.frame.items) + 1, old.highlight)
+        new.on_face(self.face_ok)
+        self.pointer = new
+        self.pointing_mode = mode
+        log.info("pointing mode %s: highlight from %s", mode, new.source)
+        if self.state is SessionState.SCANNING:
+            new.start()
 
     def _change_learning(self) -> None:
         """Day 1 mode on or off. While scanning, the board goes back to home so the before / after
@@ -1048,7 +1117,13 @@ class Session:
 
     def _on_highlight(self, index: int) -> None:
         if self.state is SessionState.SCANNING:
-            self._effort.step()
+            if self.pointer.source == "scan":
+                self._effort.step()  # waiting through the scan; a head turn is not waiting
+            self._emit(self._screen())
+
+    def _on_pointer_source(self) -> None:
+        """Auto switched between webcam and scan: redraw so the board shows (or hides) the badge."""
+        if self.state is SessionState.SCANNING:
             self._emit(self._screen())
 
     # --- messages -------------------------------------------------------------
@@ -1070,14 +1145,32 @@ class Session:
         frame = self.frame
         tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind) for i in frame.items]
         tiles.append(self._other_tile(frame))
+        key = tuple((t.id, t.label, t.kind) for t in tiles)
+        if key != self._tiles_key:  # new tiles: a new seq, so a POINT for the old ones is ignored
+            self._tiles_key = key
+            self._seq += 1
+        highlight = self.pointer.highlight
+        self._note_highlight(highlight)
         return Screen(
             screen="suggestions" if frame.kind == "suggestions" else "menu",
+            seq=self._seq,
             tiles=tiles,
-            highlight=self.pointer.highlight,
+            highlight=highlight,
             lang=self.lang,
             path=self._crumbs(),
             loading=self.state is SessionState.LOADING,
+            pointer=self.pointer.source,
         )
+
+    def _note_highlight(self, highlight: int) -> None:
+        """Remember when the highlight changed (for the clench look-back), keeping about TRAIL_S of it
+        plus the entry still in effect before that."""
+        now = self._scheduler.now()
+        trail = self._trail
+        if not trail or trail[-1][1:] != (self._seq, highlight):
+            trail.append((now, self._seq, highlight))
+        while len(trail) > 1 and trail[1][0] <= now - TRAIL_S:
+            trail.popleft()
 
     def _confirm_msg(self) -> Confirm:
         item = self._pending

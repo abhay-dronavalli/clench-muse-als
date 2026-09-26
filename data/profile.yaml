@@ -6,6 +6,9 @@
 #   speak_picks   say each picked tile's label aloud as it is picked (true | false, switchable live)
 #   learning      rank by the patient's history (true), or "Day 1 mode" (false): menu.yaml order,
 #                 the fixed Suggested list, no one-clench shortcut, no Jev. Switchable live.
+#   clench_lookback_ms  when the highlight follows the head (Webcam, Auto on webcam), a clench picks
+#                 the tile that was highlighted this many ms before it: clenching the jaw can move
+#                 the head slightly (PRD 3a "freeze on clench"). 0 = the tile at the clench.
 #   ranking       PRD section 9 score weights (normalized, so only their ratios matter) and the
 #                 stability margin: a menu item moves above the one before it only when its score
 #                 is `hysteresis` times higher.
@@ -15,6 +18,7 @@ lang: es
 help_contact: maria
 speak_picks: true
 learning: true
+clench_lookback_ms: 250
 ranking:
   weights:
     use: 0.4

@@ -9,6 +9,11 @@
 export const POINTING_MODES = ['auto', 'scan', 'webcam', 'headtilt'] as const
 export type PointingMode = (typeof POINTING_MODES)[number]
 export type PointSource = 'webcam' | 'headtilt'
+/**
+ * Where the highlight is coming from right now: Auto shows 'scan' after falling back, and Head tilt
+ * shows 'scan' until it is built.
+ */
+export type ActivePointer = 'scan' | 'webcam' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
@@ -69,12 +74,17 @@ export interface Signal {
 
 // --- Board -> Core (Webcam mode) / Sensor Service -> Core (Head tilt mode) ---
 
-/** The person is facing tile `tile`. Sent only when the tile changes. */
+/**
+ * The person is facing tile `tile` of the SCREEN numbered `seq`. Sent when the tile changes and once
+ * for every new SCREEN. The Core ignores a POINT whose `seq` is not the current screen's.
+ */
 export interface Point {
   type: 'POINT'
   source: PointSource
   /** 0-based, >= 0 */
   tile: number
+  /** the SCREEN `seq` the tile index belongs to; integer >= 0 */
+  seq: number
   t: number
 }
 
@@ -130,6 +140,8 @@ export interface Tile {
 export interface Screen {
   type: 'SCREEN'
   screen: ScreenName
+  /** goes up every time the tiles change (not when only the highlight moves); POINT echoes it */
+  seq: number
   /** at most 6 (PRD D8) */
   tiles: Tile[]
   /** 0-based; null = nothing highlighted */
@@ -141,6 +153,11 @@ export interface Screen {
   countdown?: number | null
   /** true while the Core waits (at most 4 s) for AI options after a pick; scanning is paused */
   loading?: boolean
+  /**
+   * where the highlight comes from right now (null on the help countdown); 'scan' in Auto or Head
+   * tilt mode means the fallback is on: the board shows a small "Scanning" badge
+   */
+  pointer?: ActivePointer | null
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */
@@ -185,6 +202,22 @@ export interface ActionResult {
   detail: string
   /** contact's display name in the current language; null when there is none */
   contact: string | null
+}
+
+// --- Board <-> Core over REST (not a WebSocket message): GET / PUT /api/head-range ---
+
+/**
+ * The person's comfortable head range from the calibration overlay, in degrees of head yaw and pitch
+ * as the board measures them. Saved in the database profile (PRD A7 `head_range_json`). Left and
+ * right lie on opposite sides of the center, as do up and down, each at least 2 degrees away.
+ */
+export interface HeadRange {
+  center_yaw: number
+  center_pitch: number
+  left_yaw: number
+  right_yaw: number
+  up_pitch: number
+  down_pitch: number
 }
 
 // --- Core -> Console and web dev panel ---

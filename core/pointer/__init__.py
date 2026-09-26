@@ -2,19 +2,38 @@
 
 from core.clock import Scheduler
 from core.contracts import PointingMode
-from core.pointer.base import OnHighlight, Pointer
+from core.pointer.auto import FACE_LOST_S, AutoPointer
+from core.pointer.base import OnHighlight, OnSource, Pointer
+from core.pointer.headtilt import HeadTiltPointer
 from core.pointer.scan import DEFAULT_SCAN_MS, ScanPointer
+from core.pointer.webcam import WebcamPointer
 
-__all__ = ["DEFAULT_SCAN_MS", "Pointer", "ScanPointer", "make_pointer"]
+__all__ = [
+    "DEFAULT_SCAN_MS",
+    "FACE_LOST_S",
+    "AutoPointer",
+    "HeadTiltPointer",
+    "Pointer",
+    "ScanPointer",
+    "WebcamPointer",
+    "make_pointer",
+]
 
 
 def make_pointer(
-    mode: PointingMode, scheduler: Scheduler, on_highlight: OnHighlight, scan_ms: int = DEFAULT_SCAN_MS
+    mode: PointingMode,
+    scheduler: Scheduler,
+    on_highlight: OnHighlight,
+    scan_ms: int = DEFAULT_SCAN_MS,
+    on_source: OnSource | None = None,
 ) -> Pointer:
-    """Build the Pointer for a pointing mode.
-
-    TODO(chunk: webcam): WebcamPointer for "webcam", HeadTiltPointer for "headtilt", and an
-    AutoPointer that uses webcam while FACE_OK and falls back to scan after ~3 s. Until then every
-    mode scans, which is the PRD's safe fallback.
-    """
-    return ScanPointer(scheduler, on_highlight, scan_ms)
+    """Build the Pointer for a pointing mode. Head tilt scans until the sensor chunk builds it."""
+    match mode:
+        case "webcam":
+            return WebcamPointer(on_highlight, on_source)
+        case "auto":
+            return AutoPointer(scheduler, on_highlight, scan_ms, on_source)
+        case "headtilt":
+            return HeadTiltPointer(scheduler, on_highlight, scan_ms, on_source)
+        case _:
+            return ScanPointer(scheduler, on_highlight, scan_ms, on_source)
