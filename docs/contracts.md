@@ -9,6 +9,8 @@ General rules:
 - Every message is one small JSON object sent over the WebSocket, with a `type` field naming it.
 - `t` is a timestamp in float seconds since the Unix epoch.
 - `tile` and `highlight` are 0-based indexes into the `tiles` of the SCREEN the board is showing.
+  Every SCREEN carries a `seq` that goes up when its tiles change; a POINT names the `seq` its `tile`
+  belongs to, so a late POINT can never highlight a tile on a newer screen.
 - Unknown fields are rejected. To add a field, change the contract, don't just send it.
 - The keyboard stand-in (dev panel in `web/src/dev/`) sends CLENCH, DOUBLE_BLINK and LONG_CLENCH
   exactly as the Sensor Service would. The Core cannot tell them apart (PRD D15).
@@ -21,10 +23,18 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
 | `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
-| `/ws/console` | Caregiver console | SETTINGS | SETTINGS and the same Core -> Board messages (mirror) |
-| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS |
+| `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS and the same Core -> Board messages (mirror) |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS, METRICS |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
+
+REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to the Core):
+
+| Route | What |
+|---|---|
+| `GET /api/head-range` | the saved head range (HeadRange below), or `null` before the first calibration (the board then uses its defaults) |
+| `PUT /api/head-range` | save a HeadRange from the calibration overlay; answers with it. 422 when the sides are not around the center |
+| `GET /audio/<sha256>.mp3` | cached ElevenLabs audio named in PLAY_AUDIO |
 
 | Message | Sender | Receiver | Meaning |
 |---|---|---|---|
@@ -37,12 +47,13 @@ Every client gets the current SETTINGS the moment it connects, and again after e
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
 | READY | Board | Core | Board connected; Core replies with the current view |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
-| SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks; the Core announces the current values |
+| SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks, learning; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
+| METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 
 ## Sensor Service -> Core
 
@@ -118,23 +129,29 @@ Thinned copy of the signal, for the caregiver chart only. Never used for decisio
 
 ### POINT
 
-The person is facing a tile. Sent only when the tile changes. The Core still decides what is
-highlighted (PRD A3.3).
+The person is facing a tile. Sent when the tile changes, and once for every new SCREEN (so the Core
+knows the tile under the head on the new tiles). The Core still decides what is highlighted (PRD
+A3.3): it only uses a POINT while scanning in Webcam mode, or in Auto mode on webcam, and ignores
+any POINT whose `seq` is not the current screen's.
 
 | Field | Type | Notes |
 |---|---|---|
 | `source` | `"webcam"` \| `"headtilt"` | webcam comes from the board, headtilt from the Sensor Service |
-| `tile` | int | 0-based, >= 0 |
+| `tile` | int | 0-based, >= 0, into the tiles of SCREEN `seq` |
+| `seq` | int | >= 0, the `seq` of the SCREEN the board measured the tile on |
 | `t` | float | seconds |
 
 ```json
-{"type": "POINT", "source": "webcam", "tile": 3, "t": 1727300011.2}
+{"type": "POINT", "source": "webcam", "tile": 3, "seq": 42, "t": 1727300011.2}
 ```
 
 ### FACE_OK
 
-Webcam face tracking status, sent by the board when it changes. In Auto mode the Core falls back
-to Scan when the face has been lost for about 3 s, and switches back when it returns.
+Webcam face tracking status, sent by the board when it changes (after about 300 ms steady), when
+the board connects, and as `false` when the camera stops or fails. In Auto mode the Core falls back
+to Scan when the face has been lost for 3 s, and switches back to webcam when a face is seen again
+and a POINT arrives. The Core also treats the last board disconnecting as `false`. Only POINT and
+FACE_OK leave the browser; video never does (PRD section 11).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -180,9 +197,9 @@ matching AUDIO_DONE wins and later ones are ignored.
 
 ### SETTINGS
 
-Caregiver changes pointing mode, scan speed, language or speak picks. Applies at once, no restart
-(PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks toggle) on
-`/ws/input`.
+Caregiver changes pointing mode, scan speed, language, speak picks or learning. Applies at once, no
+restart (PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks and
+Day 1 mode toggles) on `/ws/input`.
 
 The Core sends the same message the other way, with every field filled in, to each board, console
 and input client when it connects, and to all of them after every SETTINGS it receives (the sender
@@ -194,9 +211,10 @@ included). Screens show these values instead of assuming defaults.
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
+| `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true}
 ```
 
 ## Core -> Board
@@ -204,18 +222,20 @@ included). Screens show these values instead of assuming defaults.
 ### SCREEN
 
 What the board should draw. The board is "dumb": the Core owns the highlight position. Sent after
-every change while scanning (level change, highlight move, language change, loading starts), and
-once a second during the help countdown.
+every change while scanning (level change, highlight move, language change, loading starts,
+pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
 | `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | `suggestions` = the sentences for a picked leaf |
+| `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
 | `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
 | `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
 | `loading` | bool | optional, default false. True while the Core waits for AI options after a pick (at most 4 s); scanning is paused and the board shows "Finding options..." / "Buscando opciones..." |
+| `pointer` | `"scan"` \| `"webcam"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
 
 Tiles:
 
@@ -233,14 +253,14 @@ suggestions screen keeps its leaf's id. The AI never chooses the action or the c
 takes them from its level, an AI sentence from its leaf.
 
 ```json
-{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false}
+{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam"}
 ```
 
 **Suggestions screen** (PRD section 5 step 6). Up to 3 AI sentences, then the leaf's fixed phrase
 (when the AI did not already write it), then "Other..." (more sentences):
 
 ```json
-{"type": "SCREEN", "screen": "suggestions", "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false}
+{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan"}
 ```
 
 **Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
@@ -253,8 +273,21 @@ Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Pa
 para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
-{"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false}
+{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null}
 ```
+
+**Pointing** (PRD D2, A3.3a). The Core has one pointer slot, set live by SETTINGS `pointing_mode`:
+
+| Mode | Highlight comes from | `pointer` |
+|---|---|---|
+| `scan` | the Core's scan timer, one tile every `scan_ms` | `"scan"` |
+| `webcam` | the board's POINT messages (head turns); no timer. On new tiles the highlight stays at the same index until the board's POINT for the new `seq` arrives | `"webcam"` |
+| `auto` | starts scanning; switches to webcam when FACE_OK is true and a POINT arrives; back to scanning after 3 s without a face | `"scan"` or `"webcam"` |
+| `headtilt` | not built yet (needs the headband motion data): scans, and logs that it does | `"scan"` |
+
+Picking is always a CLENCH on the highlighted tile. When the highlight follows the head, the Core
+picks the tile that was highlighted about 250 ms before the CLENCH arrived (`clench_lookback_ms` in
+`data/profile.yaml`), because clenching the jaw can move the head slightly (PRD 3a "freeze on clench").
 
 ### CONFIRM
 
@@ -326,6 +359,24 @@ dev server).
 {"type": "PLAY_AUDIO", "id": "b41e07c9d2aa", "kind": "echo", "url": "/audio/9b1f0e7c5a2d4e6f8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f.mp3", "text": "Dolor", "lang": "es", "cached": true}
 ```
 
+### HeadRange (REST body, not a message)
+
+Sent by the board's calibration overlay with `PUT /api/head-range` and returned by `GET`. Degrees of
+head yaw and pitch as the board measures them from MediaPipe's face transformation matrix. The board
+maps yaw from `left_yaw` (x = 0, the left edge) through `center_yaw` (x = 0.5) to `right_yaw` (x = 1),
+and pitch from `up_pitch` (top) through `center_pitch` to `down_pitch` (bottom), piece by piece, so an
+uneven range works. Left and right must lie on opposite sides of the center, at least 2 degrees
+away; the same for up and down.
+
+| Field | Type |
+|---|---|
+| `center_yaw`, `center_pitch` | float, looking at the middle of the screen |
+| `left_yaw`, `right_yaw` | float, looking at the left / right edge |
+| `up_pitch`, `down_pitch` | float, looking at the top / bottom edge |
+
+For example `{"center_yaw": 0.5, "center_pitch": -2.0, "left_yaw": -18.0, "right_yaw": 17.0,
+"up_pitch": 9.0, "down_pitch": -12.0}`.
+
 ### ACTION_RESULT
 
 Sent when a confirmed action that leaves the laptop finishes: `send_message` (Telegram),
@@ -342,4 +393,24 @@ board shows it as a toast for 4 s.
 
 ```json
 {"type": "ACTION_RESULT", "action": "send_message", "ok": true, "detail": "sent", "contact": "María"}
+```
+
+## Core -> Console and web dev panel
+
+### METRICS
+
+Sent right after every confirm clench (to `/ws/console` and `/ws/input`, not to the board), so the
+demo can show that learning turns into speed (PRD D7, section 12): "Took 2 clenches, 0 s waiting
+(Day 1: 5 clenches, 6 s)". Seconds are `scan_steps * scan_ms / 1000`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `text` | string | the confirmed sentence |
+| `selections` | int | clenches since home, >= 1: every pick (going back does not undo one) plus 1 for the confirm |
+| `scan_steps` | int | highlight moves the person waited through before those picks, >= 0 |
+| `day1_selections` | int | the same message in Day 1 mode: menu.yaml order, no shortcut, the fixed phrase after the AI's sentences when the AI is on |
+| `day1_scan_steps` | int | the same, in scan steps. When the message cannot be reached in Day 1 mode (an AI sentence on Suggested, an AI option from "Other..."), both Day 1 fields repeat the real numbers |
+
+```json
+{"type": "METRICS", "text": "Mija, estoy bien, llámame a las seis.", "selections": 2, "scan_steps": 0, "day1_selections": 5, "day1_scan_steps": 6}
 ```

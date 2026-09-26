@@ -1,5 +1,5 @@
 """WebSocket hub: keeps track of connected clients and delivers Core -> Board messages (and SETTINGS
-to everyone).
+to everyone, METRICS to consoles and the dev panel).
 
 Each client has its own queue and writer task, so messages always arrive in the order the session
 emitted them, and a slow or dead client never blocks the session.
@@ -13,7 +13,7 @@ from typing import Literal
 
 from fastapi import WebSocket
 
-from core.contracts import Message, Settings
+from core.contracts import Message, Metrics, Settings
 
 log = logging.getLogger("clench.hub")
 
@@ -51,9 +51,14 @@ class Hub:
 
     def broadcast(self, msg: Message) -> None:
         """Send to every board, and to every console so the caregiver screen can mirror. SETTINGS
-        also goes to input clients, so the dev panel shows the real values."""
+        also goes to input clients, so the dev panel shows the real values. METRICS goes to consoles
+        and input clients (the dev panel) only: the patient's board has no use for it."""
         for c in self._clients:
-            if c.role in ("board", "console") or isinstance(msg, Settings):
+            if isinstance(msg, Metrics):
+                wanted = c.role in ("console", "input")
+            else:
+                wanted = c.role in ("board", "console") or isinstance(msg, Settings)
+            if wanted:
                 c.queue.put_nowait(msg)
 
     def send_to(self, client: Client, msg: Message) -> None:

@@ -12,7 +12,7 @@ from core.suggest import build_provider, prompts
 from core.suggest.errors import ProviderError
 from core.suggest.fake import FakeProvider
 from core.suggest.gemini import DEFAULT_MODEL, GeminiProvider
-from core.suggest.provider import MAX_TEXT, Option, Options, Sentences, SuggestContext
+from core.suggest.provider import MAX_TEXT, Bundle, LevelContext, LevelLeaf, Option, Options, Sentences, SuggestContext
 from core.suggest.service import Pending, Suggester
 
 
@@ -311,3 +311,121 @@ def test_pending_callbacks():
     p.resolve(2)  # only the first counts
     p.on_done(got.append)  # already done: runs at once
     assert got == [1, 1]
+
+
+# --- level bundle: one request per level ------------------------------------------------
+
+LEAVES = (("Water", "I'd like some water, please."), ("Food", "I'm hungry."), ("Bathroom", "I need the bathroom."))
+
+
+def test_level_bundle_is_one_request_and_fills_every_part():
+    fake = FakeProvider()
+    s, loop, _ = make(fake)
+    s.level_bundle(("I need",), "en", leaves=LEAVES, other_shown=("Water", "Food", "Bathroom"))
+    assert len(loop.jobs) == 1
+    # A pick before the answer shares the request in flight instead of asking again.
+    early = s.compose(("I need", "Water"), "en", fixed_phrase="I'd like some water, please.")
+    assert not early.done and len(loop.jobs) == 1
+    loop.run()
+    assert [m for m, _ in fake.calls] == ["level_bundle"]
+    (_, c), = fake.calls
+    assert [leaf.id for leaf in c.leaves] == ["L1", "L2", "L3"] and c.options and not c.now
+    assert early.done and len(early.result) == 3
+    # Every part is now a cache hit: nothing more is asked.
+    for label, fixed in LEAVES:
+        p = s.compose(("I need", label), "en", fixed_phrase=fixed)
+        assert p.done and p.result and fixed not in p.result
+    other = s.more_options(("I need",), "en", shown=("Water", "Food", "Bathroom"))
+    assert other.done and "Water" not in [o.label for o in other.result]
+    assert loop.jobs == [] and s.calls == 1
+
+
+def test_level_bundle_cache_hit_makes_no_request():
+    fake = FakeProvider()
+    s, loop, _ = make(fake)
+    s.level_bundle((), "en", now=True, other_shown=("Suggested",))
+    loop.run()
+    assert s.calls == 1
+    s.level_bundle((), "en", now=True, other_shown=("Suggested",))  # the level opens again
+    assert loop.jobs == [] and s.calls == 1
+    assert s.compose((), "en").done  # home Suggested sentences came in the bundle
+
+
+def test_level_bundle_asks_only_for_what_is_missing():
+    fake = FakeProvider()
+    s, loop, _ = make(fake)
+    s.compose(("I need", "Water"), "en", fixed_phrase="I'd like some water, please.")
+    loop.run()
+    s.level_bundle(("I need",), "en", leaves=LEAVES[:2])  # Water cached: only Food is missing
+    loop.run()
+    assert [m for m, _ in fake.calls] == ["compose", "compose"]  # a single part goes on its own
+
+
+class BundleLeavesOneOut(FakeProvider):
+    async def level_bundle(self, ctx):
+        bundle = await super().level_bundle(ctx)
+        return bundle.model_copy(update={"leaves": bundle.leaves[1:]})
+
+
+def test_level_bundle_part_left_out_is_not_cached():
+    s, loop, _ = make(BundleLeavesOneOut())
+    s.level_bundle(("I need",), "en", leaves=LEAVES)
+    first = s.compose(("I need", "Water"), "en", fixed_phrase=LEAVES[0][1])
+    loop.run()
+    assert first.result is None  # the pick falls back to the fixed phrase
+    assert s.compose(("I need", "Food"), "en", fixed_phrase=LEAVES[1][1]).done
+    s.compose(("I need", "Water"), "en", fixed_phrase=LEAVES[0][1])
+    assert loop.jobs  # asked again on its own
+    loop.run()
+
+
+def test_level_bundle_failure_resolves_every_part_with_none():
+    class Broken(FakeProvider):
+        async def level_bundle(self, ctx):
+            raise ProviderError("Gemini error 429", pause_s=60)
+
+    s, loop, _ = make(Broken())
+    s.level_bundle(("I need",), "en", leaves=LEAVES, other_shown=())
+    p = s.compose(("I need", "Food"), "en", fixed_phrase=LEAVES[1][1])
+    loop.run()
+    assert p.done and p.result is None and not s.available
+
+
+def test_day1_mode_hides_the_history_from_the_ai(tmp_path):
+    db = Db(tmp_path / "t.db")
+    db.sync_profile("Luis", "en", [])
+    db.use_phrase("Honey, come here.", "en")
+    fake = FakeProvider()
+    s, loop, _ = make(fake, history=db)
+    s.use_history = False
+    s.level_bundle(("I need",), "en", leaves=LEAVES)
+    loop.run()
+    (_, c), = fake.calls
+    assert c.top_phrases == () and c.recent_messages == ()
+    s.use_history = True  # a different cache entry: asked again, with the history
+    s.compose(("I need", "Water"), "en", fixed_phrase=LEAVES[0][1])
+    loop.run()
+    assert fake.calls[-1][1].top_phrases == ("Honey, come here.",)
+    db.close()
+
+
+def test_bundle_validation_and_gemini_request():
+    b = Bundle.model_validate(
+        {
+            "leaves": [{"id": "L1", "sentences": ["A.", "", "a"]}, {"id": 3, "sentences": ["x"]}, "junk", {"id": "L2"}],
+            "now": ["Good morning.", "x" * (MAX_TEXT + 1)],
+            "options": [{"label": "Arms", "text": "My arms hurt.", "action": "place_call"}],
+            "contact": "carlos",
+        }
+    )
+    assert b.for_leaf("L1") == ["A."] and b.for_leaf("L2") is None
+    assert b.now == ["Good morning."] and b.options == [Option(label="Arms", text="My arms hurt.")]
+    client = FakeGeminiClient(json.dumps({"leaves": [{"id": "L1", "sentences": ["Tengo sed."]}], "now": [], "options": []}))
+    level = LevelContext(
+        path=("Necesito",), lang="es", hour=8, patient_name="Luis", leaves=(LevelLeaf("L1", "Agua", "Quiero agua."),), options=True
+    )
+    out = asyncio.run(GeminiProvider("key", client=client).level_bundle(level))
+    assert out.for_leaf("L1") == ["Tengo sed."]
+    (req,) = client.requests
+    assert req.config.max_output_tokens > 512
+    assert "L1: Necesito > Agua" in req.contents and '"options"' in req.contents and '"now"' not in req.contents.split("Return JSON")[0]

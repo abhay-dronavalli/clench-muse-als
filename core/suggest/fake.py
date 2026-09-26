@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from core.contracts import Lang
-from core.suggest.provider import Options, Sentences, SuggestContext, drop_known
+from core.suggest.provider import Bundle, LevelContext, Options, Sentences, SuggestContext, drop_known
 
 # {topic} is the last label of the path, lower case.
 LEAF: dict[Lang, list[str]] = {
@@ -87,24 +87,45 @@ class FakeProvider:
     model = "fake"
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, SuggestContext]] = []  # what was asked, for tests
+        # What was asked, for tests: ("compose" | "more_options", SuggestContext) or ("level_bundle", LevelContext).
+        self.calls: list[tuple[str, SuggestContext | LevelContext]] = []
 
     async def compose(self, ctx: SuggestContext) -> Sentences:
         self.calls.append(("compose", ctx))
-        if ctx.path:
-            topic = ctx.path[-1].rstrip(".?!…").lower()
-            pool = [t.format(topic=topic, Topic=topic[:1].upper() + topic[1:]) for t in LEAF[ctx.lang]]
-        else:
-            part = PARTS[ctx.lang][_part_of_day(ctx.hour)]
-            pool = [t.format(part=part) for t in NOW[ctx.lang]]
-        known = ctx.shown + ((ctx.fixed_phrase,) if ctx.fixed_phrase else ())
-        return Sentences.model_validate({"sentences": drop_known(pool, known)})
+        return Sentences.model_validate({"sentences": _sentences(ctx.path, ctx.lang, ctx.hour, ctx.fixed_phrase, ctx.shown)})
 
     async def more_options(self, ctx: SuggestContext) -> Options:
         self.calls.append(("more_options", ctx))
-        shown = set(drop_known([label for label, _ in OPTIONS[ctx.lang]], ctx.shown))
-        options = [{"label": label, "text": text} for label, text in OPTIONS[ctx.lang] if label in shown]
-        return Options.model_validate({"options": options})
+        return Options.model_validate({"options": _options(ctx.lang, ctx.shown)})
+
+    async def level_bundle(self, ctx: LevelContext) -> Bundle:
+        self.calls.append(("level_bundle", ctx))
+        leaves = [
+            {"id": leaf.id, "sentences": _sentences((*ctx.path, leaf.label), ctx.lang, ctx.hour, leaf.fixed_phrase, ())}
+            for leaf in ctx.leaves
+        ]
+        return Bundle.model_validate(
+            {
+                "leaves": leaves,
+                "now": _sentences((), ctx.lang, ctx.hour, None, ()) if ctx.now else [],
+                "options": _options(ctx.lang, ctx.shown) if ctx.options else [],
+            }
+        )
 
     async def aclose(self) -> None:
         pass
+
+
+def _sentences(path: tuple[str, ...], lang: Lang, hour: int, fixed: str | None, shown: tuple[str, ...]) -> list[str]:
+    if path:
+        topic = path[-1].rstrip(".?!…").lower()
+        pool = [t.format(topic=topic, Topic=topic[:1].upper() + topic[1:]) for t in LEAF[lang]]
+    else:
+        part = PARTS[lang][_part_of_day(hour)]
+        pool = [t.format(part=part) for t in NOW[lang]]
+    return drop_known(pool, shown + ((fixed,) if fixed else ()))
+
+
+def _options(lang: Lang, shown: tuple[str, ...]) -> list[dict[str, str]]:
+    fresh = set(drop_known([label for label, _ in OPTIONS[lang]], shown))
+    return [{"label": label, "text": text} for label, text in OPTIONS[lang] if label in fresh]

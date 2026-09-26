@@ -6,6 +6,8 @@
 # names the .env variables that hold them:
 #   phone_env          E.164 number for Twilio voice calls, e.g. CONTACT_MARIA_PHONE=+13055550123
 #   telegram_chat_env  chat id the Telegram bot messages, e.g. TELEGRAM_CHAT_ID_MARIA=123456789
+#   urgent             (optional) the contact is who to reach for help (nurse): their branch moves up
+#                      when the body state is elevated
 
 contacts:
   - id: maria
@@ -49,6 +51,7 @@ contacts:
     label_es: Enfermera
     relation: nurse
     language: en
+    urgent: true
     phone_env: CONTACT_NURSE_PHONE
     telegram_chat_env: TELEGRAM_CHAT_ID_NURSE
     phrases:

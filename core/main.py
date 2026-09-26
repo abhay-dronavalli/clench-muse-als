@@ -9,7 +9,10 @@ Run:  uv run uvicorn core.main:app --reload --port 8000
                POINT, SETTINGS in; SETTINGS out
 
 Every client gets the current SETTINGS as soon as it connects, and again after every change.
+When the last board disconnects the session hears FACE_OK false (Auto falls back to scan in 3 s).
+
   /audio/<sha256>.mp3  cached ElevenLabs audio named in PLAY_AUDIO
+  /api/head-range      GET / PUT the calibrated head range (HeadRange) in the database profile
 
 Every incoming message is parsed with parse_message. Invalid ones are logged and ignored; a bad
 message never closes the connection.
@@ -31,12 +34,13 @@ from pydantic import ValidationError
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
 from core.config import dry_run_enabled, load_env, prewarm_enabled
-from core.contracts import Lang, Message, Ready, parse_message
+from core.contracts import FaceOk, HeadRange, Lang, Message, Ready, parse_message
 from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
+from core.rank.jev import JevRanker, build_jev
 from core.session import Session, voice_lines
 from core.suggest import build_provider
 from core.suggest.provider import LLMProvider
@@ -89,6 +93,7 @@ def create_app(
     audio_dir: Path = AUDIO_DIR,
     tts: TTS | None = None,
     provider: LLMProvider | None = None,
+    jev: JevRanker | None = None,
 ) -> FastAPI:
     """Build the app. Defaults are safe for tests: an in-memory database and no keys, so actions
     only dry-run, speech uses the browser voice and there is no AI (fixed phrases). The real app
@@ -103,6 +108,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = Db(db_path)
         db.sync_profile(profile.name, profile.lang, menu.contacts.values())
+        app.state.db = db
         voice = Voice(hub.broadcast, tts=tts or build_tts(env), cache=AudioCache(audio_dir, db))
         app.state.voice = voice
         llm, off_reason = (provider, "") if provider is not None else build_provider(env)
@@ -114,6 +120,8 @@ def create_app(
             off_reason=off_reason,
         )
         app.state.suggester = suggester
+        ranker_jev, jev_off = (jev, "") if jev is not None else build_jev(env)
+        app.state.jev = ranker_jev
         session = Session(
             menu,
             hub.broadcast,
@@ -125,6 +133,7 @@ def create_app(
             db=db,
             scan_ms=scan_ms,
             lang=lang,
+            jev=ranker_jev,
         )
         app.state.session = session
         session.start()
@@ -135,6 +144,8 @@ def create_app(
             log.warning("ACTIONS_DRY_RUN is off: confirmed messages and calls are REALLY sent")
         log.info("voice: %s", voice.describe())
         log.info("AI: %s", suggester.describe())
+        log.info("ranking: %s, %s", "learning on" if session.learning else "Day 1 mode (learning off)",
+                 ranker_jev.describe() if ranker_jev else f"no Jev ({jev_off}): history and time of day only")
         prewarm: asyncio.Task[object] | None = None
         if voice.tts.voice_id is not None and prewarm_enabled(env):
             # Background only: the board works (browser speech for anything not cached) meanwhile.
@@ -144,6 +155,8 @@ def create_app(
             prewarm.cancel()
         session.stop()
         await suggester.aclose()
+        if ranker_jev is not None:
+            await ranker_jev.aclose()
         await voice.aclose()
         db.close()
 
@@ -183,6 +196,9 @@ def create_app(
         finally:
             hub.remove(client)
             writer.cancel()
+            if role == "board" and hub.count("board") == 0 and session.face_ok:
+                log.info("last board disconnected: no webcam face any more")
+                session.handle(FaceOk(ok=False))
 
     @app.websocket("/ws/board")
     async def ws_board(ws: WebSocket) -> None:
@@ -204,6 +220,23 @@ def create_app(
         # The name is a hash of the text and voice, so the file never changes.
         return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
+    @app.get("/api/head-range")
+    async def get_head_range() -> HeadRange | None:
+        saved = app.state.db.head_range()
+        if saved is None:
+            return None
+        try:
+            return HeadRange.model_validate(saved)
+        except ValidationError:
+            log.warning("saved head range is invalid, ignored (calibrate again): %s", saved)
+            return None
+
+    @app.put("/api/head-range")
+    async def put_head_range(head_range: HeadRange) -> HeadRange:
+        app.state.db.set_head_range(head_range.model_dump())
+        log.info("head range saved: %s", head_range.model_dump())
+        return head_range
+
     @app.get("/health")
     async def health() -> dict[str, object]:
         session: Session = app.state.session
@@ -220,6 +253,11 @@ def create_app(
             "speak_picks": session.speak_picks,
             "ai": suggester.describe(),
             "ai_calls": suggester.calls,
+            "learning": session.learning,
+            "pointing_mode": session.pointing_mode,
+            "pointer": session.pointer.source,
+            "face_ok": session.face_ok,
+            "jev": app.state.jev.describe() if app.state.jev else "off",
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),

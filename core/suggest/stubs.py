@@ -1,13 +1,13 @@
 """Placeholders for the other providers the PRD names (A3.5: LLM_PROVIDER = gemini | claude | openai).
 
 Not implemented yet. build_provider() logs that and runs with fixed phrases only. To add one:
-implement compose() and more_options() with structured JSON output validated by Sentences /
-Options (see gemini.py), with the prompts from prompts.py, and return it from build_provider().
+implement compose(), more_options() and level_bundle() with structured JSON output validated by
+Sentences / Options / Bundle (see gemini.py), with the prompts from prompts.py, and return it from build_provider().
 """
 
 from __future__ import annotations
 
-from core.suggest.provider import Options, Sentences, SuggestContext
+from core.suggest.provider import Bundle, LevelContext, Options, Sentences, SuggestContext
 
 
 class _NotBuilt:
@@ -18,6 +18,9 @@ class _NotBuilt:
         raise NotImplementedError(f"{self.name} provider is not built yet")
 
     async def more_options(self, ctx: SuggestContext) -> Options:
+        raise NotImplementedError(f"{self.name} provider is not built yet")
+
+    async def level_bundle(self, ctx: LevelContext) -> Bundle:
         raise NotImplementedError(f"{self.name} provider is not built yet")
 
     async def aclose(self) -> None:

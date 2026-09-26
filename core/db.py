@@ -1,8 +1,9 @@
 """Local SQLite store (PRD A7, D14): everything the person says stays on this laptop.
 
-Only the tables needed so far: profile, contacts, events, phrases, audio_cache. The learning chunk
-reads `events` (what was picked, when, in which language) and `phrases` (what was said, how often,
-at what hour). `audio_cache` records each cloud TTS file saved in data/audio_cache/.
+Only the tables needed so far: profile (with the calibrated head range), contacts, events, phrases,
+audio_cache. The ranking (core/rank) learns from `events` (what was confirmed or cancelled, when, in
+which language); the AI and Jev get a short summary from `phrases` (what was said, how often, at
+what hour). `audio_cache` records each cloud TTS file saved in data/audio_cache/.
 
 One profile per database for now (id 1). Timestamps are Unix seconds; hours are local time.
 """
@@ -129,6 +130,20 @@ class Db:
                     (c.id, PROFILE_ID, c.label_en, c.relation, c.language, c.phone_env, c.telegram_chat_env),
                 )
 
+    def head_range(self) -> dict[str, float] | None:
+        """The calibrated head range (the board's HeadRange JSON), None before the first calibration."""
+        row = self._conn.execute("SELECT head_range_json FROM profile WHERE id = ?", (PROFILE_ID,)).fetchone()
+        return json.loads(row["head_range_json"]) if row and row["head_range_json"] else None
+
+    def set_head_range(self, head_range: dict[str, float]) -> None:
+        """Save the head range from the calibration overlay. sync_profile must have run first."""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE profile SET head_range_json = ? WHERE id = ?", (json.dumps(head_range), PROFILE_ID)
+            )
+        if cur.rowcount != 1:
+            raise LookupError("no profile row: call sync_profile first")
+
     # --- events and phrases --------------------------------------------------------
 
     def log_event(
@@ -143,8 +158,9 @@ class Db:
         state_level: BodyStateLevel | None = None,
         text: str | None = None,
         contact: str | None = None,
+        t: float | None = None,
     ) -> int:
-        """Append one events row and return its id."""
+        """Append one events row and return its id. `t` defaults to now (the demo seed sets it)."""
         with self._conn:
             cur = self._conn.execute(
                 """INSERT INTO events (profile_id, t, node_id, path, action, confirmed, rejected, lang,
@@ -152,7 +168,7 @@ class Db:
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     PROFILE_ID,
-                    self._clock(),
+                    self._clock() if t is None else t,
                     node_id,
                     json.dumps(list(path), ensure_ascii=False),
                     action,
@@ -167,9 +183,9 @@ class Db:
         assert cur.lastrowid is not None
         return cur.lastrowid
 
-    def use_phrase(self, text: str, lang: Lang) -> None:
-        """Count one confirmed use of `text`: uses + 1, last_used = now, this hour's bucket + 1."""
-        now = self._clock()
+    def use_phrase(self, text: str, lang: Lang, *, t: float | None = None) -> None:
+        """Count one confirmed use of `text`: uses + 1, last_used = now (or `t`), that hour's bucket + 1."""
+        now = self._clock() if t is None else t
         hour = datetime.fromtimestamp(now).hour
         with self._conn:
             row = self._conn.execute(
@@ -186,7 +202,8 @@ class Db:
                 )
             else:
                 self._conn.execute(
-                    "UPDATE phrases SET uses = uses + 1, last_used = ?, hour_histogram_json = ? WHERE id = ?",
+                    "UPDATE phrases SET uses = uses + 1, last_used = MAX(COALESCE(last_used, 0), ?),"
+                    " hour_histogram_json = ? WHERE id = ?",
                     (now, json.dumps(hist), row["id"]),
                 )
 
@@ -220,6 +237,53 @@ class Db:
             (PROFILE_ID, lang, limit),
         ).fetchall()
         return [r["text"] for r in rows]
+
+    def top_phrases_with_hours(self, lang: Lang, limit: int = 10) -> list[tuple[str, int, list[int]]]:
+        """(text, uses, 24 hourly counts) of the most used confirmed sentences in `lang` (the Jev
+        state summary)."""
+        rows = self._conn.execute(
+            """SELECT text, uses, hour_histogram_json FROM phrases WHERE profile_id = ? AND lang = ?
+               ORDER BY uses DESC, last_used DESC LIMIT ?""",
+            (PROFILE_ID, lang, limit),
+        ).fetchall()
+        return [(r["text"], r["uses"], json.loads(r["hour_histogram_json"])) for r in rows]
+
+    def recent_messages_with_times(self, lang: Lang, limit: int = 5) -> list[tuple[float, str]]:
+        """(t, text) of the last confirmed sentences in `lang`, newest first, help alert left out."""
+        rows = self._conn.execute(
+            """SELECT t, text FROM events
+               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help'
+               ORDER BY t DESC, id DESC LIMIT ?""",
+            (PROFILE_ID, lang, limit),
+        ).fetchall()
+        return [(r["t"], r["text"]) for r in rows]
+
+    # --- learning (core/rank) ----------------------------------------------------------
+
+    def last_outcome_id(self) -> int:
+        """Id of the newest confirmed send or cancelled confirm, 0 when there is none. The ranking and
+        Jev cache on it: plain picks do not change what they learn from."""
+        row = self._conn.execute(
+            "SELECT MAX(id) AS id FROM events WHERE profile_id = ? AND (confirmed = 1 OR rejected = 1)", (PROFILE_ID,)
+        ).fetchone()
+        return int(row["id"] or 0)
+
+    def outcomes(self, since: float) -> list[sqlite3.Row]:
+        """Confirmed sends and cancelled confirms since `since` (the evidence the ranking learns from).
+        The help alert is left out: it is not a choice on the menu."""
+        return self._conn.execute(
+            """SELECT id, t, node_id, text, lang, confirmed, rejected FROM events
+               WHERE profile_id = ? AND t >= ? AND (confirmed = 1 OR rejected = 1) AND node_id != 'help'
+               ORDER BY t, id""",
+            (PROFILE_ID, since),
+        ).fetchall()
+
+    def clear_history(self) -> tuple[int, int]:
+        """Delete every event and phrase (scripts/seed_demo.py --reset). Returns (events, phrases) removed."""
+        with self._conn:
+            events = self._conn.execute("DELETE FROM events WHERE profile_id = ?", (PROFILE_ID,)).rowcount
+            phrases = self._conn.execute("DELETE FROM phrases WHERE profile_id = ?", (PROFILE_ID,)).rowcount
+        return events, phrases
 
     # --- reading (tests, console history later) ------------------------------------
 

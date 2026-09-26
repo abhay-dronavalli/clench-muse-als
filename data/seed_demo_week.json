@@ -1,0 +1,68 @@
+{
+  "_about": "A simulated week of use for the 'it learns him' demo (PRD section 9, 'Showing it in the demo'). Patterns, not timestamps: scripts/seed_demo.py --load turns them into 7 days of events ending now, in both languages by default (--lang both|es|en). Each pattern is a leaf of data/menu.yaml (path), with its exact phrase in English and Spanish, action and contact (checked against the menu at load time), the hours of the day it is usually said (one use per listed hour on each chosen day, at a random minute) and on how many of the 7 days. The pattern with focus=true is the one --focus-hour ties to the demo hour. We say plainly in the demo that this week is simulated.",
+  "patient": "Luis",
+  "days": 7,
+  "patterns": [
+    {
+      "name": "breakfast hunger",
+      "path": "need.food",
+      "phrase_en": "I'm hungry. Can I have something to eat?",
+      "phrase_es": "Tengo hambre. ¿Me das algo de comer?",
+      "action": "speak",
+      "contact": null,
+      "hours": [8],
+      "days_per_week": 7
+    },
+    {
+      "name": "water",
+      "path": "need.water",
+      "phrase_en": "I'd like some water, please.",
+      "phrase_es": "Quiero agua, por favor.",
+      "action": "speak",
+      "contact": null,
+      "hours": [11, 16],
+      "days_per_week": 6
+    },
+    {
+      "name": "back pain in the afternoon",
+      "path": "need.pain.back.a_lot",
+      "phrase_en": "My back hurts a lot. Can you help me turn over?",
+      "phrase_es": "Me duele mucho la espalda. ¿Me ayudas a voltearme?",
+      "action": "speak",
+      "contact": null,
+      "hours": [15],
+      "days_per_week": 3
+    },
+    {
+      "name": "TV at night",
+      "path": "room.tv.on",
+      "phrase_en": "Please turn on the TV.",
+      "phrase_es": "Por favor, prende la televisión.",
+      "action": "room_control",
+      "contact": null,
+      "hours": [20],
+      "days_per_week": 5
+    },
+    {
+      "name": "thanks before bed",
+      "path": "suggested.thank_you",
+      "phrase_en": "Thank you for today. I love you.",
+      "phrase_es": "Gracias por todo hoy. Te quiero.",
+      "action": "speak",
+      "contact": null,
+      "hours": [21],
+      "days_per_week": 4
+    },
+    {
+      "name": "text María",
+      "path": "people.maria.text",
+      "phrase_en": "Honey, I'm okay, call me at six.",
+      "phrase_es": "Mija, estoy bien, llámame a las seis.",
+      "action": "send_message",
+      "contact": "maria",
+      "hours": [17],
+      "days_per_week": 6,
+      "focus": true
+    }
+  ]
+}

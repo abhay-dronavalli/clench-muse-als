@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.contracts import Lang
-from core.suggest.provider import MAX_OPTIONS, MAX_SENTENCES, SuggestContext
+from core.suggest.provider import MAX_OPTIONS, MAX_SENTENCES, LevelContext, SuggestContext
 
 LANGUAGE: dict[Lang, str] = {"en": "English", "es": "Spanish (Latin American, as spoken in Miami)"}
 
@@ -40,7 +40,7 @@ Rules:
 - Answer with JSON only, in the requested shape."""
 
 
-def _history(ctx: SuggestContext) -> str:
+def _history(ctx: SuggestContext | LevelContext) -> str:
     lines = [f"Patient's first name: {ctx.patient_name}", f"Local time: {ctx.hour:02d}:00"]
     if ctx.contacts:
         lines.append("People they talk to: " + ", ".join(ctx.contacts))
@@ -51,7 +51,7 @@ def _history(ctx: SuggestContext) -> str:
     return "\n".join(lines)
 
 
-def _path(ctx: SuggestContext) -> str:
+def _path(ctx: SuggestContext | LevelContext) -> str:
     return " > ".join(ctx.path) if ctx.path else "(home screen)"
 
 
@@ -96,4 +96,46 @@ For each option give:
 - "text": the full sentence said aloud when they confirm it, first person, about 12 words at most
 
 Return JSON: {{"options": [{{"label": "...", "text": "..."}}]}}"""
+    return Prompt(system=_rules(ctx.lang), user=user)
+
+
+def level_bundle(ctx: LevelContext) -> Prompt:
+    """Everything a menu level may need, in one request (the per-level prefetch)."""
+    parts: list[str] = [f"They are on this menu level: {_path(ctx)}"]
+    if ctx.leaves:
+        listed = "\n".join(
+            f'- {leaf.id}: {" > ".join((*ctx.path, leaf.label))}'
+            + (f' (standard phrase: "{leaf.fixed_phrase}", do not repeat it)' if leaf.fixed_phrase else "")
+            for leaf in ctx.leaves
+        )
+        parts.append(
+            f"""1) "leaves": for EACH option below, up to {MAX_SENTENCES} different short sentences they might want
+to say if they pick it, most likely first. Stay on that option's meaning; vary the detail or the request.
+Answer every id, using the id exactly as written:
+{listed}"""
+        )
+    if ctx.now:
+        parts.append(
+            f"""2) "now": up to {MAX_SENTENCES} short sentences they are most likely to want to say right now, given
+the time of day and their habits. Most likely first."""
+        )
+    if ctx.options:
+        where = (
+            "that belong on this level and stay on its topic (for example, under Pain the options are other body\n"
+            "parts or kinds of pain; under a person's name they are things to tell that person)"
+            if ctx.path
+            else "useful for this time of day (greetings, thanks, yes / no answers, small requests, feelings)"
+        )
+        shown = ""
+        if ctx.shown:
+            shown = "\nAlready on screen, do not repeat or rephrase these:\n" + "\n".join(f"- {s}" for s in ctx.shown)
+        parts.append(
+            f"""3) "options": up to {MAX_OPTIONS} NEW options {where}. Each has "label" (the tile text, 1 to 4 words)
+and "text" (the full sentence said aloud when they confirm it, about 12 words at most).{shown}"""
+        )
+    parts.append(
+        'Leave out any part that was not asked for (send an empty list). Return JSON: {"leaves": [{"id": "L1", '
+        '"sentences": ["..."]}], "now": ["..."], "options": [{"label": "...", "text": "..."}]}'
+    )
+    user = f"{_history(ctx)}\n\n" + "\n\n".join(parts)
     return Prompt(system=_rules(ctx.lang), user=user)

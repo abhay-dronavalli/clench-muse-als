@@ -22,16 +22,30 @@ MP3 = b"ID3\x04fake-mp3"
 
 
 class ElevenLabs:
-    """Fake ElevenLabs: records requests and answers with `status` (or sleeps `delay` s first)."""
+    """Fake ElevenLabs: records requests and answers with `status` (or sleeps `delay` s first).
 
-    def __init__(self, status: int = 200, body: object = None, delay: float = 0.0) -> None:
+    With `hold=True` every request waits until the test calls release(), so a test decides exactly
+    when a "slow" request finishes instead of racing real time.
+    """
+
+    def __init__(self, status: int = 200, body: object = None, delay: float = 0.0, hold: bool = False) -> None:
         self.status = status
         self.body = body
         self.delay = delay
+        self.hold = hold
+        self._released: asyncio.Event | None = None
         self.requests: list[httpx.Request] = []
+
+    def release(self) -> None:
+        self.hold = False
+        if self._released is not None:
+            self._released.set()
 
     async def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if self.hold:
+            self._released = asyncio.Event()
+            await self._released.wait()
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.status == 200:
@@ -70,6 +84,15 @@ async def settle() -> None:
     """Let background voice tasks run."""
     for _ in range(20):
         await asyncio.sleep(0)
+
+
+async def until(condition, steps: int = 1000) -> None:
+    """Let background tasks run until `condition()` holds. Counts event-loop turns, not seconds."""
+    for _ in range(steps):
+        if condition():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition never became true")
 
 
 # --- ElevenLabs request ----------------------------------------------------------------
@@ -204,15 +227,19 @@ def test_error_falls_back_to_speak(cache):
 
 
 def test_timeout_falls_back_to_speak_and_still_caches(cache):
-    service = ElevenLabs(delay=0.3)
+    # No real time: the request is held until release(), and a 0 s wait always times out first.
+    service = ElevenLabs(hold=True)
     sent: list[Message] = []
 
     async def go():
-        voice = make_voice(service, cache, sent, timeouts={"echo": 0.05, "phrase": 0.05, "system": 0.05})
+        voice = make_voice(service, cache, sent, timeouts={"echo": 0.0, "phrase": 0.0, "system": 0.0})
         uid = voice.speak("Mucho", "es", "phrase")
-        await asyncio.sleep(0.1)
+        await until(lambda: sent)
         assert sent == [Speak(id=uid, kind="phrase", text="Mucho", lang="es")]  # said at once by the browser
-        await asyncio.sleep(0.4)  # the slow request finishes in the background
+        await until(lambda: service.requests)
+        assert not list(cache.directory.glob("*.mp3"))  # ElevenLabs is still "working" on it
+        service.release()  # the slow request finishes in the background
+        await until(lambda: list(cache.directory.glob("*.mp3")))
         again = voice.speak("Mucho", "es", "phrase")
         await voice.aclose()
         return again

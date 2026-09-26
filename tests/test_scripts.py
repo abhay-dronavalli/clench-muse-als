@@ -1,6 +1,7 @@
 """The real-service scripts in scripts/ must do nothing real unless run with --send."""
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -14,6 +15,7 @@ def load(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(f"script_{name}", SCRIPTS / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses in a script look their module up here
     spec.loader.exec_module(module)
     return module
 
@@ -38,12 +40,13 @@ def no_network(monkeypatch):
         ("test_call", ["carlos", "en"]),
         ("test_voice", []),
         ("test_gemini", []),
+        ("test_jev", []),
     ],
 )
 def test_scripts_do_nothing_without_send(name, argv, no_network, monkeypatch, capsys):
     module = load(name)
     # Belt and braces: the pieces that would reach a service or write the database must not run.
-    for attr in ("TelegramMessageAction", "TwilioCallAction", "Db", "build_tts", "build_provider"):
+    for attr in ("TelegramMessageAction", "TwilioCallAction", "Db", "build_tts", "build_provider", "JevRanker"):
         if hasattr(module, attr):
             monkeypatch.setattr(module, attr, lambda *a, **k: pytest.fail(f"{name} used {attr} without --send"))
     assert module.main(argv) == 0

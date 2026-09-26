@@ -233,7 +233,7 @@ def test_help_countdown_fires_call_and_message(session, sched, sent):
     pick(session, sched, sent, "need")
     session.handle(long_clench())
     assert session.state is SessionState.HELP_COUNTDOWN
-    assert sent[-1] == Screen(screen="help_countdown", tiles=[], highlight=None, lang="en", path=[], countdown=5)
+    assert sent[-1] == Screen(screen="help_countdown", seq=session.seq, tiles=[], highlight=None, lang="en", path=[], countdown=5)
     sched.advance(4.0)
     assert countdowns(sent) == [5, 4, 3, 2, 1]
     assert results(sent) == [] and spoken(sent) == []
@@ -345,10 +345,12 @@ def test_help_countdown_view_and_language_switch(session, sched, sent):
     session.handle(long_clench())
     sched.advance(2.0)
     assert session.current_view() == Screen(
-        screen="help_countdown", tiles=[], highlight=None, lang="en", path=[], countdown=3
+        screen="help_countdown", seq=session.seq, tiles=[], highlight=None, lang="en", path=[], countdown=3
     )
     session.handle(Settings(pointing_mode="auto", scan_ms=1000, lang="es"))
-    assert sent[-1] == Screen(screen="help_countdown", tiles=[], highlight=None, lang="es", path=[], countdown=3)
+    assert sent[-1] == Screen(
+        screen="help_countdown", seq=session.seq, tiles=[], highlight=None, lang="es", path=[], countdown=3
+    )
 
 
 def test_people_text_in_spanish(session, sched, sent):

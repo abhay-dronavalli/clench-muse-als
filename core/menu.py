@@ -52,6 +52,8 @@ class MenuNode(BaseModel):
     phrase_es: Text | None = None
     action: MenuAction | None = None
     contact: str | None = None  # contact id, for People leaves
+    # Pain, bathroom, help: moves up when the body state is elevated (PRD D10, only reorders).
+    urgent: bool = False
 
     @model_validator(mode="after")
     def _branch_or_leaf(self) -> MenuNode:
@@ -95,6 +97,15 @@ class MenuNode(BaseModel):
             return [self]
         return [leaf for c in (self.children or []) + (self.more or []) for leaf in c.leaves()]
 
+    @property
+    def has_urgent(self) -> bool:
+        """This node or anything below it is urgent."""
+        return self.urgent or any(c.has_urgent for c in (self.children or []) + (self.more or []))
+
+    def child(self, node_id: str) -> MenuNode | None:
+        """The child (or `more` item) with this id."""
+        return next((c for c in (self.children or []) + (self.more or []) if c.id == node_id), None)
+
     def inherited(self) -> ActionContact:
         """Action and contact for an option the AI adds to this level. They always come from the
         path, never from the AI: the action every leaf below shares (else speak), and the contact
@@ -133,6 +144,7 @@ class Contact(BaseModel):
     phone_env: EnvName | None = None
     telegram_chat_env: EnvName | None = None
     phrases: ContactPhrases
+    urgent: bool = False  # the People > <contact> branch moves up when the body state is elevated
 
     def label(self, lang: Lang) -> str:
         return self.label_es if lang == "es" else self.label_en
@@ -152,6 +164,23 @@ class _ContactsFile(BaseModel):
 class Menu(BaseModel):
     root: MenuNode
     contacts: dict[str, Contact]
+
+    def chain(self, path: str) -> list[MenuNode]:
+        """The nodes along dotted `path` from home down, as far as the path exists in the menu."""
+        nodes: list[MenuNode] = []
+        node = self.root
+        for part in path.split(".") if path else []:
+            found = node.child(part)
+            if found is None:
+                break
+            nodes.append(found)
+            node = found
+        return nodes
+
+    def find(self, path: str) -> MenuNode | None:
+        """The node at dotted `path`, or None when the path is not (all) in the menu."""
+        nodes = self.chain(path)
+        return nodes[-1] if nodes and len(nodes) == len(path.split(".")) else None
 
 
 # Call / Text / Say out loud under each contact.
@@ -177,7 +206,7 @@ def _contact_branch(c: Contact) -> MenuNode:
                 contact=c.id,
             )
         )
-    return MenuNode(id=c.id, label_en=c.label_en, label_es=c.label_es, children=leaves)
+    return MenuNode(id=c.id, label_en=c.label_en, label_es=c.label_es, children=leaves, urgent=c.urgent)
 
 
 def _expand_contacts(node: MenuNode, contacts: list[Contact]) -> MenuNode:
