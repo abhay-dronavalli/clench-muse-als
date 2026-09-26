@@ -88,6 +88,21 @@ class FaceOk(_Msg):
     ok: bool
 
 
+# --- Board -> Core ------------------------------------------------------------
+
+
+class Ready(_Msg):
+    """The board connected and is ready to draw. The Core replies with the current view."""
+
+    type: Literal["READY"] = "READY"
+
+
+class AudioDone(_Msg):
+    """Speech (SPEAK) or audio (PLAY_AUDIO) finished or failed on the board."""
+
+    type: Literal["AUDIO_DONE"] = "AUDIO_DONE"
+
+
 # --- Console -> Core ----------------------------------------------------------
 
 
@@ -97,6 +112,7 @@ class Settings(_Msg):
     type: Literal["SETTINGS"] = "SETTINGS"
     pointing_mode: PointingMode
     scan_ms: int = Field(gt=0)
+    lang: Lang | None = None  # omit to keep the current language
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -115,6 +131,7 @@ class Screen(_Msg):
     tiles: list[Tile] = Field(max_length=6)  # PRD D8: no more than six options
     highlight: int | None = Field(ge=0)  # None = nothing highlighted
     lang: Lang
+    path: list[str]  # breadcrumb labels from home down to this level; [] at home
 
 
 class Confirm(_Msg):
@@ -125,8 +142,16 @@ class Confirm(_Msg):
     action: ActionName
 
 
+class Speak(_Msg):
+    """Speak `text` with the browser's speech synthesis. Only sent after a confirming clench."""
+
+    type: Literal["SPEAK"] = "SPEAK"
+    text: str
+    lang: Lang
+
+
 class PlayAudio(_Msg):
-    """Play an audio file served by the Core."""
+    """Play an audio file served by the Core (later, for cloud voices)."""
 
     type: Literal["PLAY_AUDIO"] = "PLAY_AUDIO"
     url: str
@@ -143,9 +168,12 @@ Message = Annotated[
         Signal,
         Point,
         FaceOk,
+        Ready,
+        AudioDone,
         Settings,
         Screen,
         Confirm,
+        Speak,
         PlayAudio,
     ],
     Field(discriminator="type"),

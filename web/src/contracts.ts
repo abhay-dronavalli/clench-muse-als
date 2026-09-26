@@ -74,7 +74,19 @@ export interface FaceOk {
   ok: boolean
 }
 
-// --- Console -> Core ---
+// --- Board -> Core ---
+
+/** The board connected and is ready to draw. The Core replies with the current view. */
+export interface Ready {
+  type: 'READY'
+}
+
+/** Speech (SPEAK) or audio (PLAY_AUDIO) finished or failed on the board. */
+export interface AudioDone {
+  type: 'AUDIO_DONE'
+}
+
+// --- Console -> Core (the web dev panel also sends it) ---
 
 /** Caregiver settings change. */
 export interface Settings {
@@ -82,6 +94,8 @@ export interface Settings {
   pointing_mode: PointingMode
   /** integer ms per tile in Scan mode, > 0 */
   scan_ms: number
+  /** omit to keep the current language */
+  lang?: Lang
 }
 
 // --- Core -> Board ---
@@ -100,6 +114,8 @@ export interface Screen {
   /** 0-based; null = nothing highlighted */
   highlight: number | null
   lang: Lang
+  /** breadcrumb labels from home down to this level; [] at home */
+  path: string[]
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */
@@ -109,7 +125,14 @@ export interface Confirm {
   action: ActionName
 }
 
-/** Play an audio file served by the Core. */
+/** Speak `text` with the browser's speech synthesis. Only sent after a confirming clench. */
+export interface Speak {
+  type: 'SPEAK'
+  text: string
+  lang: Lang
+}
+
+/** Play an audio file served by the Core (later, for cloud voices). */
 export interface PlayAudio {
   type: 'PLAY_AUDIO'
   url: string
@@ -125,9 +148,12 @@ export type Message =
   | Signal
   | Point
   | FaceOk
+  | Ready
+  | AudioDone
   | Settings
   | Screen
   | Confirm
+  | Speak
   | PlayAudio
 
 export type MessageType = Message['type']

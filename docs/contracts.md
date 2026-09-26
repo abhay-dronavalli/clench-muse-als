@@ -12,6 +12,17 @@ General rules:
 - Unknown fields are rejected. To add a field, change the contract, don't just send it.
 - The keyboard stand-in (dev panel in `web/src/dev/`) sends CLENCH, DOUBLE_BLINK and LONG_CLENCH
   exactly as the Sensor Service would. The Core cannot tell them apart (PRD D15).
+- Invalid messages are logged and ignored by the Core; the connection stays open.
+
+## WebSocket endpoints (Core, `ws://127.0.0.1:8000`)
+
+The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws://localhost:5173/ws/...`.
+
+| Endpoint | Who connects | Accepted messages | Receives |
+|---|---|---|---|
+| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SCREEN, CONFIRM, SPEAK, PLAY_AUDIO |
+| `/ws/console` | Caregiver console | SETTINGS | the same Core -> Board messages (mirror) |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | nothing |
 
 | Message | Sender | Receiver | Meaning |
 |---|---|---|---|
@@ -22,10 +33,13 @@ General rules:
 | SIGNAL | Sensor Service | Core, relayed to Console | Thinned signal for the live chart |
 | POINT | Board (Webcam), Sensor Service (Head tilt) | Core | Person is facing a tile |
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
-| SETTINGS | Console | Core | Pointing mode and scan speed |
+| READY | Board | Core | Board connected; Core replies with the current view |
+| AUDIO_DONE | Board | Core | Speech or audio finished (or failed) |
+| SETTINGS | Console, web dev panel | Core | Pointing mode, scan speed, language |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
-| CONFIRM | Core | Board | "Send this?" screen before anything is spoken or sent |
-| PLAY_AUDIO | Core | Board | Play an audio file |
+| CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
+| SPEAK | Core | Board, Console | Speak a confirmed sentence with browser speech |
+| PLAY_AUDIO | Core | Board, Console | Play an audio file (later, cloud voices) |
 
 ## Sensor Service -> Core
 
@@ -127,36 +141,66 @@ to Scan when the face has been lost for about 3 s, and switches back when it ret
 {"type": "FACE_OK", "ok": false}
 ```
 
+## Board -> Core
+
+### READY
+
+Sent by the board right after it connects (after the "Click to start" overlay has unlocked speech).
+The Core replies to that board only with the current view: SCREEN while scanning, CONFIRM while
+confirming, nothing while speaking (the next SCREEN follows when speech ends).
+
+No fields besides `type`.
+
+```json
+{"type": "READY"}
+```
+
+### AUDIO_DONE
+
+Sent by the board when a SPEAK (or PLAY_AUDIO) finishes or fails. The Core returns to home. If no
+AUDIO_DONE arrives within 10 s the Core returns to home anyway. With several boards open, the first
+AUDIO_DONE wins and later ones are ignored.
+
+No fields besides `type`.
+
+```json
+{"type": "AUDIO_DONE"}
+```
+
 ## Console -> Core
 
 ### SETTINGS
 
-Caregiver changes pointing mode or scan speed. Applies at once, no restart (PRD P1).
+Caregiver changes pointing mode, scan speed or language. Applies at once, no restart (PRD P1). The
+web dev panel also sends it (scan speed slider, EN/ES toggle) on `/ws/input`.
 
 | Field | Type | Notes |
 |---|---|---|
 | `pointing_mode` | `"auto"` \| `"scan"` \| `"webcam"` \| `"headtilt"` | Auto is the default |
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
+| `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es"}
 ```
 
 ## Core -> Board
 
 ### SCREEN
 
-What the board should draw. The board is "dumb": the Core owns the highlight position.
+What the board should draw. The board is "dumb": the Core owns the highlight position. Sent after
+every change while scanning (level change, highlight move, language change).
 
 | Field | Type | Notes |
 |---|---|---|
 | `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | |
-| `tiles` | `{"id": string, "label": string}[]` | at most 6 (PRD D8) |
+| `tiles` | `{"id": string, "label": string}[]` | at most 6 (PRD D8); `id` is the dotted menu path, e.g. `need.pain.back` |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
+| `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home |
 
 ```json
-{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "suggested", "label": "Tengo hambre"}, {"id": "need", "label": "Necesito"}, {"id": "people", "label": "Personas"}], "highlight": 2, "lang": "es"}
+{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco"}, {"id": "need.pain.back.a_lot", "label": "Mucho"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"]}
 ```
 
 ### CONFIRM
@@ -173,9 +217,25 @@ DOUBLE_BLINK cancels (PRD D5).
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_text"}
 ```
 
+### SPEAK
+
+Speak a sentence with the browser's speech synthesis (`en-US` / `es-US` voice when installed).
+Only ever sent after a confirming CLENCH on a CONFIRM screen (PRD D5). The board replies with
+AUDIO_DONE.
+
+| Field | Type | Notes |
+|---|---|---|
+| `text` | string | the confirmed sentence |
+| `lang` | `"en"` \| `"es"` | |
+
+```json
+{"type": "SPEAK", "text": "My back hurts a lot. Can you help me turn over?", "lang": "en"}
+```
+
 ### PLAY_AUDIO
 
-Play an audio file served by the Core (cached TTS).
+Play an audio file served by the Core (cached cloud TTS, later chunk). The board replies with
+AUDIO_DONE.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -184,8 +244,3 @@ Play an audio file served by the Core (cached TTS).
 ```json
 {"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}
 ```
-
-## Not yet defined
-
-The PRD (A3.3) says the board also sends "ready" and audio status to the Core. Those messages
-will be added here, with their code, when the board is built.

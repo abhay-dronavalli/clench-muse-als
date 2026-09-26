@@ -39,9 +39,11 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         {"type": "POINT", "source": "webcam", "tile": 3, "t": 1727300011.2},
     ),
     "FACE_OK": (contracts.FaceOk, {"type": "FACE_OK", "ok": False}),
+    "READY": (contracts.Ready, {"type": "READY"}),
+    "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE"}),
     "SETTINGS": (
         contracts.Settings,
-        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000},
+        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es"},
     ),
     "SCREEN": (
         contracts.Screen,
@@ -55,6 +57,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             ],
             "highlight": 2,
             "lang": "es",
+            "path": [],
         },
     ),
     "CONFIRM": (
@@ -64,6 +67,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "text": "Mija, estoy bien, llámame a las seis.",
             "action": "send_text",
         },
+    ),
+    "SPEAK": (
+        contracts.Speak,
+        {"type": "SPEAK", "text": "Tengo hambre. ¿Qué hay de almuerzo?", "lang": "es"},
     ),
     "PLAY_AUDIO": (contracts.PlayAudio, {"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}),
 }
@@ -97,18 +104,27 @@ def test_round_trip(name):
         {"type": "STATE", "t": 1.0, "level": "panic", "hr": None, "motion": 0, "eyes_closed": False},
         {"type": "POINT", "source": "webcam", "tile": -1, "t": 1.0},
         {"type": "CONFIRM", "text": "hi", "action": "delete_everything"},
+        {"type": "SPEAK", "text": "hi", "lang": "fr"},
+        {"type": "READY", "board": 1},
+        {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
         {
             "type": "SCREEN",
             "screen": "menu",
             "tiles": [{"id": str(i), "label": str(i)} for i in range(7)],
             "highlight": 0,
             "lang": "en",
+            "path": [],
         },
     ],
 )
 def test_rejects_invalid(bad):
     with pytest.raises(ValidationError):
         parse_message(bad)
+
+
+def test_settings_lang_is_optional():
+    msg = parse_message({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 800})
+    assert msg.lang is None
 
 
 def test_typescript_contract_has_every_type():
