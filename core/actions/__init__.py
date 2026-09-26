@@ -17,7 +17,7 @@ from core.actions.call import TwilioCallAction
 from core.actions.message import TelegramMessageAction
 from core.actions.room import RoomControlAction
 from core.actions.speak import SpeakAction
-from core.contracts import Message
+from core.voice import Voice
 
 __all__ = [
     "Action",
@@ -30,17 +30,17 @@ __all__ = [
 
 
 def build_registry(
-    emit: Callable[[Message], None],
+    voice: Voice,
     env: Mapping[str, str],
     *,
     dry_run: bool = True,
     transport: httpx.AsyncBaseTransport | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> ActionRegistry:
-    """All actions. `emit` sends SPEAK to the board; `env` holds the keys (see .env.example)."""
+    """All actions. `voice` says things on the board; `env` holds the keys (see .env.example)."""
     return ActionRegistry(
         [
-            SpeakAction(emit),
+            SpeakAction(voice),
             TelegramMessageAction(env, dry_run=dry_run, transport=transport),
             TwilioCallAction(env, dry_run=dry_run, transport=transport),
             RoomControlAction(dry_run=dry_run),

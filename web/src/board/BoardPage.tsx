@@ -27,7 +27,6 @@ export default function BoardPage() {
   const { toasts, push } = useToasts()
 
   const onMessage = (msg: Message, send: Send) => {
-    const done = () => send({ type: 'AUDIO_DONE' })
     switch (msg.type) {
       case 'SCREEN':
         setLang(msg.lang)
@@ -40,10 +39,10 @@ export default function BoardPage() {
       case 'SPEAK':
         setLang(msg.lang)
         setView({ kind: 'speaking', text: msg.text })
-        speak(msg.text, msg.lang, done)
+        speak(msg.text, msg.lang, () => send({ type: 'AUDIO_DONE', id: msg.id }))
         break
       case 'PLAY_AUDIO':
-        playAudio(msg.url, done)
+        playAudio(msg.url, () => send({ type: 'AUDIO_DONE', id: msg.id }))
         break
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))

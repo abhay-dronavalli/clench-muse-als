@@ -40,10 +40,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     ),
     "FACE_OK": (contracts.FaceOk, {"type": "FACE_OK", "ok": False}),
     "READY": (contracts.Ready, {"type": "READY"}),
-    "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE"}),
+    "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
     "SETTINGS": (
         contracts.Settings,
-        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es"},
+        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False},
     ),
     "SCREEN": (
         contracts.Screen,
@@ -71,9 +71,20 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     ),
     "SPEAK": (
         contracts.Speak,
-        {"type": "SPEAK", "text": "Tengo hambre. ¿Qué hay de almuerzo?", "lang": "es"},
+        {"type": "SPEAK", "id": "u1", "kind": "phrase", "text": "Tengo hambre. ¿Qué hay de almuerzo?", "lang": "es"},
     ),
-    "PLAY_AUDIO": (contracts.PlayAudio, {"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}),
+    "PLAY_AUDIO": (
+        contracts.PlayAudio,
+        {
+            "type": "PLAY_AUDIO",
+            "id": "u2",
+            "kind": "echo",
+            "url": "/audio/abc123.mp3",
+            "text": "Dolor",
+            "lang": "es",
+            "cached": True,
+        },
+    ),
     "ACTION_RESULT": (
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
@@ -109,7 +120,12 @@ def test_round_trip(name):
         {"type": "STATE", "t": 1.0, "level": "panic", "hr": None, "motion": 0, "eyes_closed": False},
         {"type": "POINT", "source": "webcam", "tile": -1, "t": 1.0},
         {"type": "CONFIRM", "text": "hi", "action": "delete_everything"},
-        {"type": "SPEAK", "text": "hi", "lang": "fr"},
+        {"type": "SPEAK", "id": "u1", "kind": "phrase", "text": "hi", "lang": "fr"},
+        {"type": "SPEAK", "text": "hi", "lang": "en"},  # id and kind are required
+        {"type": "SPEAK", "id": "u1", "kind": "shout", "text": "hi", "lang": "en"},
+        {"type": "AUDIO_DONE"},  # id is required
+        {"type": "AUDIO_DONE", "id": ""},
+        {"type": "PLAY_AUDIO", "id": "u1", "kind": "echo", "url": "/audio/a.mp3", "text": "hi", "lang": "en"},
         {"type": "ACTION_RESULT", "action": "send_text", "ok": True, "detail": "", "contact": None},
         {"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": None, "lang": "en", "path": [], "countdown": -1},
         {"type": "ACTION_RESULT", "action": "place_call", "ok": True, "detail": ""},  # contact is required
@@ -130,9 +146,10 @@ def test_rejects_invalid(bad):
         parse_message(bad)
 
 
-def test_settings_lang_is_optional():
+def test_settings_lang_and_speak_picks_are_optional():
     msg = parse_message({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 800})
     assert msg.lang is None
+    assert msg.speak_picks is None
 
 
 def test_typescript_contract_has_every_type():

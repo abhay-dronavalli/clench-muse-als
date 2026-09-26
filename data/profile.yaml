@@ -3,7 +3,9 @@
 #   name          used in messages and calls ("Luis: ...", "Mensaje de Luis: ...")
 #   lang          language the board starts in: en | es (switchable live)
 #   help_contact  contact id from contacts.yaml called and messaged by the long-clench help alert
+#   speak_picks   say each picked tile's label aloud as it is picked (true | false, switchable live)
 
 name: Luis
 lang: es
 help_contact: maria
+speak_picks: true

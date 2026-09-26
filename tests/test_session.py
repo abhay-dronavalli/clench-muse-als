@@ -14,6 +14,7 @@ from core.contracts import (
     Confirm,
     DoubleBlink,
     LongClench,
+    PlayAudio,
     Screen,
     Settings,
     Speak,
@@ -21,6 +22,7 @@ from core.contracts import (
 from core.menu import load_menu
 from core.pointer import ScanPointer
 from core.profile import load_profile
+from core.voice import Voice
 from core.session import CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, SPEAK_TIMEOUT_S, Session, SessionState
 
 SCAN_S = 1.0
@@ -62,8 +64,15 @@ def last_screen(sent) -> Screen:
     return next(m for m in reversed(sent) if isinstance(m, Screen))
 
 
-def spoken(sent) -> list[Speak]:
-    return [m for m in sent if isinstance(m, Speak)]
+def spoken(sent) -> list[tuple[str, str]]:
+    """(text, lang) of every phrase and system line said on the board; echoes are left out."""
+    return [(m.text, m.lang) for m in sent if isinstance(m, (Speak, PlayAudio)) and m.kind != "echo"]
+
+
+def done(sent) -> AudioDone:
+    """The board's AUDIO_DONE for the last phrase or system line."""
+    last = next(m for m in reversed(sent) if isinstance(m, (Speak, PlayAudio)) and m.kind != "echo")
+    return AudioDone(id=last.id)
 
 
 def results(sent) -> list[ActionResult]:
@@ -124,9 +133,9 @@ def test_walk_pain_back_a_lot_then_speak(session, sched, sent):
     sched.advance(CLENCH_DEBOUNCE_S + 0.05)
     session.handle(clench())
     assert session.state is SessionState.SPEAKING
-    assert spoken(sent) == [Speak(text="My back hurts a lot. Can you help me turn over?", lang="en")]
+    assert spoken(sent) == [("My back hurts a lot. Can you help me turn over?", "en")]
 
-    session.handle(AudioDone())
+    session.handle(done(sent))
     assert session.state is SessionState.SCANNING
     assert last_screen(sent).path == []
     assert last_screen(sent).tiles[0].id == "suggested"
@@ -176,7 +185,7 @@ def test_nothing_spoken_without_confirm(session, sched, sent):
     session.handle(blink())
     session.handle(LongClench(t=0.0, duration=1.6))
     session.handle(blink())  # help countdown cancelled
-    session.handle(AudioDone())
+    session.handle(AudioDone(id="stray"))
     sched.advance(60)
     assert spoken(sent) == []
     assert results(sent) == []
@@ -198,7 +207,7 @@ def test_speaking_times_out_to_home(session, sched, sent):
 
 
 def test_late_audio_done_is_ignored(session, sched, sent):
-    session.handle(AudioDone())
+    session.handle(AudioDone(id="late"))
     assert session.state is SessionState.SCANNING
     assert last_screen(sent).path == []
 
@@ -227,9 +236,9 @@ def test_help_countdown_fires_call_and_message(session, sched, sent):
         ActionResult(action="place_call", ok=True, detail="dry run", contact="Maria"),
         ActionResult(action="send_message", ok=True, detail="dry run", contact="Maria"),
     ]
-    assert spoken(sent) == [Speak(text="Calling Maria", lang="en")]
+    assert spoken(sent) == [("Calling Maria", "en")]
     assert session.state is SessionState.SPEAKING
-    session.handle(AudioDone())
+    session.handle(done(sent))
     assert session.state is SessionState.SCANNING
     assert last_screen(sent).path == []  # home
 
@@ -249,7 +258,7 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
         "TWILIO_FROM_NUMBER": "+13055550100",
         "CONTACT_MARIA_PHONE": "+13055550123",
     }
-    actions = build_registry(sent.append, env, dry_run=False, transport=httpx.MockTransport(service))
+    actions = build_registry(Voice(sent.append), env, dry_run=False, transport=httpx.MockTransport(service))
     s = Session(menu, sent.append, sched, profile=profile, actions=actions, spawn=run_now)  # profile lang: es
     s.start()
     s.handle(long_clench())
@@ -260,7 +269,7 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
     assert parse_qs(call.content.decode())["Twiml"] == [f'<Response>{say}<Pause length="1"/>{say}</Response>']
     assert message.url.host == "api.telegram.org"
     assert json.loads(message.content) == {"chat_id": "42", "text": "Luis necesita ayuda ahora"}
-    assert spoken(sent) == [Speak(text="Llamando a María", lang="es")]
+    assert spoken(sent) == [("Llamando a María", "es")]
     assert [(r.action, r.ok, r.contact) for r in results(sent)] == [
         ("place_call", True, "María"),
         ("send_message", True, "María"),
@@ -291,7 +300,7 @@ def test_double_blink_cancels_help_back_to_confirm(session, sched, sent):
     assert session.state is SessionState.CONFIRMING
     assert sent[-1] == Confirm(text="I'm hungry. What's for lunch?", action="speak")
     session.handle(clench())  # the confirm screen works as before
-    assert spoken(sent) == [Speak(text="I'm hungry. What's for lunch?", lang="en")]
+    assert spoken(sent) == [("I'm hungry. What's for lunch?", "en")]
 
 
 def test_help_ignores_clench_and_repeat_long_clench(session, sched, sent):
@@ -334,7 +343,7 @@ def test_people_text_in_spanish(session, sched, sent):
     sched.advance(CLENCH_DEBOUNCE_S + 0.05)
     session.handle(clench())
     # Spoken in the room and sent at the same time; with no keys the default registry dry-runs.
-    assert spoken(sent) == [Speak(text="Mija, estoy bien, llámame a las seis.", lang="es")]
+    assert spoken(sent) == [("Mija, estoy bien, llámame a las seis.", "es")]
     assert results(sent) == [ActionResult(action="send_message", ok=True, detail="dry run", contact="María")]
 
 
@@ -360,7 +369,7 @@ def test_confirmed_call_really_sends(menu, profile, sched, sent):
         "TWILIO_FROM_NUMBER": "+13055550100",
         "CONTACT_CARLOS_PHONE": "+13055550199",
     }
-    actions = build_registry(sent.append, env, dry_run=False, transport=httpx.MockTransport(twilio))
+    actions = build_registry(Voice(sent.append), env, dry_run=False, transport=httpx.MockTransport(twilio))
     s = Session(menu, sent.append, sched, profile=profile, actions=actions, spawn=run_now, lang="en")
     s.start()
     for tile in ["people", "carlos", "call"]:
@@ -381,7 +390,7 @@ def test_failed_send_reports_error(menu, profile, sched, sent):
         sent.append,
         sched,
         profile=profile,
-        actions=build_registry(sent.append, {}, dry_run=False),
+        actions=build_registry(Voice(sent.append), {}, dry_run=False),
         spawn=run_now,
         lang="en",
     )
@@ -425,3 +434,26 @@ def test_scan_pointer_alone():
     p.start()
     sched.advance(5)
     assert moves == [1, 2, 0]  # a single tile never moves
+
+
+def test_speaking_ends_only_on_the_phrase_id(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    (phrase,) = [m for m in sent if isinstance(m, Speak) and m.kind == "phrase"]
+    assert session.speaking_id == phrase.id
+    session.handle(AudioDone(id="an-older-one"))
+    assert session.state is SessionState.SPEAKING
+    session.handle(AudioDone(id=phrase.id))
+    assert session.state is SessionState.SCANNING
+    assert session.speaking_id is None
+    assert last_screen(sent).path == []
+
+
+def test_speak_picks_setting(session):
+    assert session.speak_picks is True  # data/profile.yaml
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000, speak_picks=False))
+    assert session.speak_picks is False
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000))  # omitted: kept
+    assert session.speak_picks is False

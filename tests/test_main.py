@@ -48,9 +48,16 @@ def test_board_gets_confirm_then_speak():
 
             clench()  # confirm
             speak = board.receive_json()
-            assert speak == {"type": "SPEAK", "text": "I'm hungry. What's for lunch?", "lang": "en"}
+            assert speak == {
+                "type": "SPEAK",
+                "id": speak["id"],
+                "kind": "phrase",
+                "text": "I'm hungry. What's for lunch?",
+                "lang": "en",
+            }
 
-            board.send_json({"type": "AUDIO_DONE"})
+            board.send_json({"type": "AUDIO_DONE", "id": "someone-else"})  # not the phrase: ignored
+            board.send_json({"type": "AUDIO_DONE", "id": speak["id"]})
             back_home = board.receive_json()
             assert back_home["type"] == "SCREEN"
             assert back_home["path"] == []

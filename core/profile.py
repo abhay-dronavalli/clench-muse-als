@@ -27,6 +27,7 @@ class Profile(BaseModel):
     name: Annotated[str, Field(min_length=1)]
     lang: Lang = "en"
     help_contact: str  # contact id in data/contacts.yaml
+    speak_picks: bool = True  # say each picked tile aloud as it is picked (switchable live)
 
 
 def load_profile(contacts: dict[str, Contact], path: Path = PROFILE_PATH) -> Profile:

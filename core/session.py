@@ -4,7 +4,8 @@ Pointer, the only copy of the highlight. The board just draws what the session s
 Flow: SCANNING --clench on leaf--> CONFIRMING --clench--> SPEAKING --AUDIO_DONE/timeout--> home.
 Nothing is spoken or sent without the confirming clench (PRD D5). On that clench the sentence is
 spoken on the board and, at the same time, the leaf's action (message, call, room) runs in the
-background through the action registry; its outcome comes back as ACTION_RESULT.
+background through the action registry; its outcome comes back as ACTION_RESULT. Every utterance
+has an id; SPEAKING only ends on the AUDIO_DONE with the id of the utterance it is waiting for.
 
 Help alert (PRD D3): LONG_CLENCH while SCANNING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one SCREEN
 per second. DOUBLE_BLINK cancels back to where the person was. At 0 the help contact gets a call
@@ -35,12 +36,14 @@ from core.contracts import (
     Screen,
     Settings,
     Tile,
+    UtteranceKind,
 )
 from core.contracts import ActionResult as ActionResultMsg
 from core.db import Db
 from core.menu import Menu, MenuNode
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
 from core.profile import Profile
+from core.voice import Voice
 
 log = logging.getLogger("clench.session")
 
@@ -74,29 +77,34 @@ class Session:
         *,
         profile: Profile,
         actions: ActionRegistry | None = None,
+        voice: Voice | None = None,
         spawn: Spawn | None = None,
         db: Db | None = None,
         lang: Lang | None = None,
         scan_ms: int = DEFAULT_SCAN_MS,
         pointing_mode: PointingMode = "auto",
+        speak_picks: bool | None = None,
     ) -> None:
         self._menu = menu
         self._emit = emit
         self._scheduler = scheduler
         self.profile = profile
+        self._voice = voice or Voice(emit)  # default: browser speech only
         # Default: dry-run actions with no keys, so nothing can leave the laptop by accident.
-        self._actions = actions or build_registry(emit, {}, dry_run=True)
+        self._actions = actions or build_registry(self._voice, {}, dry_run=True)
         self._spawn = spawn or self._spawn_task  # tests pass a runner that finishes at once
         self._tasks: set[asyncio.Task[None]] = set()
         self._db = db  # None = nothing is recorded (some tests)
         self.lang: Lang = lang or profile.lang
         self.scan_ms = scan_ms
         self.pointing_mode: PointingMode = pointing_mode
+        self.speak_picks = profile.speak_picks if speak_picks is None else speak_picks
         self.state = SessionState.SCANNING
         self._path: list[MenuNode] = [menu.root]
         self._pending: MenuNode | None = None  # leaf being confirmed or spoken
         self._last_clench: float | None = None
         self._speak_timer: TimerHandle | None = None
+        self._speaking_id: str | None = None  # the utterance SPEAKING waits for
         self._help_timer: TimerHandle | None = None
         self._help_left = 0  # seconds left in the help countdown
         self._help_from = SessionState.SCANNING  # where a cancelled countdown goes back to
@@ -111,6 +119,11 @@ class Session:
     @property
     def highlight(self) -> int:
         return self.pointer.highlight
+
+    @property
+    def speaking_id(self) -> str | None:
+        """Id of the utterance SPEAKING is waiting for; None when not speaking."""
+        return self._speaking_id
 
     def start(self) -> None:
         """Show home and start scanning."""
@@ -146,8 +159,10 @@ class Session:
                 else:
                     log.info("LONG_CLENCH (%.1f s) ignored while %s", msg.duration, self.state.value)
             case AudioDone():
-                if self.state is SessionState.SPEAKING:
+                if self.state is SessionState.SPEAKING and msg.id == self._speaking_id:
                     self._finish_speaking("audio done")
+                else:
+                    log.debug("AUDIO_DONE %s ignored (waiting for %s)", msg.id, self._speaking_id)
             case Settings():
                 self._apply_settings(msg)
             case Point():
@@ -216,14 +231,14 @@ class Session:
         ctx = self._context(text, node.contact)
         self._record(node, confirmed=True, text=text)
         self._use_phrase(text)
-        self._speak(ctx)  # always said aloud in the room
+        self._speak(text, "phrase")  # always said aloud in the room
         if node.action != "speak":
             self._run_action(node.action, ctx)  # and sent, at the same time
 
-    def _speak(self, ctx: ActionContext) -> None:
-        """Say `ctx.text` on the board; back to home on AUDIO_DONE or after SPEAK_TIMEOUT_S."""
+    def _speak(self, text: str, kind: UtteranceKind) -> None:
+        """Say `text` on the board; back to home on its AUDIO_DONE or after SPEAK_TIMEOUT_S."""
         self.state = SessionState.SPEAKING
-        self._run_action("speak", ctx, report=False)
+        self._speaking_id = self._voice.speak(text, self.lang, kind)
         self._cancel_speak_timer()
         self._speak_timer = self._scheduler.call_later(
             SPEAK_TIMEOUT_S, lambda: self._finish_speaking("timeout")
@@ -232,6 +247,7 @@ class Session:
     def _finish_speaking(self, reason: str) -> None:
         log.info("speaking done (%s), back to home", reason)
         self._cancel_speak_timer()
+        self._speaking_id = None
         self._pending = None
         self._path = [self._menu.root]
         self._enter_level()
@@ -291,7 +307,7 @@ class Session:
         ctx = self._context(text, contact.id, add_sender=False)  # the text already names the patient
         self._run_action("place_call", ctx)
         self._run_action("send_message", ctx)
-        self._speak(self._context(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), None))
+        self._speak(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), "system")
 
     def _help_screen(self) -> Screen:
         return Screen(
@@ -311,6 +327,8 @@ class Session:
             if s.pointing_mode not in ("auto", "scan"):
                 log.info("pointing mode %s is not built yet; scanning instead", s.pointing_mode)
         self.scan_ms = s.scan_ms
+        if s.speak_picks is not None:
+            self.speak_picks = s.speak_picks
         self.pointer.apply_settings(s)
         if s.lang is not None and s.lang != self.lang:
             self.lang = s.lang
@@ -350,8 +368,8 @@ class Session:
             text=text, lang=self.lang, contact=contact, patient_name=self.profile.name, add_sender=add_sender
         )
 
-    def _run_action(self, name: ActionName, ctx: ActionContext, *, report: bool = True) -> None:
-        """Run an action in the background. With `report`, send ACTION_RESULT when it finishes."""
+    def _run_action(self, name: ActionName, ctx: ActionContext) -> None:
+        """Run an action in the background and send ACTION_RESULT when it finishes."""
         contact_label = ctx.contact.label(ctx.lang) if ctx.contact else None
 
         async def run() -> None:
@@ -361,8 +379,7 @@ class Session:
                 log.info("%s%s: %s (%r)", name, target, result.detail, ctx.text)
             else:
                 log.warning("%s%s FAILED: %s (%r)", name, target, result.detail, ctx.text)
-            if report:
-                self._emit(ActionResultMsg(action=name, ok=result.ok, detail=result.detail, contact=contact_label))
+            self._emit(ActionResultMsg(action=name, ok=result.ok, detail=result.detail, contact=contact_label))
 
         self._spawn(run())
 

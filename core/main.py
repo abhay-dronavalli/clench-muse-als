@@ -34,6 +34,7 @@ from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
 from core.session import Session
+from core.voice import Voice
 
 logging.basicConfig(format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 logging.getLogger("clench").setLevel(logging.INFO)
@@ -91,12 +92,14 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = Db(db_path)
         db.sync_profile(profile.name, profile.lang, menu.contacts.values())
+        voice = Voice(hub.broadcast)
         session = Session(
             menu,
             hub.broadcast,
             scheduler or AsyncioScheduler(),
             profile=profile,
-            actions=build_registry(hub.broadcast, env, dry_run=dry_run),
+            actions=build_registry(voice, env, dry_run=dry_run),
+            voice=voice,
             db=db,
             scan_ms=scan_ms,
             lang=lang,

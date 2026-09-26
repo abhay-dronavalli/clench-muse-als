@@ -13,6 +13,11 @@ export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
 export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
+/**
+ * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
+ * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
+ */
+export type UtteranceKind = 'phrase' | 'echo' | 'system'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 
@@ -81,9 +86,11 @@ export interface Ready {
   type: 'READY'
 }
 
-/** Speech (SPEAK) or audio (PLAY_AUDIO) finished or failed on the board. */
+/** Speech (SPEAK) or audio (PLAY_AUDIO) `id` finished, failed or was interrupted on the board. */
 export interface AudioDone {
   type: 'AUDIO_DONE'
+  /** the SPEAK / PLAY_AUDIO id */
+  id: string
 }
 
 // --- Console -> Core (the web dev panel also sends it) ---
@@ -96,6 +103,8 @@ export interface Settings {
   scan_ms: number
   /** omit to keep the current language */
   lang?: Lang
+  /** say each picked tile aloud; omit to keep the current value */
+  speak_picks?: boolean
 }
 
 // --- Core -> Board ---
@@ -127,17 +136,30 @@ export interface Confirm {
   action: ActionName
 }
 
-/** Speak `text` with the browser's speech synthesis. Only sent after a confirming clench. */
+/**
+ * Say `text` with the browser's speech synthesis (no cloud audio for it right now).
+ * A phrase is only ever sent after a confirming clench (PRD D5).
+ */
 export interface Speak {
   type: 'SPEAK'
+  /** utterance id, echoed back in AUDIO_DONE */
+  id: string
+  kind: UtteranceKind
   text: string
   lang: Lang
 }
 
-/** Play an audio file served by the Core (later, for cloud voices). */
+/** Play cloud TTS audio served by the Core (/audio/<hash>.mp3). Same rules as SPEAK. */
 export interface PlayAudio {
   type: 'PLAY_AUDIO'
+  id: string
+  kind: UtteranceKind
   url: string
+  /** what the audio says; the board speaks it with browser speech if the file fails */
+  text: string
+  lang: Lang
+  /** true = the file was already on disk (no request to the TTS service) */
+  cached: boolean
 }
 
 /** How a confirmed action that leaves the laptop went (message, call, room control). */

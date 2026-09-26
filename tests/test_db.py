@@ -126,7 +126,7 @@ def test_phrase_use_count_and_hour_histogram(session, sched, db, wall):
     for _ in range(2):
         walk(session, sched, "suggested", "water")
         confirm(session, sched)
-        session.handle(AudioDone())
+        session.handle(AudioDone(id=session.speaking_id))
     wall.t = T0 + 3 * 3600  # 17:30
     walk(session, sched, "suggested", "water")
     confirm(session, sched)

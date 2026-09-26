@@ -34,12 +34,12 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | POINT | Board (Webcam), Sensor Service (Head tilt) | Core | Person is facing a tile |
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
 | READY | Board | Core | Board connected; Core replies with the current view |
-| AUDIO_DONE | Board | Core | Speech or audio finished (or failed) |
-| SETTINGS | Console, web dev panel | Core | Pointing mode, scan speed, language |
+| AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
+| SETTINGS | Console, web dev panel | Core | Pointing mode, scan speed, language, speak picks |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
-| SPEAK | Core | Board, Console | Speak a confirmed sentence with browser speech |
-| PLAY_AUDIO | Core | Board, Console | Play an audio file (later, cloud voices) |
+| SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
+| PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 
 ## Sensor Service -> Core
@@ -158,31 +158,39 @@ No fields besides `type`.
 
 ### AUDIO_DONE
 
-Sent by the board when a SPEAK (or PLAY_AUDIO) finishes or fails. The Core returns to home. If no
-AUDIO_DONE arrives within 10 s the Core returns to home anyway. With several boards open, the first
-AUDIO_DONE wins and later ones are ignored.
+Sent by the board when a SPEAK or PLAY_AUDIO of kind `phrase` or `system` ends: finished, failed
+(after the browser-speech fallback), or interrupted by a newer one. Never sent for `echo`.
 
-No fields besides `type`.
+The Core only reacts to the AUDIO_DONE whose `id` is the phrase it is speaking: it then returns to
+home. Any other id (an echo, a system line, an older phrase) is ignored. If the right AUDIO_DONE
+does not arrive within 10 s the Core returns to home anyway. With several boards open, the first
+matching AUDIO_DONE wins and later ones are ignored.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | the `id` of the SPEAK / PLAY_AUDIO that ended |
 
 ```json
-{"type": "AUDIO_DONE"}
+{"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}
 ```
 
 ## Console -> Core
 
 ### SETTINGS
 
-Caregiver changes pointing mode, scan speed or language. Applies at once, no restart (PRD P1). The
-web dev panel also sends it (scan speed slider, EN/ES toggle) on `/ws/input`.
+Caregiver changes pointing mode, scan speed, language or speak picks. Applies at once, no restart
+(PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks toggle) on
+`/ws/input`.
 
 | Field | Type | Notes |
 |---|---|---|
 | `pointing_mode` | `"auto"` \| `"scan"` \| `"webcam"` \| `"headtilt"` | Auto is the default |
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
+| `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es"}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true}
 ```
 
 ## Core -> Board
@@ -210,8 +218,10 @@ during the help countdown.
 screen starts a 5 second countdown. The Core sends this SCREEN with `countdown` 5, 4, 3, 2, 1, one
 per second, with no tiles. A DOUBLE_BLINK cancels it and the board goes back to where it was. At
 0 the Core calls and messages the profile's help contact (the countdown is the confirmation, so no
-CONFIRM screen), sends SPEAK "Calling Maria" / "Llamando a María", and returns home after
-AUDIO_DONE. Each of the call and the message then reports an ACTION_RESULT.
+CONFIRM screen), says "Calling Maria" / "Llamando a María" (kind `system`) and returns home right
+away. Each of the call and the message then reports an ACTION_RESULT. When the countdown starts the
+Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Parpadea dos veces
+para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
 {"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5}
@@ -231,32 +241,60 @@ DOUBLE_BLINK cancels (PRD D5).
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
 ```
 
+### Utterances: SPEAK and PLAY_AUDIO
+
+Everything the board says is one utterance with an `id` and a `kind`:
+
+| `kind` | What | When | Volume | AUDIO_DONE |
+|---|---|---|---|---|
+| `phrase` | the confirmed sentence | only after a confirming CLENCH on a CONFIRM screen (PRD D5); the Core is SPEAKING until its AUDIO_DONE | 100% | yes |
+| `echo` | the label of the tile just picked | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK or the confirm clench | 70% | no |
+| `system` | a fixed line from the Core | help countdown start, help alert fired | 100% | yes (ignored by the Core) |
+
+The Core sends PLAY_AUDIO when it has (or can make in time) ElevenLabs audio for the text, and
+SPEAK when it cannot (no key, no internet, too slow, service errors): the board then uses browser
+speech, so nothing is ever left silent.
+
+Board rules (one audio player, reused):
+
+- A new echo interrupts an older echo. An echo that arrives while a phrase or system line is
+  playing is dropped (it never cuts the person's sentence).
+- A phrase or system line interrupts whatever is playing. An interrupted phrase or system line
+  still gets its AUDIO_DONE.
+- If a PLAY_AUDIO file fails to load or play, the board says the same `text` with browser speech,
+  then sends AUDIO_DONE.
+
 ### SPEAK
 
-Speak a sentence with the browser's speech synthesis (`en-US` / `es-US` voice when installed).
-Only ever sent after a confirming CLENCH on a CONFIRM screen (PRD D5). The board replies with
-AUDIO_DONE.
+Say `text` with the browser's speech synthesis (`en-US` / `es-US` voice when installed).
 
 | Field | Type | Notes |
 |---|---|---|
-| `text` | string | the confirmed sentence |
+| `id` | string | utterance id, sent back in AUDIO_DONE |
+| `kind` | `"phrase"` \| `"echo"` \| `"system"` | see the table above |
+| `text` | string | what to say |
 | `lang` | `"en"` \| `"es"` | |
 
 ```json
-{"type": "SPEAK", "text": "My back hurts a lot. Can you help me turn over?", "lang": "en"}
+{"type": "SPEAK", "id": "3f9c2a71b0de", "kind": "phrase", "text": "My back hurts a lot. Can you help me turn over?", "lang": "en"}
 ```
 
 ### PLAY_AUDIO
 
-Play an audio file served by the Core (cached cloud TTS, later chunk). The board replies with
-AUDIO_DONE.
+Play an mp3 served by the Core from its audio cache (`GET /audio/<sha256>.mp3`, proxied by the web
+dev server).
 
 | Field | Type | Notes |
 |---|---|---|
+| `id` | string | utterance id, sent back in AUDIO_DONE |
+| `kind` | `"phrase"` \| `"echo"` \| `"system"` | see the table above |
 | `url` | string | path on the Core server |
+| `text` | string | what the audio says; spoken with browser speech if the file fails |
+| `lang` | `"en"` \| `"es"` | |
+| `cached` | bool | true = the file was already on disk, no request was made to ElevenLabs |
 
 ```json
-{"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}
+{"type": "PLAY_AUDIO", "id": "b41e07c9d2aa", "kind": "echo", "url": "/audio/9b1f0e7c5a2d4e6f8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f.mp3", "text": "Dolor", "lang": "es", "cached": true}
 ```
 
 ### ACTION_RESULT

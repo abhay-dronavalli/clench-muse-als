@@ -17,6 +17,9 @@ BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
 ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
+# phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
+# said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
+UtteranceKind = Literal["phrase", "echo", "system"]
 
 
 class _Msg(BaseModel):
@@ -98,9 +101,10 @@ class Ready(_Msg):
 
 
 class AudioDone(_Msg):
-    """Speech (SPEAK) or audio (PLAY_AUDIO) finished or failed on the board."""
+    """Speech (SPEAK) or audio (PLAY_AUDIO) `id` finished, failed or was interrupted on the board."""
 
     type: Literal["AUDIO_DONE"] = "AUDIO_DONE"
+    id: str = Field(min_length=1)  # the SPEAK / PLAY_AUDIO id
 
 
 # --- Console -> Core ----------------------------------------------------------
@@ -113,6 +117,7 @@ class Settings(_Msg):
     pointing_mode: PointingMode
     scan_ms: int = Field(gt=0)
     lang: Lang | None = None  # omit to keep the current language
+    speak_picks: bool | None = None  # say each picked tile aloud; omit to keep the current value
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -145,18 +150,28 @@ class Confirm(_Msg):
 
 
 class Speak(_Msg):
-    """Speak `text` with the browser's speech synthesis. Only sent after a confirming clench."""
+    """Say `text` with the browser's speech synthesis (no cloud audio for it right now).
+
+    A phrase is only ever sent after a confirming clench (PRD D5).
+    """
 
     type: Literal["SPEAK"] = "SPEAK"
+    id: str = Field(min_length=1)  # utterance id, echoed back in AUDIO_DONE
+    kind: UtteranceKind
     text: str
     lang: Lang
 
 
 class PlayAudio(_Msg):
-    """Play an audio file served by the Core (later, for cloud voices)."""
+    """Play cloud TTS audio served by the Core (/audio/<hash>.mp3). Same rules as SPEAK."""
 
     type: Literal["PLAY_AUDIO"] = "PLAY_AUDIO"
+    id: str = Field(min_length=1)
+    kind: UtteranceKind
     url: str
+    text: str  # what the audio says; the board speaks it with browser speech if the file fails
+    lang: Lang
+    cached: bool  # true = the file was already on disk (no request to the TTS service)
 
 
 class ActionResult(_Msg):

@@ -15,6 +15,7 @@ from core.actions.http import is_e164, mask_phone
 from core.actions.message import TelegramMessageAction
 from core.contracts import Speak
 from core.menu import load_menu
+from core.voice import Voice
 
 ENV = {
     "TELEGRAM_BOT_TOKEN": "123:SECRET",
@@ -241,7 +242,7 @@ def test_connection_error_hides_token(maria):
 def test_registry_dedupes_same_action_contact_and_text(maria):
     rec = Recorder(200, {"ok": True})
     clock = FakeClock()
-    reg = build_registry(lambda m: None, ENV, dry_run=False, transport=rec.transport, clock=clock)
+    reg = build_registry(Voice(lambda m: None), ENV, dry_run=False, transport=rec.transport, clock=clock)
     assert run(reg.run("send_message", ctx(maria))).detail == "sent"
     clock.t = 10.0
     again = run(reg.run("send_message", ctx(maria)))
@@ -254,17 +255,18 @@ def test_registry_dedupes_same_action_contact_and_text(maria):
 
 def test_registry_dedupe_is_per_action(maria):
     rec = Recorder(201, {"ok": True, "sid": "CA1"})
-    reg = build_registry(lambda m: None, ENV, dry_run=False, transport=rec.transport, clock=FakeClock())
+    reg = build_registry(Voice(lambda m: None), ENV, dry_run=False, transport=rec.transport, clock=FakeClock())
     assert run(reg.run("send_message", ctx(maria))).ok
     assert run(reg.run("place_call", ctx(maria))).ok
 
 
 def test_speak_is_never_deduped():
     spoken = []
-    reg = build_registry(spoken.append, {}, clock=FakeClock())
+    reg = build_registry(Voice(spoken.append), {}, clock=FakeClock())
     for _ in range(3):
         assert run(reg.run("speak", ctx(None, text="Agua"))).ok
-    assert spoken == [Speak(text="Agua", lang="es")] * 3
+    assert [(m.text, m.lang, m.kind) for m in spoken] == [("Agua", "es", "phrase")] * 3
+    assert all(isinstance(m, Speak) for m in spoken)
 
 
 def test_registry_never_raises():
@@ -279,7 +281,7 @@ def test_registry_never_raises():
 
 
 def test_room_control_mock():
-    reg = build_registry(lambda m: None, {}, dry_run=False)
+    reg = build_registry(Voice(lambda m: None), {}, dry_run=False)
     assert run(reg.run("room_control", ctx(None, text="Lights on"))).detail == "done (mock)"
-    reg = build_registry(lambda m: None, {}, dry_run=True)
+    reg = build_registry(Voice(lambda m: None), {}, dry_run=True)
     assert run(reg.run("room_control", ctx(None, text="Lights on"))).detail == "dry run"
