@@ -325,8 +325,8 @@ Detection can only be tuned offline against signal whose true events are known.
 itself instead of your memory of it:
 
 ```powershell
-.	est\.venv\Scripts\python.exe test/record_protocol.py --dry-run --speed 6   # practise the cues
-.	est\.venv\Scripts\python.exe test/record_protocol.py --profile taher       # the real ~3 min run
+.\test\.venv\Scripts\python.exe test/record_protocol.py --dry-run --speed 6   # practise the cues
+.\test\.venv\Scripts\python.exe test/record_protocol.py --profile taher       # the real ~3 min run
 ```
 
 Calibrate that profile first and don't move the band afterwards: the recording is
@@ -357,7 +357,7 @@ seconds from the **first EEG sample**) and `*_manifest.json`, ready for the
 evaluator, with the matching calibration copied in beside it:
 
 ```powershell
-.	est\.venv\Scripts\python.exe test/evaluate_detection.py --manifest test/recordings/<stamp>_<label>_manifest.json
+.\test\.venv\Scripts\python.exe test/evaluate_detection.py --manifest test/recordings/<stamp>_<label>_manifest.json
 ```
 
 The labels are what you were *asked* to do. They are corrected only where you
