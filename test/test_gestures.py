@@ -15,32 +15,67 @@ EMG_THRESHOLD = 30.0
 BLINK_THRESHOLD = 40.0
 QUIET_EMG = 10.0     # comfortably below threshold
 QUIET_BLINK = 12.0
+HOLD_THRESHOLD = 50.0
+QUIET_HOLD = 5.0     # the mean of noise averages towards zero, so rest is tiny
+LONG_BLINK_MS = 400
+
+# Measured offline against a simulated eyelid step (see the long-blink notes in
+# clench_detect): a NORMAL blink's hold level is ~66 uV and a HELD one's is
+# ~56-83 uV. They overlap, on purpose -- these tests exist to prove the two are
+# told apart by duration and not by level, because level cannot do it.
+BLINK_HOLD_LEVEL = 66.0
+HELD_HOLD_LEVEL = 80.0
 
 
-def run(script):
+def run(script, hold_threshold=None):
     """Play a list of steps and return the event names that fired.
 
-    Each step is (duration_s, emg, blink_left, blink_right). A 3-tuple is
-    accepted as shorthand meaning both forehead channels see the same thing.
+    Each step is (duration_s, emg, blink_left, blink_right, hold). Shorthands:
+    a 3-tuple means both forehead channels see the same blink level, and a
+    3- or 4-tuple leaves the eyelid-hold level at rest.
+
+    Pass hold_threshold to enable LONG_BLINK; leaving it None reproduces a
+    profile calibrated before that gesture existed.
 
     Timestamps are synthetic and advance by exactly TICK, so the test is
     deterministic -- no sleeping, no wall clock, runs in milliseconds.
     """
     recognizer = GestureRecognizer(EMG_THRESHOLD, BLINK_THRESHOLD,
-                                   long_ms=1500, double_ms=700)
+                                   long_ms=1500, double_ms=700,
+                                   hold_threshold=hold_threshold,
+                                   long_blink_ms=LONG_BLINK_MS)
     now = 100.0
     fired = []
     for step in script:
+        hold = QUIET_HOLD
         if len(step) == 3:
             duration, emg, blink = step
             left = right = blink
-        else:
+        elif len(step) == 4:
             duration, emg, left, right = step
+        else:
+            duration, emg, left, right, hold = step
         for _ in range(int(round(duration / TICK))):
-            for name, _detail in recognizer.update(Levels(emg, left, right), now):
+            levels = Levels(emg, left, right, hold, hold)
+            for name, _detail in recognizer.update(levels, now):
                 fired.append(name)
             now += TICK
     return fired
+
+
+# A blink is a swoop (p2p spikes) whose hold level rises with it; a LONG blink is
+# the same swoop followed by the level staying up. These build both from one place
+# so the only difference between the two scripts is how long the level persists.
+def swoop(hold_level=BLINK_HOLD_LEVEL):
+    return (0.15, QUIET_EMG, 120.0, 120.0, hold_level)
+
+
+def held(seconds):
+    return (seconds, QUIET_EMG, QUIET_BLINK, QUIET_BLINK, HELD_HOLD_LEVEL)
+
+
+def quiet(seconds):
+    return (seconds, QUIET_EMG, QUIET_BLINK, QUIET_BLINK, QUIET_HOLD)
 
 
 def check(label, fired, expected):
@@ -152,6 +187,73 @@ def main():
     results.append(check(
         "30 s of rest -> nothing",
         run([(30.0, QUIET_EMG, QUIET_BLINK)]),
+        []))
+
+    # ================= the long blink: the second input =================
+    # The whole reason this gesture exists: a deliberate hold must be
+    # distinguishable from the blinks a person cannot help making.
+
+    # Lid closes and stays down for 750 ms. LONG_BLINK fires once, at the 400 ms
+    # mark, and the swoop that started it must NOT also be reported as a BLINK.
+    results.append(check(
+        "eyes held 750 ms -> LONG_BLINK only",
+        run([quiet(0.5), swoop(), held(0.6), quiet(1.5)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["LONG_BLINK"]))
+
+    # The one that matters most. An ordinary blink's hold level is as high as a
+    # held one's, so if this fired LONG_BLINK the gesture would be unusable --
+    # every involuntary blink would trigger it.
+    results.append(check(
+        "ordinary 150 ms blink -> BLINK, never LONG_BLINK",
+        run([quiet(0.5), swoop(), quiet(1.5)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["BLINK"]))
+
+    # A 2 s hold is still one gesture, not four.
+    results.append(check(
+        "2 s hold -> one LONG_BLINK, not repeats",
+        run([quiet(0.5), swoop(), held(2.0), quiet(1.5)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["LONG_BLINK"]))
+
+    # --- the two inputs must not trigger each other ---
+
+    # A hard clench is EMG on the ear electrodes; it must leave the eyelid
+    # detector alone.
+    results.append(check(
+        "hard clench -> CLENCH, no LONG_BLINK",
+        run([quiet(0.5), (0.3, 80.0, QUIET_BLINK, QUIET_BLINK, QUIET_HOLD),
+             quiet(1.0)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["CLENCH"]))
+
+    # And the reverse: holding the eyes shut must not read as a jaw clench.
+    results.append(check(
+        "long blink -> LONG_BLINK, no CLENCH",
+        run([quiet(0.5), swoop(), held(0.6), quiet(1.5)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["LONG_BLINK"]))
+
+    # Two fast blinks still pair up with the hold detector switched on: adding the
+    # second input must not cost us the first behaviour.
+    results.append(check(
+        "double blink still works alongside the hold detector",
+        run([quiet(0.5), swoop(), quiet(0.3), swoop(), quiet(1.5)],
+            hold_threshold=HOLD_THRESHOLD),
+        ["DOUBLE_BLINK"]))
+
+    # A profile saved before this gesture existed has no hold threshold, and must
+    # keep behaving exactly as it did -- no LONG_BLINK, no crash.
+    results.append(check(
+        "profile without hold calibration -> no LONG_BLINK",
+        run([quiet(0.5), swoop(), held(0.6), quiet(1.5)]),
+        ["BLINK"]))
+
+    # Rest, with everything enabled.
+    results.append(check(
+        "30 s of rest with the hold detector on -> nothing",
+        run([quiet(30.0)], hold_threshold=HOLD_THRESHOLD),
         []))
 
     passed = sum(results)

@@ -104,6 +104,25 @@ RELEASE_FRACTION = 0.6      # hysteresis: must fall to 60% of threshold to relea
 MIN_EVENT_MS = 80           # shorter than this is a twitch, not a deliberate clench
 REFRACTORY_MS = 250         # ignore re-triggers this soon after an event
 
+# --- the long blink: the second input, and why it is measured differently ---
+# A blink is a swoop; a LONG blink is a swoop that stops halfway and stays there.
+# Peak-to-peak cannot see that: once the lid has stopped moving there are no more
+# swings to measure, so a held closure looks like silence to the blink detector.
+# What a held closure IS, electrically, is a sustained offset from baseline -- so
+# the measure is the mean of a short tail, which is ~0 for noise (it averages out)
+# and large while the lid is down.
+#
+# Offline against a simulated eyelid step through a 0.5 Hz front end, that mean
+# reads 56-83 uV at 390-490 ms into a hold, against 0.2 uV at rest. It survives.
+# But a NORMAL blink reads ~66 uV mid-swoop too, so the level alone cannot tell
+# the two apart -- only how long it persists can, which is why this feeds an
+# EdgeDetector with a minimum duration rather than being thresholded on its own.
+LONG_BLINK_BAND = (0.5, 8.0)   # lower than BLINK_BAND: must pass a near-DC offset
+HOLD_TAIL_SECONDS = 0.25       # the offset has to hold for this long to register
+LONG_BLINK_MS = 400            # lid down this long is deliberate, not a reflex
+LONG_BLINK_REFRACTORY_MS = 600 # one hold must not read as several
+HOLD_SIGMA_FLOOR = 5.0         # threshold never sits below rest + 5 sigma
+
 BLINK_P2P_SECONDS = 0.30    # a blink swoop fits comfortably inside 300 ms
 BLINK_COINCIDENCE_MS = 60   # both forehead channels must spike this close together
 BLINK_REFRACTORY_MS = 200   # minimum gap between two counted blinks
@@ -155,8 +174,11 @@ class ConsoleUI:
         """Every detector tick, gesture or not: the live meter."""
         status = (f"  {meter(levels.emg, recognizer.clench.threshold)} emg {levels.emg:6.1f}   "
                   f"{meter(levels.blink, recognizer.blink.threshold)} blink "
-                  f"L{levels.blink_left:5.0f} R{levels.blink_right:5.0f}   "
-                  f"{' '.join(list(recent)[-3:])}")
+                  f"L{levels.blink_left:5.0f} R{levels.blink_right:5.0f}")
+        if recognizer.long_blink is not None:
+            status += (f"   {meter(levels.hold, recognizer.long_blink.threshold)}"
+                       f" hold {levels.hold:5.1f}")
+        status += f"   {' '.join(list(recent)[-3:])}"
         print(CR + status.ljust(LINE_WIDTH), end="", flush=True)
 
     def should_stop(self):
@@ -215,7 +237,22 @@ def peak_to_peak(window, fs, band=BLINK_BAND):
     return float(np.max(segment) - np.min(segment))
 
 
-class Levels(namedtuple("Levels", "emg blink_left blink_right")):
+def deflection(window, fs, band=LONG_BLINK_BAND):
+    """How far off baseline this channel is sitting RIGHT NOW, in uV.
+
+    The mean of a short tail, which is the one measure that distinguishes "the
+    lid is down and staying down" from every fast event: noise and swoops average
+    towards zero over 250 ms, a sustained offset does not. Absolute value because
+    which way the eye dipole swings depends on which electrode, and we only care
+    how far, not which way.
+    """
+    segment = _tail(_filtered(window, fs, band, notch=False), fs, HOLD_TAIL_SECONDS)
+    if segment.size == 0:
+        return 0.0
+    return float(abs(np.mean(segment)))
+
+
+class Levels(namedtuple("Levels", "emg blink_left blink_right hold_left hold_right")):
     """One tick of measurements: clench loudness, and both forehead channels.
 
     Both forehead channels are kept separate on purpose. A real blink moves both
@@ -228,6 +265,19 @@ class Levels(namedtuple("Levels", "emg blink_left blink_right")):
     def blink(self):
         """The conservative blink size: whichever forehead channel saw less."""
         return min(self.blink_left, self.blink_right)
+
+    @property
+    def hold(self):
+        """The conservative eyelid-hold level: whichever forehead channel saw less.
+
+        Same agreement logic as `blink`, for the same reason: both lids move
+        together, so demanding that the quieter channel also sees the offset
+        throws out a single drifting electrode for free.
+        """
+        return min(self.hold_left, self.hold_right)
+
+
+Levels.__new__.__defaults__ = (0.0, 0.0)   # hold_left, hold_right
 
 
 def read_levels(board, rows, fs, window_samples):
@@ -242,7 +292,8 @@ def read_levels(board, rows, fs, window_samples):
         return None
     emg = max(envelope(data[r], fs) for r in rows["emg"])
     left, right = (peak_to_peak(data[r], fs) for r in rows["blink"])
-    return Levels(emg, left, right)
+    hold_left, hold_right = (deflection(data[r], fs) for r in rows["blink"])
+    return Levels(emg, left, right, hold_left, hold_right)
 
 
 # =================================================================== calibration
@@ -303,6 +354,34 @@ def blink_sizes(samples, provisional_threshold):
     return sizes
 
 
+def hold_runs(samples, threshold):
+    """Every stretch where BOTH lids stayed offset, as (peak uV, duration ms).
+
+    The duration is the point of this one. A long blink is defined by how long the
+    lid stays down, so calibration has to measure whether the person can actually
+    hold one past LONG_BLINK_MS -- a threshold they can cross but not hold is
+    useless, and that is invisible if you only record how high the level got.
+    """
+    runs = []
+    start = None
+    peak = 0.0
+    previous = None
+    for now, levels in samples:
+        both_down = (levels.hold_left > threshold and levels.hold_right > threshold)
+        if both_down:
+            if start is None:
+                start = now
+                peak = 0.0
+            peak = max(peak, levels.hold)
+        elif start is not None:
+            runs.append((peak, (previous - start) * 1000.0))
+            start = None
+        previous = now
+    if start is not None and previous is not None:
+        runs.append((peak, (previous - start) * 1000.0))
+    return runs
+
+
 def robust_baseline(values):
     """Median and MAD-based sigma. Median/MAD ignore the odd stray spike; mean/std
     would be dragged upward by an accidental swallow or twitch during calibration."""
@@ -339,6 +418,9 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         [max(lv.blink_left, lv.blink_right) for _t, lv in rest])
     left_rest = float(np.median([lv.blink_left for _t, lv in rest])) if rest else 0.0
     right_rest = float(np.median([lv.blink_right for _t, lv in rest])) if rest else 0.0
+    # The eyelid-hold floor, from the same resting stretch: no extra sitting still.
+    hold_rest, hold_sigma = robust_baseline(
+        [max(lv.hold_left, lv.hold_right) for _t, lv in rest])
 
     ui.log(f"   rest:  clench {emg_rest:.1f} +/- {emg_sigma:.1f} uV")
     ui.log(f"          forehead peak-to-peak  AF7 {left_rest:.0f}  AF8 {right_rest:.0f} uV")
@@ -353,8 +435,11 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     emg_threshold = emg_rest + args.k * emg_sigma
     blink_floor = blink_rest + BLINK_SIGMA_FLOOR * blink_sigma
     blink_threshold = blink_floor
-    emg_peak = blink_peak = None
-    emg_trials, blink_trials = [], []
+    hold_floor = hold_rest + HOLD_SIGMA_FLOOR * hold_sigma
+    hold_threshold = None          # stays None if the long-blink phase is skipped
+    emg_peak = blink_peak = hold_peak = None
+    emg_trials, blink_trials, hold_trials = [], [], []
+    hold_durations = []
     separation = None
 
     # --blink-only: keep the clench numbers from the saved profile and redo just
@@ -427,6 +512,42 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
             ui.log("      blink threshold this way. Using the statistical floor, which")
             ui.log("      is far less reliable. Check forehead contact and redo.")
 
+        # ---------------- long blink (the second input) ----------------
+        ui.log("")
+        ui.log("4) LONG BLINK: close your eyes and HOLD them shut for a full second,")
+        ui.log("   three times. Not a hard squeeze -- just closed and still.")
+        for rep in range(1, 4):
+            ui.wait(f"   Press Enter, then close and hold  (rep {rep}/3)...")
+            samples = collect(board, rows, fs, window_samples, 2.0,
+                              f"holding {rep}", ui)
+            runs = hold_runs(samples, hold_floor)
+            if runs:
+                # The longest run is the deliberate hold; shorter ones are the
+                # ordinary blinks either side of it.
+                peak, duration = max(runs, key=lambda run: run[1])
+                hold_trials.append(peak)
+                hold_durations.append(duration)
+                ui.log(f"   level {peak:.0f} uV, held {duration:.0f} ms")
+            else:
+                ui.log("   !! no hold detected in that rep.")
+
+        if len(hold_trials) >= 2:
+            hold_peak = float(min(hold_trials))    # the weakest hold, on purpose
+            hold_threshold = hold_floor + 0.5 * (hold_peak - hold_floor)
+            shortest = min(hold_durations)
+            ui.log(f"   weakest hold {hold_peak:.0f} uV vs floor {hold_floor:.0f} uV")
+            if shortest < LONG_BLINK_MS:
+                ui.log(f"   !! shortest hold was {shortest:.0f} ms, under the "
+                       f"{LONG_BLINK_MS} ms LONG_BLINK needs.")
+                ui.log("      Hold longer, or lower --long-blink-ms. As it stands")
+                ui.log("      some of your holds will not register.")
+            else:
+                ui.log(f"   shortest hold {shortest:.0f} ms, comfortably past "
+                       f"{LONG_BLINK_MS} ms")
+        else:
+            ui.log("   !! not enough holds detected -- LONG_BLINK stays off for this")
+            ui.log("      profile. Check forehead contact and redo.")
+
     calibration = {
         "board": board_label(board),
         "fs": fs,
@@ -440,6 +561,11 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         "blink_trials": blink_trials,
         "blink_separation": separation,
         "blink_rest_left": left_rest, "blink_rest_right": right_rest,
+        "hold_rest": hold_rest, "hold_sigma": hold_sigma,
+        "hold_floor": hold_floor,
+        "hold_peak": hold_peak, "hold_threshold": hold_threshold,
+        "hold_trials": hold_trials, "hold_durations_ms": hold_durations,
+        "long_blink_ms": LONG_BLINK_MS,
         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     path = calibration_file(board, getattr(args, "profile", "default"))
@@ -470,6 +596,16 @@ def describe(calibration, ui=None):
         verdict = "good" if separation >= 3 else ("usable" if separation >= 2 else "WEAK")
         ui.log(f"  blink separation       {separation:.1f}x above the noise floor "
                f"({verdict})")
+    hold_threshold = calibration.get("hold_threshold")
+    if hold_threshold:
+        held = calibration.get("hold_durations_ms") or []
+        margin = (f", you held {min(held):.0f}-{max(held):.0f} ms" if held else "")
+        ui.log(f"  {'long blink (hold)':<22} rest "
+               f"{calibration.get('hold_rest', 0.0):6.1f} -> fires at "
+               f"{hold_threshold:6.1f} uV after "
+               f"{calibration.get('long_blink_ms', LONG_BLINK_MS)} ms{margin}")
+    else:
+        ui.log("  long blink (hold)      not calibrated -- LONG_BLINK will not fire")
 
 
 # ==================================================================== detection
@@ -578,10 +714,17 @@ class GestureRecognizer:
     """
 
     def __init__(self, emg_threshold, blink_threshold, long_ms=1500, double_ms=700,
-                 emit_start=False):
+                 emit_start=False, hold_threshold=None, long_blink_ms=LONG_BLINK_MS):
         self.clench = EdgeDetector(emg_threshold, MIN_EVENT_MS, REFRACTORY_MS)
         self.blink = BlinkDetector(blink_threshold)
+        # The eyelid hold reuses EdgeDetector unchanged: "level stays up for N ms"
+        # is exactly what it already does for the held clench. hold_threshold is
+        # optional so a profile calibrated before this gesture existed still
+        # loads -- it just cannot fire LONG_BLINK.
+        self.long_blink = (EdgeDetector(hold_threshold, 0, LONG_BLINK_REFRACTORY_MS)
+                           if hold_threshold else None)
         self.long_ms = long_ms
+        self.long_blink_ms = long_blink_ms
         self.double_ms = double_ms
         # emit_start: fire CLENCH_START the instant the envelope crosses the
         # threshold, instead of waiting for the release. Anything interactive --
@@ -589,9 +732,14 @@ class GestureRecognizer:
         # whole length of the clench to the latency, which reads as "one cell late".
         self.emit_start = emit_start
         self.long_fired = False      # one held clench emits LONG_CLENCH only once
+        self.long_blink_fired = False # likewise for one held blink
+        # A long blink STARTS with an ordinary blink swoop, so the p2p detector
+        # sees it and would report BLINK on top of LONG_BLINK. Once the hold has
+        # fired, eye events are swallowed until the lid comes back up.
+        self.swallow_blinks = False
         self.pending_blink = None    # a blink waiting to see if a second follows
         self.counts = {"CLENCH": 0, "CLENCH_START": 0, "LONG_CLENCH": 0,
-                       "BLINK": 0, "DOUBLE_BLINK": 0}
+                       "BLINK": 0, "DOUBLE_BLINK": 0, "LONG_BLINK": 0}
 
     def update(self, levels, now):
         """Feed one Levels tick. Returns a list of (NAME, detail) fired on it."""
@@ -612,6 +760,25 @@ class GestureRecognizer:
             events.append(("LONG_CLENCH", f"held {self.long_ms} ms   -- HELP"))
             self.long_fired = True
 
+        # --- eyelid hold: the second input ---
+        # Fired while the lid is still down, not on reopen. Waiting for the eyes
+        # to open would add the whole hold to the latency, which is the same
+        # mistake waiting for a clench to release makes.
+        if self.long_blink is not None:
+            edge = self.long_blink.update(levels.hold, now)
+            if edge and edge[0] == "rise":
+                self.long_blink_fired = False
+            elif edge and edge[0] == "fall":
+                self.swallow_blinks = False
+            if (self.long_blink.active and not self.long_blink_fired
+                    and self.long_blink.held_ms(now) >= self.long_blink_ms):
+                events.append(("LONG_BLINK",
+                               f"held {self.long_blink_ms} ms   level "
+                               f"{levels.hold:5.1f} uV"))
+                self.long_blink_fired = True
+                self.swallow_blinks = True
+                self.pending_blink = None
+
         # --- eyes ---
         # A blink only exists if both forehead channels agreed; `coincidence` is
         # how far apart they were, which is worth showing while tuning.
@@ -619,14 +786,21 @@ class GestureRecognizer:
         if coincidence is not None:
             gap_ms = (now - self.pending_blink) * 1000 if self.pending_blink else None
             if gap_ms is not None and gap_ms <= self.double_ms:
-                events.append(("DOUBLE_BLINK", f"gap {gap_ms:4.0f} ms  -- BACK"))
+                if not self.swallow_blinks:
+                    events.append(("DOUBLE_BLINK", f"gap {gap_ms:4.0f} ms  -- BACK"))
                 self.pending_blink = None
             else:
                 self.pending_blink = now
-        # A lone blink only becomes a BLINK once its partner window has expired.
+        # A lone blink only becomes a BLINK once its partner window has expired
+        # AND the eye has actually reopened. While the lid is still down this is
+        # not yet a short blink -- it may be a long one in progress, and the hold
+        # level lags the swoop that started it.
+        lid_still_down = self.long_blink is not None and self.long_blink.active
         if (self.pending_blink is not None
-                and (now - self.pending_blink) * 1000 > self.double_ms):
-            events.append(("BLINK", ""))
+                and (now - self.pending_blink) * 1000 > self.double_ms
+                and not lid_still_down):
+            if not self.swallow_blinks:
+                events.append(("BLINK", ""))
             self.pending_blink = None
 
         for name, _ in events:
@@ -637,14 +811,23 @@ class GestureRecognizer:
 def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None):
     """The input loop: read envelopes, recognise gestures, report them."""
     ui = ui or ConsoleUI()
+    hold_threshold = calibration.get("hold_threshold")
     recognizer = GestureRecognizer(calibration["emg_threshold"],
                                    calibration["blink_threshold"],
-                                   args.long_ms, args.double_ms)
+                                   args.long_ms, args.double_ms,
+                                   hold_threshold=hold_threshold,
+                                   long_blink_ms=getattr(args, "long_blink_ms",
+                                                         LONG_BLINK_MS))
     recent = deque(maxlen=6)
 
     ui.log("")
     ui.log("--- LISTENING ---  clench = CLENCH, hold = LONG_CLENCH, "
            "two blinks = DOUBLE_BLINK.   Ctrl-C to stop.")
+    if hold_threshold:
+        ui.log("                   eyes closed and held = LONG_BLINK.")
+    else:
+        ui.log("                   (LONG_BLINK is off: this profile has no hold "
+               "calibration -- recalibrate to enable it.)")
     ui.log("")
     started = time.monotonic()
 
@@ -694,6 +877,10 @@ def main():
                         help="hold this long for LONG_CLENCH (default 1500)")
     parser.add_argument("--double-ms", type=int, default=700,
                         help="two blinks within this gap are a DOUBLE_BLINK (default 700)")
+    parser.add_argument("--long-blink-ms", type=int, default=LONG_BLINK_MS,
+                        help=f"hold your eyes shut this long for LONG_BLINK "
+                             f"(default {LONG_BLINK_MS}). Lower it if your holds "
+                             f"are not registering, raise it if ordinary blinks are.")
     args = parser.parse_args()
 
     board = get_board(args)
