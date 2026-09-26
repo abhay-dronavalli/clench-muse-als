@@ -27,3 +27,6 @@ data/recordings/*.csv
 .idea/
 .DS_Store
 Thumbs.db
+
+# Browser test artifacts
+.playwright-mcp/
