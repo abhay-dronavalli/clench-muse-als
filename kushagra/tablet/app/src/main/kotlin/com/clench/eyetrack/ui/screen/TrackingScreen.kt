@@ -1,10 +1,14 @@
 package com.clench.eyetrack.ui.screen
 
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,8 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -25,32 +28,21 @@ import com.clench.eyetrack.ui.component.DebugPanel
 import com.clench.eyetrack.ui.component.GazeDot
 import com.clench.eyetrack.ui.component.HeadGuideOverlay
 
-/**
- * Main tracking screen.
- *
- * Layers (bottom to top):
- * 1. Six test tiles (full screen)
- * 2. Gaze dot
- * 3. Head drift warning banner
- * 4. Camera preview with head guide overlay (bottom-right)
- * 5. Debug panel (bottom-left)
- * 6. Calibration overlay (when active)
- */
 @Composable
 fun TrackingScreen(viewModel: EyeTrackViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val density = LocalDensity.current
 
     val gazeState by viewModel.gazeState.collectAsState()
     val calStep by viewModel.calibrationStep.collectAsState()
     val calResult by viewModel.calibrationResult.collectAsState()
+    val calAccuracy by viewModel.calibrationAccuracy.collectAsState()
+    val highlightedTile by viewModel.highlightedTile.collectAsState()
+    val fps by viewModel.fps.collectAsState()
 
-    // Camera manager
     val cameraManager = remember { CameraManager(context) }
     DisposableEffect(Unit) { onDispose { cameraManager.shutdown() } }
 
-    // Track screen size
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -60,10 +52,10 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
                 viewModel.screenHeight = coords.size.height.toFloat()
             },
     ) {
-        // Layer 1: Test tile grid
-        TileGrid()
+        // Layer 1: Tile grid with gaze highlighting
+        TileGrid(highlightedTile = highlightedTile)
 
-        // Layer 2: Gaze dot
+        // Layer 2: Gaze dot (smooth)
         gazeState?.screen?.let { screen ->
             GazeDot(x = screen.x, y = screen.y)
         }
@@ -78,7 +70,6 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
                 if (kotlin.math.abs(drift.deltaRoll) > 3f) add(if (drift.deltaRoll > 0) "untilt right" else "untilt left")
             }
             val prefix = if (drift.level == DriftLevel.WARNING) "Move head: " else "Slight drift: "
-
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -95,7 +86,7 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
-                .size(320.dp, 240.dp),
+                .size(280.dp, 210.dp),
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -107,18 +98,10 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-
-            // Head guide overlay on top of camera preview
             calResult?.let { cal ->
-                val currentSnapshot = gazeState?.let { state ->
-                    // Build a FacePoseSnapshot from current landmarks
-                    // This is approximate — uses the gaze state's head pose to infer position
-                    // In a real impl, we'd pass the snapshot through the state flow
-                    null // The HeadGuideOverlay handles null gracefully
-                }
                 HeadGuideOverlay(
                     calibration = cal,
-                    currentFace = currentSnapshot,
+                    currentFace = null,
                     drift = gazeState?.headDrift ?: com.clench.eyetrack.model.HeadDrift.NONE,
                 )
             }
@@ -127,12 +110,14 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
         // Layer 5: Debug panel
         DebugPanel(
             state = gazeState,
+            fps = fps,
+            accuracy = calAccuracy,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
         )
 
-        // Status + calibrate button
+        // Status bar + calibrate button
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -143,14 +128,25 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val statusText = when {
-                calResult != null -> "Tracking (calibrated)"
+                calResult != null -> {
+                    val accStr = calAccuracy?.let { "  •  Error: %.0fpx (%.1f%%)".format(it.meanErrorPx, it.meanErrorPct) } ?: ""
+                    "Tracking$accStr"
+                }
                 calStep == CalibrationStep.IN_PROGRESS -> "Calibrating..."
-                else -> "Click Calibrate to start"
+                else -> "Tap Calibrate to start"
             }
-            Text(statusText, color = Color(0xFF3B82F6), fontSize = 13.sp)
+            val statusColor = when {
+                calResult != null -> Color(0xFF22C55E)
+                calStep == CalibrationStep.IN_PROGRESS -> Color(0xFFFACC15)
+                else -> Color(0xFF3B82F6)
+            }
+            Text(statusText, color = statusColor, fontSize = 13.sp)
 
-            Button(onClick = { viewModel.startCalibration() }) {
-                Text("Calibrate")
+            Button(
+                onClick = { viewModel.startCalibration() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+            ) {
+                Text(if (calResult != null) "Recalibrate" else "Calibrate")
             }
         }
 
@@ -158,15 +154,19 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
         if (calStep == CalibrationStep.IN_PROGRESS) {
             CalibrationOverlay(
                 manager = viewModel.calibrationManager,
-                onDotTap = { viewModel.recordCalibrationPointWithSnapshot() },
+                onDotTap = { viewModel.recordCalibrationDot() },
             )
         }
     }
 }
 
 @Composable
-private fun TileGrid() {
+private fun TileGrid(highlightedTile: Int) {
     val tiles = listOf("I need", "People", "How I feel", "Room", "Suggested", "Other...")
+    val tileColors = listOf(
+        Color(0xFF1E3A5F), Color(0xFF2D1B4E), Color(0xFF1B4332),
+        Color(0xFF3D2C1E), Color(0xFF1A1A3E), Color(0xFF2C2C2C),
+    )
 
     Column(Modifier.fillMaxSize().padding(4.dp)) {
         for (row in 0..1) {
@@ -176,15 +176,33 @@ private fun TileGrid() {
             ) {
                 for (col in 0..2) {
                     val idx = row * 3 + col
+                    val isHighlighted = idx == highlightedTile
+
+                    val bgColor by animateColorAsState(
+                        targetValue = if (isHighlighted) tileColors[idx].copy(alpha = 0.9f) else tileColors[idx].copy(alpha = 0.5f),
+                        animationSpec = spring(stiffness = 300f),
+                        label = "tileBg$idx",
+                    )
+                    val borderColor by animateColorAsState(
+                        targetValue = if (isHighlighted) Color(0xFF3B82F6) else Color.Transparent,
+                        animationSpec = spring(stiffness = 300f),
+                        label = "tileBorder$idx",
+                    )
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                             .padding(2.dp)
-                            .background(Color(0xFF1A1A2E), RoundedCornerShape(16.dp)),
+                            .background(bgColor, RoundedCornerShape(16.dp))
+                            .border(3.dp, borderColor, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(tiles[idx], color = Color(0xFFE5E5E5), fontSize = 22.sp)
+                        Text(
+                            tiles[idx],
+                            color = if (isHighlighted) Color.White else Color(0xFFAAAAAA),
+                            fontSize = if (isHighlighted) 26.sp else 22.sp,
+                        )
                     }
                 }
             }

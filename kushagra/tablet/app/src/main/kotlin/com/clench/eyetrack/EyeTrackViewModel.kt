@@ -10,26 +10,16 @@ import com.google.mediapipe.framework.image.MPImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.sqrt
 
-/**
- * Central ViewModel that owns all tracking state.
- *
- * The camera feeds frames here via [onFrame]. The UI observes [gazeState]
- * and [calibrationStep] to draw the gaze dot, head guide, and calibration overlay.
- */
 class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
 
-    // --- MediaPipe ---
     private val landmarkerHelper = FaceLandmarkerHelper(app)
-
-    // --- Smoothing ---
     private val sgH = SavGolFilter(windowSize = 15, polyOrder = 3)
     private val sgV = SavGolFilter(windowSize = 15, polyOrder = 3)
-
-    // --- Calibration ---
     val calibrationManager = CalibrationManager()
 
-    // --- State flows for the UI ---
+    // --- UI state flows ---
     private val _gazeState = MutableStateFlow<GazeState?>(null)
     val gazeState: StateFlow<GazeState?> = _gazeState.asStateFlow()
 
@@ -39,80 +29,28 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
     private val _calibrationResult = MutableStateFlow<CalibrationResult?>(null)
     val calibrationResult: StateFlow<CalibrationResult?> = _calibrationResult.asStateFlow()
 
-    // Screen dimensions (set by the UI layer)
+    private val _calibrationAccuracy = MutableStateFlow<CalibrationAccuracy?>(null)
+    val calibrationAccuracy: StateFlow<CalibrationAccuracy?> = _calibrationAccuracy.asStateFlow()
+
+    // Tile highlighting
+    private val _highlightedTile = MutableStateFlow(-1)
+    val highlightedTile: StateFlow<Int> = _highlightedTile.asStateFlow()
+
+    // FPS tracking
+    private val _fps = MutableStateFlow(0)
+    val fps: StateFlow<Int> = _fps.asStateFlow()
+
     var screenWidth: Float = 1f
     var screenHeight: Float = 1f
 
-    /** Called for every camera frame. Runs detection + gaze math. */
-    fun onFrame(image: MPImage, timestampMs: Long) {
-        val result = landmarkerHelper.detect(image, timestampMs) ?: return
+    // FPS counter
+    private var frameCount = 0
+    private var lastFpsTime = System.currentTimeMillis()
 
-        // Iris gaze ratios
-        val ratios = IrisGazeEstimator.estimate(result) ?: return
+    // Latest landmarker result for face snapshots
+    private var latestLandmarkerResult:
+        com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult? = null
 
-        // Smooth
-        sgH.push(ratios.avgH)
-        sgV.push(ratios.avgV)
-        val smoothH = sgH.get()
-        val smoothV = sgV.get()
-
-        // Head pose
-        val headPose = HeadPoseEstimator.estimate(result) ?: HeadPose(0f, 0f, 0f)
-
-        // Drift check
-        val calResult = calibrationManager.result
-        val drift = if (calResult != null) {
-            HeadPoseGuard.check(headPose, calResult.headPose)
-        } else {
-            HeadDrift.NONE
-        }
-
-        // Map to screen
-        val screen = calResult?.let {
-            GazeMapper.map(smoothH, smoothV, it.coeffs, screenWidth, screenHeight)
-        }
-
-        _gazeState.value = GazeState(ratios, smoothH, smoothV, screen, headPose, drift)
-    }
-
-    /** Start or restart calibration. */
-    fun startCalibration() {
-        calibrationManager.reset()
-        sgH.reset()
-        sgV.reset()
-        _calibrationStep.value = CalibrationStep.IN_PROGRESS
-        _calibrationResult.value = null
-    }
-
-    /** Record the current gaze at the active calibration dot. */
-    fun recordCalibrationPoint() {
-        val state = _gazeState.value ?: return
-        val snapshot = _gazeState.value?.let {
-            // We need the latest FaceLandmarkerResult for the snapshot,
-            // but we already extracted it into the gaze state. Build from current ratios.
-            null // Will be filled by the overload below
-        }
-        recordCalibrationPoint(state.smoothH, state.smoothV, state.headPose, null)
-    }
-
-    /** Record with explicit face snapshot (called from onFrame context if needed). */
-    fun recordCalibrationPoint(
-        smoothH: Float,
-        smoothV: Float,
-        headPose: HeadPose?,
-        faceSnapshot: FacePoseSnapshot?,
-    ) {
-        val done = calibrationManager.recordPoint(smoothH, smoothV, headPose, faceSnapshot)
-        if (done) {
-            _calibrationStep.value = CalibrationStep.DONE
-            _calibrationResult.value = calibrationManager.result
-        }
-    }
-
-    // Keep the latest FaceLandmarkerResult so we can grab a face snapshot on cal click
-    private var latestLandmarkerResult: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult? = null
-
-    /** Full frame processing that also stores the result for snapshot access. */
     fun onFrameFull(image: MPImage, timestampMs: Long) {
         val result = landmarkerHelper.detect(image, timestampMs) ?: return
         latestLandmarkerResult = result
@@ -122,22 +60,88 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
         sgV.push(ratios.avgV)
         val smoothH = sgH.get()
         val smoothV = sgV.get()
+
         val headPose = HeadPoseEstimator.estimate(result) ?: HeadPose(0f, 0f, 0f)
+
         val calResult = calibrationManager.result
-        val drift = if (calResult != null) HeadPoseGuard.check(headPose, calResult.headPose) else HeadDrift.NONE
-        val screen = calResult?.let { GazeMapper.map(smoothH, smoothV, it.coeffs, screenWidth, screenHeight) }
+        val drift = if (calResult != null) {
+            HeadPoseGuard.check(headPose, calResult.headPose)
+        } else {
+            HeadDrift.NONE
+        }
+
+        val screen = calResult?.let {
+            GazeMapper.map(smoothH, smoothV, it.coeffs, screenWidth, screenHeight)
+        }
+
         _gazeState.value = GazeState(ratios, smoothH, smoothV, screen, headPose, drift)
+
+        // Update tile highlighting
+        if (screen != null && _calibrationStep.value == CalibrationStep.DONE) {
+            val col = ((screen.x / screenWidth) * 3).toInt().coerceIn(0, 2)
+            val row = ((screen.y / screenHeight) * 2).toInt().coerceIn(0, 1)
+            _highlightedTile.value = row * 3 + col
+        } else {
+            _highlightedTile.value = -1
+        }
+
+        // FPS
+        frameCount++
+        val now = System.currentTimeMillis()
+        if (now - lastFpsTime >= 1000) {
+            _fps.value = frameCount
+            frameCount = 0
+            lastFpsTime = now
+        }
     }
 
-    /** Record calibration point using the latest stored landmarks for the face snapshot. */
-    fun recordCalibrationPointWithSnapshot() {
+    fun startCalibration() {
+        calibrationManager.reset()
+        sgH.reset()
+        sgV.reset()
+        _calibrationStep.value = CalibrationStep.IN_PROGRESS
+        _calibrationResult.value = null
+        _calibrationAccuracy.value = null
+        _highlightedTile.value = -1
+    }
+
+    /** Tap a dot to instantly record the current smoothed gaze (matches index.html). */
+    fun recordCalibrationDot() {
         val state = _gazeState.value ?: return
         val snapshot = latestLandmarkerResult?.let { IrisGazeEstimator.snapshot(it) }
+
         val done = calibrationManager.recordPoint(state.smoothH, state.smoothV, state.headPose, snapshot)
+
         if (done) {
             _calibrationStep.value = CalibrationStep.DONE
             _calibrationResult.value = calibrationManager.result
+            computeAccuracy()
         }
+    }
+
+    private fun computeAccuracy() {
+        val result = calibrationManager.result ?: return
+        val samples = calibrationManager.samples
+        if (samples.isEmpty()) return
+
+        var totalErr = 0f
+        var maxErr = 0f
+        for (s in samples) {
+            val mappedX = (result.coeffs.ax * s.gazeH + result.coeffs.bx).coerceIn(0f, 1f)
+            val mappedY = (result.coeffs.ay * s.gazeV + result.coeffs.by).coerceIn(0f, 1f)
+            val dx = (mappedX - s.screenX) * screenWidth
+            val dy = (mappedY - s.screenY) * screenHeight
+            val err = sqrt(dx * dx + dy * dy)
+            totalErr += err
+            if (err > maxErr) maxErr = err
+        }
+        val meanPx = totalErr / samples.size
+        val diag = sqrt(screenWidth * screenWidth + screenHeight * screenHeight)
+        _calibrationAccuracy.value = CalibrationAccuracy(
+            meanErrorPx = meanPx,
+            maxErrorPx = maxErr,
+            meanErrorPct = (meanPx / diag) * 100f,
+        )
     }
 
     override fun onCleared() {

@@ -16,93 +16,80 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clench.eyetrack.calibration.CalibrationManager
 
-/**
- * Full-screen overlay showing the 9 calibration dots.
- *
- * The active dot pulses yellow. Completed dots turn green and dim.
- * The user looks at the yellow dot and taps it to record a sample.
- */
 @Composable
 fun CalibrationOverlay(
     manager: CalibrationManager,
-    onDotTap: (index: Int) -> Unit,
+    onDotTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xEB000000)),
     ) {
-        // Calibration dots
+        val parentWidth = maxWidth
+        val parentHeight = maxHeight
+        val dotSize = 48.dp
+        val tapTarget = 72.dp
+
         manager.dotPositions.forEachIndexed { index, (fx, fy) ->
             val isDone = index < manager.currentIndex
             val isActive = index == manager.currentIndex
 
-            CalibrationDot(
-                x = fx,
-                y = fy,
-                isActive = isActive,
-                isDone = isDone,
-                onClick = { if (isActive) onDotTap(index) },
-            )
+            val color = when {
+                isDone -> Color(0xFF22C55E)
+                isActive -> Color(0xFFFACC15)
+                else -> Color(0x66888888)
+            }
+
+            val scale by if (isActive) {
+                rememberInfiniteTransition(label = "pulse$index").animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.2f,
+                    animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+                    label = "dotScale$index",
+                )
+            } else {
+                androidx.compose.runtime.rememberUpdatedState(1f)
+            }
+
+            val offsetX = parentWidth * fx - tapTarget / 2
+            val offsetY = parentHeight * fy - tapTarget / 2
+
+            Box(
+                modifier = Modifier
+                    .offset(x = offsetX, y = offsetY)
+                    .size(tapTarget)
+                    .clickable(enabled = isActive) { onDotTap() },
+                contentAlignment = Alignment.Center,
+            ) {
+                // Dot
+                Box(
+                    modifier = Modifier
+                        .size(if (isDone) 24.dp else dotSize * scale)
+                        .background(color, CircleShape)
+                        .then(
+                            if (isActive)
+                                Modifier.border(2.dp, Color.White, CircleShape)
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isDone) {
+                        Text("✓", color = Color.White, fontSize = 14.sp)
+                    }
+                }
+            }
         }
 
         // Instructions
         Text(
             text = "Look at the yellow dot and tap it (${manager.currentIndex + 1}/9)",
             color = Color(0xFFCCCCCC),
-            fontSize = 16.sp,
+            fontSize = 18.sp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp),
         )
     }
-}
-
-@Composable
-private fun CalibrationDot(
-    x: Float,
-    y: Float,
-    isActive: Boolean,
-    isDone: Boolean,
-    onClick: () -> Unit,
-) {
-    val color = when {
-        isDone -> Color(0x6622C55E)
-        isActive -> Color(0xFFFACC15)
-        else -> Color(0xFFEF4444)
-    }
-
-    val scale by if (isActive) {
-        rememberInfiniteTransition(label = "pulse").animateFloat(
-            initialValue = 1f,
-            targetValue = 1.3f,
-            animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
-            label = "dotScale",
-        )
-    } else {
-        rememberUpdatedState(1f)
-    }
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val dotSize = 32.dp
-        val offsetX = maxWidth * x - dotSize / 2
-        val offsetY = maxHeight * y - dotSize / 2
-
-        Box(
-            modifier = Modifier
-                .offset(x = offsetX, y = offsetY)
-                .size(dotSize * scale)
-                .background(color, CircleShape)
-                .then(
-                    if (isActive) Modifier.border(2.dp, Color.White, CircleShape) else Modifier
-                )
-                .clickable(enabled = isActive, onClick = onClick),
-        )
-    }
-}
-
-@Composable
-private fun <T> rememberUpdatedState(value: T): State<T> {
-    return androidx.compose.runtime.rememberUpdatedState(value)
 }
