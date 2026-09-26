@@ -21,7 +21,8 @@ import { CameraPreview } from './CameraPreview'
  * LONG_CLENCH events the Sensor Service will send, on /ws/input, so the Core cannot tell them apart.
  *
  *   Space            CLENCH (strength 1.0)
- *   hold Space 1.5 s LONG_CLENCH instead of CLENCH (sent the moment 1.5 s is reached)
+ *   hold Space       LONG_CLENCH instead of CLENCH, sent the moment `long_clench_ms` is reached
+ *                    (from the Core's SETTINGS, the profile's 2.5 s by default)
  *   B                DOUBLE_BLINK
  *   `                expand / collapse this panel
  *
@@ -39,7 +40,7 @@ import { CameraPreview } from './CameraPreview'
  * preview with the head's yaw and pitch, "Calibrate head range" and the cursor dot toggle.
  */
 
-const LONG_CLENCH_S = 1.5
+const DEFAULT_LONG_CLENCH_MS = 2500 // until the Core's SETTINGS says otherwise
 const MAX_LOG = 10
 const MODE_LABEL: Record<PointingMode, string> = { auto: 'Auto', scan: 'Scan', webcam: 'Webcam', headtilt: 'Head tilt' }
 
@@ -108,6 +109,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const [lang, setLang] = useState<Lang | null>(null)
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [learning, setLearning] = useState<boolean | null>(null)
+  const [longClenchMs, setLongClenchMs] = useState(DEFAULT_LONG_CLENCH_MS)
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [shortcut, setShortcut] = useState<ShortcutDebug | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
@@ -130,6 +132,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       if (msg.lang) setLang(msg.lang)
       if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
       if (msg.learning !== undefined) setLearning(msg.learning)
+      if (msg.long_clench_ms !== undefined) setLongClenchMs(msg.long_clench_ms)
     },
   })
   const known = pointingMode !== null && scanMs !== null
@@ -149,8 +152,8 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const doubleBlink = useCallback(() => emit({ type: 'DOUBLE_BLINK', t: now() }), [emit])
   const reset = () => emit({ type: 'RESET' })
   const longClench = useCallback(
-    () => emit({ type: 'LONG_CLENCH', t: now(), duration: LONG_CLENCH_S }),
-    [emit],
+    () => emit({ type: 'LONG_CLENCH', t: now(), duration: longClenchMs / 1000 }),
+    [emit, longClenchMs],
   )
 
   // Keyboard: Space / B / backtick.
@@ -175,7 +178,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         longTimer = window.setTimeout(() => {
           longSent = true
           longClench()
-        }, LONG_CLENCH_S * 1000)
+        }, longClenchMs)
       } else if (e.code === 'KeyB') {
         if (!e.repeat) doubleBlink()
       } else if (e.code === 'Backquote') {
@@ -199,7 +202,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       window.removeEventListener('blur', onBlur)
       window.clearTimeout(longTimer)
     }
-  }, [clench, doubleBlink, longClench])
+  }, [clench, doubleBlink, longClench, longClenchMs])
 
   // Every change keeps the other values as the Core last reported them. The Core answers with
   // SETTINGS, which is what the controls then show.
@@ -283,7 +286,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       </header>
 
       <p className="mb-3 text-xs text-zinc-400">
-        Space = clench · hold Space {LONG_CLENCH_S} s = long clench · B = double blink
+        Space = clench · hold Space {longClenchMs / 1000} s = long clench · B = double blink
       </p>
 
       <div className="mb-3 grid grid-cols-3 gap-2">

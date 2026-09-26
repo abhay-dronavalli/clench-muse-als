@@ -133,11 +133,14 @@ def test_settings_are_announced_on_connect_and_after_every_change():
             client.websocket_connect("/ws/console") as console,
             client.websocket_connect("/ws/input") as inp,
         ):
-            current = {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True, "learning": True}
+            current = {
+                "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True,
+                "learning": True, "long_clench_ms": 2500,
+            }
             for ws in (board, console, inp):
                 assert ws.receive_json() == current
             inp.send_json({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "speak_picks": False})
-            changed = {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "lang": "en", "speak_picks": False, "learning": True}
+            changed = {**current, "pointing_mode": "scan", "scan_ms": 700, "speak_picks": False}
             for ws in (board, console, inp):  # the sender too, so every dev panel shows the truth
                 assert ws.receive_json() == changed
 

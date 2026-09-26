@@ -89,7 +89,9 @@ Other > Other goes back to Home. Single blinks are never sent (PRD D4).
 
 ### LONG_CLENCH
 
-Clench held about 1.5 s: start the 5 second help alert countdown, which a DOUBLE_BLINK cancels.
+Clench held `long_clench_ms` (2.5 s by default, `data/profile.yaml`, announced in SETTINGS): start
+the 5 second help alert countdown, which a DOUBLE_BLINK cancels. The dev panel's hold-Space uses the
+same value.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -97,7 +99,7 @@ Clench held about 1.5 s: start the 5 second help alert countdown, which a DOUBLE
 | `duration` | float | seconds held, > 0 |
 
 ```json
-{"type": "LONG_CLENCH", "t": 1727300009.9, "duration": 1.6}
+{"type": "LONG_CLENCH", "t": 1727300009.9, "duration": 2.6}
 ```
 
 ### STATE
@@ -216,7 +218,7 @@ matching AUDIO_DONE wins and later ones are ignored.
 
 ### SETTINGS
 
-Caregiver changes pointing mode, scan speed, language, speak picks or learning. Applies at once, no
+Caregiver changes pointing mode, scan speed, language, speak picks, learning or the long-clench time. Applies at once, no
 restart (PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks and
 Day 1 mode toggles) on `/ws/input`.
 
@@ -230,10 +232,11 @@ included). Screens show these values instead of assuming defaults.
 | `scan_ms` | int | ms per tile in Scan mode, > 0, default 1000 |
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
+| `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500}
 ```
 
 ## Core -> Board

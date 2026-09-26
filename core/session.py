@@ -292,6 +292,7 @@ class Session:
         self.pointing_mode: PointingMode = pointing_mode
         self.speak_picks = profile.speak_picks if speak_picks is None else speak_picks
         self.learning = profile.learning if learning is None else learning
+        self.long_clench_ms = profile.long_clench_ms
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
         self.jev = jev  # None = no Jev: the AI prior is 0
         self.state_level: BodyStateLevel | None = None  # from STATE; only reorders (PRD D10)
@@ -375,6 +376,7 @@ class Session:
             lang=self.lang,
             speak_picks=self.speak_picks,
             learning=self.learning,
+            long_clench_ms=self.long_clench_ms,
         )
 
     def handle(self, msg: Message) -> None:
@@ -1148,6 +1150,8 @@ class Session:
         self.scan_ms = s.scan_ms
         if s.speak_picks is not None:
             self.speak_picks = s.speak_picks
+        if s.long_clench_ms is not None:
+            self.long_clench_ms = s.long_clench_ms
         self.pointer.apply_settings(s)
         lang_changed = s.lang is not None and s.lang != self.lang
         if s.lang is not None:

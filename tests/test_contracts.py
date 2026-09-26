@@ -17,7 +17,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "DOUBLE_BLINK": (contracts.DoubleBlink, {"type": "DOUBLE_BLINK", "t": 1727300003.4}),
     "LONG_CLENCH": (
         contracts.LongClench,
-        {"type": "LONG_CLENCH", "t": 1727300009.9, "duration": 1.6},
+        {"type": "LONG_CLENCH", "t": 1727300009.9, "duration": 2.6},
     ),
     "STATE": (
         contracts.State,
@@ -44,7 +44,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
     "SETTINGS": (
         contracts.Settings,
-        {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False, "learning": True},
+        {
+            "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
+            "learning": True, "long_clench_ms": 2500,
+        },
     ),
     "SCREEN": (
         contracts.Screen,
@@ -160,6 +163,7 @@ def test_round_trip(name):
         {"type": "READY", "board": 1},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "learning": "day1"},
+        {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "long_clench_ms": 500},
         {"type": "METRICS", "text": "x", "selections": 0, "scan_steps": 0, "day1_selections": 1, "day1_scan_steps": 0},
         {"type": "METRICS", "text": "x", "selections": 2, "scan_steps": 0, "day1_selections": 5},
         {

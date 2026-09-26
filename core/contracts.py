@@ -52,7 +52,7 @@ class DoubleBlink(_Msg):
 
 
 class LongClench(_Msg):
-    """Clench held about 1.5 s: start the help alert countdown."""
+    """Clench held `long_clench_ms` (2.5 s by default): start the help alert countdown."""
 
     type: Literal["LONG_CLENCH"] = "LONG_CLENCH"
     t: float
@@ -136,6 +136,8 @@ class Settings(_Msg):
     speak_picks: bool | None = None  # say each picked tile aloud; omit to keep the current value
     # Rank by the patient's history; false = "Day 1 mode" (menu.yaml order). Omit to keep it.
     learning: bool | None = None
+    # How long a clench must be held to count as a LONG_CLENCH (help), in ms. Omit to keep it.
+    long_clench_ms: int | None = Field(default=None, ge=1000, le=5000)
 
 
 # --- Core -> Board ------------------------------------------------------------

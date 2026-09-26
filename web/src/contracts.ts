@@ -45,7 +45,7 @@ export interface DoubleBlink {
   t: number
 }
 
-/** Clench held about 1.5 s: start the help alert countdown. */
+/** Clench held `long_clench_ms` (2.5 s by default): start the help alert countdown. */
 export interface LongClench {
   type: 'LONG_CLENCH'
   t: number
@@ -133,6 +133,8 @@ export interface Settings {
   speak_picks?: boolean
   /** rank by the patient's history; false = "Day 1 mode" (menu.yaml order); omit to keep it */
   learning?: boolean
+  /** integer ms a clench must be held to count as a LONG_CLENCH (help), 1000 to 5000; omit to keep it */
+  long_clench_ms?: number
 }
 
 // --- Core -> Board ---

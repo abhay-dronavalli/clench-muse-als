@@ -44,6 +44,9 @@ class Profile(BaseModel):
     # When the highlight follows the head, a CLENCH picks the tile highlighted this long before it
     # arrived: clenching can move the head (PRD 3a "freeze on clench"). 0 = the tile at the clench.
     clench_lookback_ms: int = Field(default=250, ge=0, le=1000)
+    # How long a clench must be held to count as a LONG_CLENCH (help alert). The Sensor Service and
+    # the dev panel's hold-Space both use it (announced in SETTINGS). The 5 s countdown follows.
+    long_clench_ms: int = Field(default=2500, ge=1000, le=5000)
     ranking: Ranking = Field(default_factory=Ranking)
 
 

@@ -9,6 +9,8 @@
 #   clench_lookback_ms  when the highlight follows the head (Webcam, Auto on webcam), a clench picks
 #                 the tile that was highlighted this many ms before it: clenching the jaw can move
 #                 the head slightly (PRD 3a "freeze on clench"). 0 = the tile at the clench.
+#   long_clench_ms  how long a clench must be held to call for help (LONG_CLENCH), in ms. The dev
+#                 panel's hold-Space uses the same value; the 5 s cancel countdown follows it.
 #   ranking       PRD section 9 score weights (normalized, so only their ratios matter) and the
 #                 stability margin: a menu item moves above the one before it only when its score
 #                 is `hysteresis` times higher.
@@ -19,6 +21,7 @@ help_contact: maria
 speak_picks: true
 learning: true
 clench_lookback_ms: 250
+long_clench_ms: 2500
 ranking:
   weights:
     use: 0.4
