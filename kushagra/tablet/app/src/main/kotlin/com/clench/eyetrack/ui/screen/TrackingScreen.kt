@@ -37,8 +37,6 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
     val calStep by viewModel.calibrationStep.collectAsState()
     val calResult by viewModel.calibrationResult.collectAsState()
     val calAccuracy by viewModel.calibrationAccuracy.collectAsState()
-    val collecting by viewModel.collecting.collectAsState()
-    val collectionProgress by viewModel.collectionProgress.collectAsState()
     val highlightedTile by viewModel.highlightedTile.collectAsState()
     val fps by viewModel.fps.collectAsState()
 
@@ -156,9 +154,7 @@ fun TrackingScreen(viewModel: EyeTrackViewModel) {
         if (calStep == CalibrationStep.IN_PROGRESS) {
             CalibrationOverlay(
                 manager = viewModel.calibrationManager,
-                collecting = collecting,
-                collectionProgress = collectionProgress,
-                onDotTap = { viewModel.startCollectingDot() },
+                onDotTap = { viewModel.recordCalibrationDot() },
             )
         }
     }

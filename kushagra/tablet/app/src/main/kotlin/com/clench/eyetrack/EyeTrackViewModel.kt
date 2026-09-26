@@ -32,13 +32,6 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
     private val _calibrationAccuracy = MutableStateFlow<CalibrationAccuracy?>(null)
     val calibrationAccuracy: StateFlow<CalibrationAccuracy?> = _calibrationAccuracy.asStateFlow()
 
-    // Multi-sample collection state
-    private val _collecting = MutableStateFlow(false)
-    val collecting: StateFlow<Boolean> = _collecting.asStateFlow()
-
-    private val _collectionProgress = MutableStateFlow(0f)
-    val collectionProgress: StateFlow<Float> = _collectionProgress.asStateFlow()
-
     // Tile highlighting
     private val _highlightedTile = MutableStateFlow(-1)
     val highlightedTile: StateFlow<Int> = _highlightedTile.asStateFlow()
@@ -49,15 +42,6 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
 
     var screenWidth: Float = 1f
     var screenHeight: Float = 1f
-
-    // --- Multi-sample calibration ---
-    companion object {
-        private const val COLLECTION_FRAMES = 25
-    }
-
-    private val collectionH = mutableListOf<Float>()
-    private val collectionV = mutableListOf<Float>()
-    private val collectionHeadPoses = mutableListOf<HeadPose>()
 
     // FPS counter
     private var frameCount = 0
@@ -101,19 +85,6 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
             _highlightedTile.value = -1
         }
 
-        // Multi-sample collection during calibration
-        if (_collecting.value) {
-            // Use raw ratios (not smoothed) for more accurate averaging
-            collectionH.add(ratios.avgH)
-            collectionV.add(ratios.avgV)
-            collectionHeadPoses.add(headPose)
-            _collectionProgress.value = collectionH.size.toFloat() / COLLECTION_FRAMES
-
-            if (collectionH.size >= COLLECTION_FRAMES) {
-                finalizeCurrentDot()
-            }
-        }
-
         // FPS
         frameCount++
         val now = System.currentTimeMillis()
@@ -131,34 +102,15 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
         _calibrationStep.value = CalibrationStep.IN_PROGRESS
         _calibrationResult.value = null
         _calibrationAccuracy.value = null
-        _collecting.value = false
-        _collectionProgress.value = 0f
         _highlightedTile.value = -1
     }
 
-    /** Tap a dot to start collecting samples for it. */
-    fun startCollectingDot() {
-        if (_collecting.value) return
-        collectionH.clear()
-        collectionV.clear()
-        collectionHeadPoses.clear()
-        _collectionProgress.value = 0f
-        _collecting.value = true
-    }
-
-    private fun finalizeCurrentDot() {
-        val avgH = collectionH.average().toFloat()
-        val avgV = collectionV.average().toFloat()
-        val avgHead = averageHeadPose(collectionHeadPoses)
+    /** Tap a dot to instantly record the current smoothed gaze (matches index.html). */
+    fun recordCalibrationDot() {
+        val state = _gazeState.value ?: return
         val snapshot = latestLandmarkerResult?.let { IrisGazeEstimator.snapshot(it) }
 
-        val done = calibrationManager.recordPoint(avgH, avgV, avgHead, snapshot)
-
-        _collecting.value = false
-        _collectionProgress.value = 0f
-        collectionH.clear()
-        collectionV.clear()
-        collectionHeadPoses.clear()
+        val done = calibrationManager.recordPoint(state.smoothH, state.smoothV, state.headPose, snapshot)
 
         if (done) {
             _calibrationStep.value = CalibrationStep.DONE
@@ -189,16 +141,6 @@ class EyeTrackViewModel(app: Application) : AndroidViewModel(app) {
             meanErrorPx = meanPx,
             maxErrorPx = maxErr,
             meanErrorPct = (meanPx / diag) * 100f,
-        )
-    }
-
-    private fun averageHeadPose(poses: List<HeadPose>): HeadPose {
-        if (poses.isEmpty()) return HeadPose(0f, 0f, 0f)
-        val n = poses.size.toFloat()
-        return HeadPose(
-            yaw = poses.sumOf { it.yaw.toDouble() }.toFloat() / n,
-            pitch = poses.sumOf { it.pitch.toDouble() }.toFloat() / n,
-            roll = poses.sumOf { it.roll.toDouble() }.toFloat() / n,
         )
     }
 
