@@ -45,7 +45,7 @@ class RankHistory(Protocol):
 
     def outcomes(self, since: float) -> Sequence[Mapping[str, object]]: ...
 
-    def top_phrases_with_counts(self, lang: Lang, limit: int) -> list[tuple[str, int]]: ...
+    def top_phrases_with_hours(self, lang: Lang, limit: int) -> list[tuple[str, int, list[int]]]: ...
 
     def recent_messages_with_times(self, lang: Lang, limit: int) -> list[tuple[float, str]]: ...
 
@@ -180,20 +180,29 @@ class Ranker:
             f"Body state: {state_level or 'unknown'}",
         ]
         recent: list[tuple[float, str]] = []
-        top: list[tuple[str, int]] = []
+        top: list[tuple[str, int, list[int]]] = []
         if self._history is not None:
             try:
                 recent = self._history.recent_messages_with_times(lang, JEV_RECENT)
-                top = self._history.top_phrases_with_counts(lang, JEV_TOP)
+                top = self._history.top_phrases_with_hours(lang, JEV_TOP)
             except Exception:
                 log.exception("could not read the history for Jev")
         if recent:
             lines.append("Last messages:")
             lines += [f"- {_ago(now, t)}: {text}" for t, text in recent]
         if top:
-            lines.append("Most used phrases (times used):")
-            lines += [f"- {text} ({n})" for text, n in top]
+            lines.append("Most used phrases (times used, usual time):")
+            lines += [f"- {text} ({n}, {usual_hours(hist)})" for text, n, hist in top]
         return "\n".join(lines)
+
+
+def usual_hours(hist: Sequence[int]) -> str:
+    """"around 10:00", or "around 13:00 and 16:00": the busiest hours (at least half of the top)."""
+    top = max(hist, default=0)
+    if top <= 0:
+        return "any time"
+    hours = [h for h, n in enumerate(hist) if n * 2 >= top][:2]
+    return "around " + " and ".join(f"{h:02d}:00" for h in hours)
 
 
 def _ago(now: float, t: float) -> str:

@@ -223,14 +223,15 @@ class Db:
         ).fetchall()
         return [r["text"] for r in rows]
 
-    def top_phrases_with_counts(self, lang: Lang, limit: int = 10) -> list[tuple[str, int]]:
-        """(text, uses) of the most used confirmed sentences in `lang` (the Jev state summary)."""
+    def top_phrases_with_hours(self, lang: Lang, limit: int = 10) -> list[tuple[str, int, list[int]]]:
+        """(text, uses, 24 hourly counts) of the most used confirmed sentences in `lang` (the Jev
+        state summary)."""
         rows = self._conn.execute(
-            """SELECT text, uses FROM phrases WHERE profile_id = ? AND lang = ?
+            """SELECT text, uses, hour_histogram_json FROM phrases WHERE profile_id = ? AND lang = ?
                ORDER BY uses DESC, last_used DESC LIMIT ?""",
             (PROFILE_ID, lang, limit),
         ).fetchall()
-        return [(r["text"], r["uses"]) for r in rows]
+        return [(r["text"], r["uses"], json.loads(r["hour_histogram_json"])) for r in rows]
 
     def recent_messages_with_times(self, lang: Lang, limit: int = 5) -> list[tuple[float, str]]:
         """(t, text) of the last confirmed sentences in `lang`, newest first, help alert left out."""

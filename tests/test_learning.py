@@ -205,13 +205,36 @@ def test_jev_confidence_decides_when_jev_is_on(menu, profile, db, loop):
     assert sent[-1] == Confirm(text=MARIA, action="send_message")
 
 
-def test_low_jev_confidence_means_no_shortcut(menu, profile, db, loop):
-    maria_every_evening(db)  # the history alone would be confident
-    jev = JevRanker(TypeSafeAccess("k"), spawn=loop.spawn, transport=httpx.MockTransport(jev_for("people.maria.text", 0.5)))
+def with_jev(menu, profile, db, loop, choice, confidence):
+    jev = JevRanker(TypeSafeAccess("k"), spawn=loop.spawn, transport=httpx.MockTransport(jev_for(choice, confidence)))
     s, sent = make(menu, profile, db, loop, jev=jev)
-    loop.run()
+    loop.run()  # Jev answered about the Suggested phrases while home was showing
     pick(s, sent, "Suggested")
+    return s, sent
+
+
+def test_confident_jev_is_enough_even_with_little_history(menu, profile, db, loop):
+    confirm_many(db, "people.maria.text", MARIA, [NOW - 600], action="send_message", contact="maria")
+    s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.85)
+    assert sent[-1] == Confirm(text=MARIA, action="send_message")
+
+
+def test_jev_agreeing_with_a_confident_history_is_enough(menu, profile, db, loop):
+    maria_every_evening(db)
+    s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.5)  # Jev's usual calibrated 0.5
+    assert sent[-1] == Confirm(text=MARIA, action="send_message")
+
+
+def test_jev_disagreeing_means_no_shortcut(menu, profile, db, loop):
+    maria_every_evening(db)  # the history alone would be confident
+    s, sent = with_jev(menu, profile, db, loop, "suggested.water", 0.5)
     assert s.state is SessionState.SCANNING and last_screen(sent).path == ["Suggested"]
+
+
+def test_unsure_jev_and_little_history_means_no_shortcut(menu, profile, db, loop):
+    confirm_many(db, "people.maria.text", MARIA, [NOW - 600], action="send_message", contact="maria")
+    s, sent = with_jev(menu, profile, db, loop, "people.maria.text", 0.6)
+    assert s.state is SessionState.SCANNING
 
 
 # --- Day 1 mode from SETTINGS ------------------------------------------------------------------

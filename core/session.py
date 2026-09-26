@@ -738,10 +738,13 @@ class Session:
 
     def _shortcut(self, branch: Item) -> Item | None:
         """The phrase to confirm straight away when Suggested is picked, or None. Only with learning on,
-        and only when the top phrase (history and fixed phrases, ranked) is a confident guess: Jev's
-        confidence >= 0.8 with Jev on (and Jev picking the same phrase), otherwise the history share
-        >= 0.6 (Ranker.history_confidence). A cancel of it in the last 24 h lowers the confidence as it
-        lowers the score. The confirm clench is still required (PRD D5)."""
+        and only when the top phrase (history and fixed phrases, ranked) is a confident guess:
+          - Jev off (or no answer yet): the history share >= 0.6 (Ranker.history_confidence);
+          - Jev on: Jev must pick that same phrase, and then Jev's confidence >= 0.8 or the history
+            share >= 0.6 is enough (Jev's calibrated confidence stays near 0.5 even for a daily habit,
+            so it confirms the guess rather than being the only way in; decisions.md "Learning").
+        A cancel of it in the last 24 h lowers the confidence as it lowers the score. The confirm
+        clench is still required (PRD D5)."""
         if not self.learning:
             return None
         pool = self._suggested_pool(branch, None)  # no AI sentences: the learned habits only
@@ -754,12 +757,18 @@ class Session:
         )
         top = self.ranker.order_full(entries, scored)[0]
         keep = 1.0 - scored[top].reject
-        if answer is not None:
-            confidence, need, how = (answer.confidence if answer.choice == top else 0.0) * keep, JEV_SHORTCUT, "Jev"
+        history = self.ranker.history_confidence(top, scored) * keep
+        if answer is None:
+            ok = history >= SHORTCUT_HISTORY_SHARE
+            log.info("shortcut check for %s: history %.2f (needs %.1f)", top, history, SHORTCUT_HISTORY_SHARE)
         else:
-            confidence, need, how = self.ranker.history_confidence(top, scored) * keep, SHORTCUT_HISTORY_SHARE, "history"
-        log.info("shortcut check: %s confidence %.2f for %s (needs %.1f)", how, confidence, top, need)
-        return next(i for i in pool if i.id == top) if confidence >= need else None
+            jev = answer.confidence * keep if answer.choice == top else 0.0
+            ok = answer.choice == top and (jev >= JEV_SHORTCUT or history >= SHORTCUT_HISTORY_SHARE)
+            log.info(
+                "shortcut check for %s: Jev picks %s (confidence %.2f, needs %.1f), history %.2f (needs %.1f)",
+                top, answer.choice, jev, JEV_SHORTCUT, history, SHORTCUT_HISTORY_SHARE,
+            )
+        return next(i for i in pool if i.id == top) if ok else None
 
     def suggested_preview(self) -> tuple[list[str], str | None]:
         """The home Suggested phrases as they rank right now (history and fixed phrases, no AI

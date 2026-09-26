@@ -271,3 +271,16 @@ def test_ranker_rereads_history_after_new_events(db):
     assert r.score(entries, "en")["a"].score == 0
     confirm_many(db, "need.water", "I'd like some water, please.", [NOW - 60])
     assert r.score(entries, "en")["a"].score > 0
+
+
+def test_jev_state_is_a_short_plain_summary(db):
+    for t in DAYS[:3]:
+        confirm_many(db, "people.maria.text", MARIA, [t - 3600])
+    confirm_many(db, "need.water", "I'd like some water, please.", [NOW - 5 * 3600, NOW - DAY_S - 2 * 3600])
+    state = Ranker(db, clock=lambda: NOW).jev_state("en", ["Suggested"], None)
+    lines = state.splitlines()
+    assert lines[:4] == ["Now: Saturday 18:30", "Language: English", "Screen: Home > Suggested", "Body state: unknown"]
+    assert "- today 17:30: " + MARIA in lines
+    assert f"- {MARIA} (3, around 17:00)" in lines
+    assert "- I'd like some water, please. (2, around 13:00 and 16:00)" in lines
+    assert len(lines) <= 4 + 1 + 5 + 1 + 10
