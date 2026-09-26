@@ -48,7 +48,7 @@ a) The PRD is the source of truth. If the PRD is unclear, pick what fits it best
 b) Git: at the end of every chunk that works on its own, commit using Conventional Commits (feat, fix,
    chore, docs, refactor, test) with a scope (core, web, sensor, data, docs). Prefer several small
    focused commits over one big one. Commit automatically. Never push, never force, never rewrite
-   history, never delete branches.
+   history, never delete branches. Never include co-author on commits.
 
 c) Event formats in `core/contracts.py` and `web/src/contracts.ts` are the single source of truth. Any
    change must update both files and `docs/contracts.md` together.
