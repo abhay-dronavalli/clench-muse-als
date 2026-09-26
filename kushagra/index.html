@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eye Tracking Prototype</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0a; color: #e5e5e5; font-family: system-ui, sans-serif; overflow: hidden; height: 100vh; }
+
+    /* Gaze dot */
+    #gaze-dot {
+      position: fixed; width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(59, 130, 246, 0.5); border: 2px solid rgba(59, 130, 246, 0.8);
+      transform: translate(-50%, -50%); pointer-events: none; z-index: 1000;
+      transition: left 0.08s linear, top 0.08s linear;
+      display: none;
+    }
+
+    /* Webcam preview */
+    #webcam-container {
+      position: fixed; bottom: 16px; right: 16px; z-index: 900;
+      border-radius: 12px; overflow: hidden; border: 2px solid #333;
+    }
+    #webcam { width: 320px; height: 240px; transform: scaleX(-1); display: block; }
+    #iris-canvas {
+      position: absolute; top: 0; left: 0; width: 320px; height: 240px;
+      transform: scaleX(-1); pointer-events: none;
+    }
+
+    /* Calibration */
+    #calibration-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 2000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    #calibration-overlay.hidden { display: none; }
+    .cal-dot {
+      position: absolute; width: 32px; height: 32px; border-radius: 50%;
+      background: #ef4444; cursor: pointer; transform: translate(-50%, -50%);
+      transition: background 0.2s, transform 0.2s;
+      animation: cal-pulse 1.2s ease-in-out infinite;
+    }
+    .cal-dot.active { background: #facc15; transform: translate(-50%, -50%) scale(1.4); animation: none; }
+    .cal-dot.done { background: #22c55e; opacity: 0.4; pointer-events: none; animation: none; }
+    @keyframes cal-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); } 50% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } }
+    #cal-msg {
+      position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+      text-align: center; font-size: 1.1rem; color: #ccc; max-width: 500px;
+    }
+
+    /* Grid for testing */
+    #tile-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+      height: 100vh; gap: 4px; padding: 4px;
+    }
+    .tile {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: 700; border-radius: 16px;
+      background: #1a1a2e; border: 3px solid #333; transition: border-color 0.15s, background 0.15s;
+    }
+    .tile.gazed { border-color: #3b82f6; background: #1e3a5f; }
+
+    /* Status bar */
+    #status-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 800;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(8px);
+      padding: 8px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      font-size: 0.85rem; border-bottom: 1px solid #222;
+    }
+    #status-bar .label { color: #888; }
+    #status-bar .value { color: #3b82f6; font-weight: 600; }
+    #status-bar button {
+      background: #3b82f6; color: white; border: none; padding: 6px 14px;
+      border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    }
+    #status-bar button:hover { background: #2563eb; }
+
+    /* Iris detail panel */
+    #iris-detail {
+      position: fixed; bottom: 16px; left: 16px; z-index: 900;
+      background: rgba(20,20,20,0.9); border: 1px solid #333; border-radius: 12px;
+      padding: 12px 16px; font-size: 0.8rem; font-family: monospace; min-width: 240px;
+    }
+    #iris-detail h3 { color: #3b82f6; margin-bottom: 6px; font-size: 0.85rem; }
+    #iris-detail .row { display: flex; justify-content: space-between; padding: 2px 0; }
+    #iris-detail .dim { color: #666; }
+
+    /* Head pose guide */
+    #head-guide {
+      position: fixed; top: 50px; left: 50%; transform: translateX(-50%); z-index: 850;
+      background: rgba(239, 68, 68, 0.9); color: white; padding: 10px 24px;
+      border-radius: 10px; font-size: 0.95rem; font-weight: 600; text-align: center;
+      pointer-events: none; transition: opacity 0.3s, background 0.3s;
+      opacity: 0; white-space: nowrap;
+    }
+    #head-guide.warn { opacity: 1; background: rgba(239, 68, 68, 0.9); }
+    #head-guide.ok { opacity: 0; }
+  </style>
+</head>
+<body>
+
+  <div id="gaze-dot"></div>
+  <div id="head-guide"></div>
+
+  <div id="status-bar">
+    <span><span class="label">Status:</span> <span class="value" id="st-status">Loading MediaPipe...</span></span>
+    <span><span class="label">Gaze:</span> <span class="value" id="st-gaze">-</span></span>
+    <span><span class="label">Tile:</span> <span class="value" id="st-tile">-</span></span>
+    <span><span class="label">Cal pts:</span> <span class="value" id="st-cal">0</span></span>
+    <button id="btn-calibrate">Calibrate (9-point)</button>
+    <button id="btn-toggle-grid">Hide grid</button>
+  </div>
+
+  <div id="tile-grid">
+    <div class="tile" data-idx="0">I need</div>
+    <div class="tile" data-idx="1">People</div>
+    <div class="tile" data-idx="2">How I feel</div>
+    <div class="tile" data-idx="3">Room</div>
+    <div class="tile" data-idx="4">Suggested</div>
+    <div class="tile" data-idx="5">Other...</div>
+  </div>
+
+  <div id="webcam-container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="iris-canvas"></canvas>
+  </div>
+
+  <div id="iris-detail">
+    <h3>Iris Tracking</h3>
+    <div class="row"><span>L gaze H:</span><span id="ir-lg" class="dim">-</span></div>
+    <div class="row"><span>R gaze H:</span><span id="ir-rg" class="dim">-</span></div>
+    <div class="row"><span>L gaze V:</span><span id="ir-lv" class="dim">-</span></div>
+    <div class="row"><span>R gaze V:</span><span id="ir-rv" class="dim">-</span></div>
+    <div class="row"><span>Avg H:</span><span id="ir-ah" class="dim">-</span></div>
+    <div class="row"><span>Avg V:</span><span id="ir-av" class="dim">-</span></div>
+    <div class="row"><span>Screen X:</span><span id="ir-sx" class="dim">-</span></div>
+    <div class="row"><span>Screen Y:</span><span id="ir-sy" class="dim">-</span></div>
+    <div class="row" style="border-top:1px solid #333; margin-top:4px; padding-top:4px;"><span>Yaw:</span><span id="ir-yaw" class="dim">-</span></div>
+    <div class="row"><span>Pitch:</span><span id="ir-pitch" class="dim">-</span></div>
+    <div class="row"><span>Roll:</span><span id="ir-roll" class="dim">-</span></div>
+  </div>
+
+  <!-- Calibration overlay -->
+  <div id="calibration-overlay" class="hidden">
+    <p id="cal-msg">Look at the yellow dot and click it. Do all 9 points.</p>
+  </div>
+
+  <script type="module">
+    import { FaceLandmarker, FilesetResolver } from
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+    // ---- Elements ----
+    const gazeDot = document.getElementById("gaze-dot");
+    const webcam = document.getElementById("webcam");
+    const irisCanvas = document.getElementById("iris-canvas");
+    const ictx = irisCanvas.getContext("2d");
+    const stStatus = document.getElementById("st-status");
+    const stGaze = document.getElementById("st-gaze");
+    const stTile = document.getElementById("st-tile");
+    const stCal = document.getElementById("st-cal");
+    const calOverlay = document.getElementById("calibration-overlay");
+    const calMsg = document.getElementById("cal-msg");
+    const tiles = document.querySelectorAll(".tile");
+    const tileGrid = document.getElementById("tile-grid");
+
+    const irLg = document.getElementById("ir-lg");
+    const irRg = document.getElementById("ir-rg");
+    const irLv = document.getElementById("ir-lv");
+    const irRv = document.getElementById("ir-rv");
+    const irAh = document.getElementById("ir-ah");
+    const irAv = document.getElementById("ir-av");
+    const irSx = document.getElementById("ir-sx");
+    const irSy = document.getElementById("ir-sy");
+
+    let currentTile = -1;
+    let gridVisible = true;
+    let currentLandmarks = null; // latest face landmarks from MediaPipe
+
+    // ---- Iris landmark indices ----
+    const LEFT_IRIS_CENTER = 468;
+    const RIGHT_IRIS_CENTER = 473;
+    const LEFT_IRIS = [468, 469, 470, 471, 472];
+    const RIGHT_IRIS = [473, 474, 475, 476, 477];
+    const L_EYE_OUT = 33, L_EYE_IN = 133, L_EYE_TOP = 159, L_EYE_BOT = 145;
+    const R_EYE_IN = 362, R_EYE_OUT = 263, R_EYE_TOP = 386, R_EYE_BOT = 374;
+
+    // ---- Head pose estimation from landmarks ----
+    // Uses nose tip, chin, left/right eye corners, left/right mouth corners
+    // to compute yaw, pitch, roll from the 2D landmark geometry.
+    const NOSE_TIP = 1, CHIN = 152, L_EYE_CORNER = 33, R_EYE_CORNER = 263;
+    const L_MOUTH = 61, R_MOUTH = 291, FOREHEAD = 10;
+
+    function estimateHeadPose(lm) {
+      // Yaw: horizontal offset of nose relative to midpoint of eye corners
+      const eyeMidX = (lm[L_EYE_CORNER].x + lm[R_EYE_CORNER].x) / 2;
+      const eyeSpan = Math.abs(lm[R_EYE_CORNER].x - lm[L_EYE_CORNER].x);
+      const yaw = eyeSpan > 0 ? ((lm[NOSE_TIP].x - eyeMidX) / eyeSpan) * 90 : 0;
+
+      // Pitch: vertical offset of nose relative to forehead-chin midpoint
+      const faceMidY = (lm[FOREHEAD].y + lm[CHIN].y) / 2;
+      const faceH = Math.abs(lm[CHIN].y - lm[FOREHEAD].y);
+      const pitch = faceH > 0 ? ((lm[NOSE_TIP].y - faceMidY) / faceH) * 90 : 0;
+
+      // Roll: angle of the line between eye corners
+      const dx = lm[R_EYE_CORNER].x - lm[L_EYE_CORNER].x;
+      const dy = lm[R_EYE_CORNER].y - lm[L_EYE_CORNER].y;
+      const roll = Math.atan2(dy, dx) * (180 / Math.PI);
+
+      return { yaw, pitch, roll };
+    }
+
+    // Calibrated head pose and face position (average across all 9 calibration clicks)
+    let calHeadPose = null;       // { yaw, pitch, roll }
+    let calHeadSamples = [];      // collected during calibration
+    let currentHeadPose = null;   // updated every frame
+
+    // Calibrated face landmark positions (normalized 0..1, averaged during cal)
+    // We store nose, forehead, chin, eye corners, mouth corners — enough to draw
+    // a ghost face outline on the webcam preview
+    const FACE_GUIDE_LM = [NOSE_TIP, FOREHEAD, CHIN, L_EYE_CORNER, R_EYE_CORNER, L_MOUTH, R_MOUTH];
+    let calFacePositions = null;  // { [idx]: {x, y} } averaged from cal samples
+    let calFaceSamples = [];      // array of { [idx]: {x, y} } per cal click
+
+    const headGuide = document.getElementById("head-guide");
+    const irYaw = document.getElementById("ir-yaw");
+    const irPitch = document.getElementById("ir-pitch");
+    const irRoll = document.getElementById("ir-roll");
+
+    // Thresholds (degrees) — small for "nudge", large for "warning"
+    const HEAD_NUDGE_YAW = 4, HEAD_WARN_YAW = 8;
+    const HEAD_NUDGE_PITCH = 4, HEAD_WARN_PITCH = 8;
+    const HEAD_NUDGE_ROLL = 3, HEAD_WARN_ROLL = 6;
+
+    function headDriftLevel() {
+      // Returns 0 (aligned), 1 (nudge), 2 (warning)
+      if (!calHeadPose || !currentHeadPose) return 0;
+      const dY = Math.abs(currentHeadPose.yaw - calHeadPose.yaw);
+      const dP = Math.abs(currentHeadPose.pitch - calHeadPose.pitch);
+      const dR = Math.abs(currentHeadPose.roll - calHeadPose.roll);
+      if (dY > HEAD_WARN_YAW || dP > HEAD_WARN_PITCH || dR > HEAD_WARN_ROLL) return 2;
+      if (dY > HEAD_NUDGE_YAW || dP > HEAD_NUDGE_PITCH || dR > HEAD_NUDGE_ROLL) return 1;
+      return 0;
+    }
+
+    function checkHeadPose() {
+      const level = headDriftLevel();
+      if (level === 0) {
+        headGuide.className = "ok";
+      } else {
+        // Text hint stays as a fallback alongside the visual guide
+        const dYaw   = currentHeadPose.yaw   - calHeadPose.yaw;
+        const dPitch = currentHeadPose.pitch  - calHeadPose.pitch;
+        const dRoll  = currentHeadPose.roll   - calHeadPose.roll;
+        const hints = [];
+        if (Math.abs(dYaw)   > HEAD_NUDGE_YAW)   hints.push(dYaw > 0 ? "right" : "left");
+        if (Math.abs(dPitch) > HEAD_NUDGE_PITCH)  hints.push(dPitch > 0 ? "up" : "down");
+        if (Math.abs(dRoll)  > HEAD_NUDGE_ROLL)   hints.push(dRoll > 0 ? "untilt right" : "untilt left");
+        headGuide.textContent = (level === 2 ? "Move head: " : "Slight drift: ") + hints.join(", ");
+        headGuide.className = "warn";
+      }
+    }
+
+    // Draw the visual head-position guide on the webcam canvas.
+    // Shows a ghost outline of where the face was during calibration,
+    // the current face position, and an arrow from current to target.
+    function drawHeadGuide(lm, w, h) {
+      if (!calFacePositions) return;
+
+      const drift = headDriftLevel();
+      if (drift === 0) return; // aligned, no guide needed
+
+      const alpha = drift === 2 ? 0.9 : 0.5;
+
+      // --- Ghost face outline (where you WERE during calibration) ---
+      ictx.save();
+      ictx.globalAlpha = alpha;
+
+      // Ghost dots at calibrated landmark positions
+      for (const idx of FACE_GUIDE_LM) {
+        const cp = calFacePositions[idx];
+        ictx.beginPath();
+        ictx.arc(cp.x * w, cp.y * h, 5, 0, Math.PI * 2);
+        ictx.fillStyle = "rgba(34, 197, 94, 0.6)";  // green ghost
+        ictx.fill();
+      }
+
+      // Ghost face outline: forehead -> L eye -> L mouth -> chin -> R mouth -> R eye -> forehead
+      const ghostOrder = [FOREHEAD, L_EYE_CORNER, L_MOUTH, CHIN, R_MOUTH, R_EYE_CORNER, FOREHEAD];
+      ictx.beginPath();
+      ghostOrder.forEach((idx, i) => {
+        const cp = calFacePositions[idx];
+        if (i === 0) ictx.moveTo(cp.x * w, cp.y * h);
+        else ictx.lineTo(cp.x * w, cp.y * h);
+      });
+      ictx.strokeStyle = "rgba(34, 197, 94, 0.5)";
+      ictx.lineWidth = 2;
+      ictx.setLineDash([6, 4]);
+      ictx.stroke();
+      ictx.setLineDash([]);
+
+      // --- Current face outline (where you ARE now) ---
+      const currOrder = [FOREHEAD, L_EYE_CORNER, L_MOUTH, CHIN, R_MOUTH, R_EYE_CORNER, FOREHEAD];
+      ictx.beginPath();
+      currOrder.forEach((idx, i) => {
+        if (i === 0) ictx.moveTo(lm[idx].x * w, lm[idx].y * h);
+        else ictx.lineTo(lm[idx].x * w, lm[idx].y * h);
+      });
+      ictx.strokeStyle = drift === 2 ? "rgba(239, 68, 68, 0.7)" : "rgba(250, 204, 21, 0.6)";
+      ictx.lineWidth = 2;
+      ictx.stroke();
+
+      // --- Arrow from current nose to calibrated nose ---
+      const curNose  = { x: lm[NOSE_TIP].x * w, y: lm[NOSE_TIP].y * h };
+      const calNose  = { x: calFacePositions[NOSE_TIP].x * w, y: calFacePositions[NOSE_TIP].y * h };
+      const dx = calNose.x - curNose.x;
+      const dy = calNose.y - curNose.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 3) {
+        // Arrow shaft
+        ictx.beginPath();
+        ictx.moveTo(curNose.x, curNose.y);
+        ictx.lineTo(calNose.x, calNose.y);
+        ictx.strokeStyle = drift === 2 ? "rgba(239, 68, 68, 0.9)" : "rgba(250, 204, 21, 0.8)";
+        ictx.lineWidth = 2.5;
+        ictx.stroke();
+
+        // Arrowhead
+        const angle = Math.atan2(dy, dx);
+        const headLen = Math.min(12, dist * 0.4);
+        ictx.beginPath();
+        ictx.moveTo(calNose.x, calNose.y);
+        ictx.lineTo(calNose.x - headLen * Math.cos(angle - 0.4), calNose.y - headLen * Math.sin(angle - 0.4));
+        ictx.moveTo(calNose.x, calNose.y);
+        ictx.lineTo(calNose.x - headLen * Math.cos(angle + 0.4), calNose.y - headLen * Math.sin(angle + 0.4));
+        ictx.stroke();
+      }
+
+      // --- Target crosshair at calibrated nose ---
+      const cr = 10;
+      ictx.beginPath();
+      ictx.arc(calNose.x, calNose.y, cr, 0, Math.PI * 2);
+      ictx.strokeStyle = "rgba(34, 197, 94, 0.8)";
+      ictx.lineWidth = 1.5;
+      ictx.stroke();
+      ictx.beginPath();
+      ictx.moveTo(calNose.x - cr - 4, calNose.y);
+      ictx.lineTo(calNose.x + cr + 4, calNose.y);
+      ictx.moveTo(calNose.x, calNose.y - cr - 4);
+      ictx.lineTo(calNose.x, calNose.y + cr + 4);
+      ictx.stroke();
+
+      ictx.restore();
+    }
+
+    // ---- Savitzky-Golay smoothing (ported from scipy.signal.savgol_filter) ----
+    // Same approach as DreamTeam/TrainOfFour — buffer recent values, fit a polynomial
+    // over the window, and take the fitted center value to kill noise without lag.
+
+    const SG_WINDOW = 15;  // must be odd; ~15 frames at 30fps = 0.5s lookback
+    const SG_POLY   = 3;   // cubic polynomial (same as the DreamTeam project)
+
+    // Precompute SG convolution coefficients for the center point.
+    // These are the weights you dot-product with the window to get the smoothed value.
+    function computeSGCoeffs(windowSize, polyOrder) {
+      const half = (windowSize - 1) / 2;
+      // Build the Vandermonde-like matrix J where J[i][k] = i^k, i = -half..half
+      const rows = windowSize;
+      const cols = polyOrder + 1;
+      const J = [];
+      for (let i = 0; i < rows; i++) {
+        const row = [];
+        const x = i - half;
+        for (let k = 0; k < cols; k++) row.push(Math.pow(x, k));
+        J.push(row);
+      }
+      // Compute (J^T J)
+      const JtJ = Array.from({ length: cols }, () => new Float64Array(cols));
+      for (let a = 0; a < cols; a++)
+        for (let b = 0; b < cols; b++) {
+          let s = 0;
+          for (let i = 0; i < rows; i++) s += J[i][a] * J[i][b];
+          JtJ[a][b] = s;
+        }
+      // Invert (J^T J) via Gauss-Jordan
+      const aug = JtJ.map((row, i) => {
+        const r = new Float64Array(cols * 2);
+        for (let j = 0; j < cols; j++) r[j] = row[j];
+        r[cols + i] = 1;
+        return r;
+      });
+      for (let i = 0; i < cols; i++) {
+        let maxRow = i;
+        for (let k = i + 1; k < cols; k++)
+          if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) maxRow = k;
+        [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+        const pivot = aug[i][i];
+        for (let j = 0; j < cols * 2; j++) aug[i][j] /= pivot;
+        for (let k = 0; k < cols; k++) {
+          if (k === i) continue;
+          const factor = aug[k][i];
+          for (let j = 0; j < cols * 2; j++) aug[k][j] -= factor * aug[i][j];
+        }
+      }
+      const inv = aug.map(r => Array.from(r.slice(cols)));
+      // Coefficients for the center output = row 0 of (J^T J)^-1 J^T
+      // which gives us weights[i] = sum_k inv[0][k] * J[i][k]
+      const coeffs = new Float64Array(rows);
+      for (let i = 0; i < rows; i++) {
+        let s = 0;
+        for (let k = 0; k < cols; k++) s += inv[0][k] * J[i][k];
+        coeffs[i] = s;
+      }
+      return coeffs;
+    }
+
+    const sgCoeffs = computeSGCoeffs(SG_WINDOW, SG_POLY);
+
+    class SavGolSmoother {
+      constructor(windowSize, coeffs) {
+        this.buf = [];
+        this.windowSize = windowSize;
+        this.coeffs = coeffs;
+      }
+      push(val) {
+        this.buf.push(val);
+        if (this.buf.length > this.windowSize) this.buf.shift();
+      }
+      get() {
+        if (this.buf.length < this.windowSize) {
+          // Not enough data yet — return simple average
+          return this.buf.reduce((a, b) => a + b, 0) / this.buf.length;
+        }
+        let s = 0;
+        for (let i = 0; i < this.windowSize; i++) s += this.coeffs[i] * this.buf[i];
+        return s;
+      }
+    }
+
+    const sgH = new SavGolSmoother(SG_WINDOW, sgCoeffs);
+    const sgV = new SavGolSmoother(SG_WINDOW, sgCoeffs);
+    let smoothH = 0.5, smoothV = 0.5;
+
+    // ---- Calibration data & regression ----
+    // We collect (gazeH, gazeV) -> (screenX%, screenY%) pairs,
+    // then fit a simple linear mapping: screenX = a*gazeH + b, screenY = c*gazeV + d
+    let calSamples = []; // { gh, gv, sx, sy } where sx/sy are 0..1 screen fractions
+    let calCoeffs = null; // { ax, bx, ay, by } after fitting
+
+    // Current raw gaze ratios (updated each frame)
+    let latestGH = 0.5, latestGV = 0.5;
+
+    function fitCalibration() {
+      if (calSamples.length < 3) return;
+      // Least squares for screenX = ax * gazeH + bx
+      // and screenY = ay * gazeV + by
+      const n = calSamples.length;
+      let sumH = 0, sumV = 0, sumSx = 0, sumSy = 0;
+      let sumHH = 0, sumVV = 0, sumHSx = 0, sumVSy = 0;
+      for (const s of calSamples) {
+        sumH += s.gh; sumV += s.gv;
+        sumSx += s.sx; sumSy += s.sy;
+        sumHH += s.gh * s.gh; sumVV += s.gv * s.gv;
+        sumHSx += s.gh * s.sx; sumVSy += s.gv * s.sy;
+      }
+      const detH = n * sumHH - sumH * sumH;
+      const detV = n * sumVV - sumV * sumV;
+      if (Math.abs(detH) < 1e-9 || Math.abs(detV) < 1e-9) return;
+
+      const ax = (n * sumHSx - sumH * sumSx) / detH;
+      const bx = (sumSx - ax * sumH) / n;
+      const ay = (n * sumVSy - sumV * sumSy) / detV;
+      const by = (sumSy - ay * sumV) / n;
+      calCoeffs = { ax, bx, ay, by };
+    }
+
+    function gazeToScreen(gh, gv) {
+      if (!calCoeffs) return null;
+      const sx = calCoeffs.ax * gh + calCoeffs.bx;
+      const sy = calCoeffs.ay * gv + calCoeffs.by;
+      return {
+        x: Math.max(0, Math.min(1, sx)) * window.innerWidth,
+        y: Math.max(0, Math.min(1, sy)) * window.innerHeight,
+      };
+    }
+
+    // ---- Calibration UI ----
+    const calPositions = [
+      [10, 10], [50, 10], [90, 10],
+      [10, 50], [50, 50], [90, 50],
+      [10, 90], [50, 90], [90, 90],
+    ];
+    let calIdx = 0;
+    let calDots = [];
+
+    document.getElementById("btn-calibrate").addEventListener("click", startCalibration);
+
+    function startCalibration() {
+      calSamples = [];
+      calCoeffs = null;
+      calHeadPose = null;
+      calHeadSamples = [];
+      calFacePositions = null;
+      calFaceSamples = [];
+      headGuide.className = "ok";
+      calIdx = 0;
+      calOverlay.classList.remove("hidden");
+      calOverlay.querySelectorAll(".cal-dot").forEach(d => d.remove());
+      calDots = [];
+
+      calPositions.forEach(([xp, yp], i) => {
+        const dot = document.createElement("div");
+        dot.className = "cal-dot";
+        dot.style.left = xp + "%";
+        dot.style.top = yp + "%";
+        dot.addEventListener("click", () => onCalDotClick(i));
+        calOverlay.appendChild(dot);
+        calDots.push(dot);
+      });
+
+      // Highlight first dot
+      calDots[0].classList.add("active");
+      calMsg.textContent = "Look at the yellow dot and click it (1/9)";
+    }
+
+    function onCalDotClick(idx) {
+      if (idx !== calIdx) return; // must click in order
+
+      // Record the current iris gaze ratios mapped to this screen position
+      const [xp, yp] = calPositions[idx];
+      calSamples.push({ gh: smoothH, gv: smoothV, sx: xp / 100, sy: yp / 100 });
+
+      // Also record head pose and face positions at this calibration point
+      if (currentHeadPose) calHeadSamples.push({ ...currentHeadPose });
+      if (currentLandmarks) {
+        const snap = {};
+        for (const idx of FACE_GUIDE_LM) {
+          snap[idx] = { x: currentLandmarks[idx].x, y: currentLandmarks[idx].y };
+        }
+        calFaceSamples.push(snap);
+      }
+
+      calDots[idx].classList.remove("active");
+      calDots[idx].classList.add("done");
+      calIdx++;
+      stCal.textContent = calIdx;
+
+      if (calIdx >= 9) {
+        fitCalibration();
+        // Average the head pose samples to get the calibrated reference pose
+        if (calHeadSamples.length > 0) {
+          calHeadPose = {
+            yaw:   calHeadSamples.reduce((s, p) => s + p.yaw, 0)   / calHeadSamples.length,
+            pitch: calHeadSamples.reduce((s, p) => s + p.pitch, 0) / calHeadSamples.length,
+            roll:  calHeadSamples.reduce((s, p) => s + p.roll, 0)  / calHeadSamples.length,
+          };
+        }
+        // Average the face landmark positions across calibration clicks
+        if (calFaceSamples.length > 0) {
+          calFacePositions = {};
+          for (const idx of FACE_GUIDE_LM) {
+            calFacePositions[idx] = {
+              x: calFaceSamples.reduce((s, snap) => s + snap[idx].x, 0) / calFaceSamples.length,
+              y: calFaceSamples.reduce((s, snap) => s + snap[idx].y, 0) / calFaceSamples.length,
+            };
+          }
+        }
+        calMsg.textContent = "Done! Calibration applied (head pose saved).";
+        setTimeout(() => calOverlay.classList.add("hidden"), 600);
+        stStatus.textContent = "Tracking (calibrated)";
+      } else {
+        calDots[calIdx].classList.add("active");
+        calMsg.textContent = `Look at the yellow dot and click it (${calIdx + 1}/9)`;
+      }
+    }
+
+    // ---- Toggle grid ----
+    document.getElementById("btn-toggle-grid").addEventListener("click", () => {
+      gridVisible = !gridVisible;
+      tileGrid.style.visibility = gridVisible ? "visible" : "hidden";
+      document.getElementById("btn-toggle-grid").textContent = gridVisible ? "Hide grid" : "Show grid";
+    });
+
+    // ---- MediaPipe setup ----
+    let faceLandmarker = null;
+
+    async function initMediaPipe() {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
+      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+        outputFaceBlendshapes: false,
+        outputFacialTransformationMatrixes: false,
+      });
+    }
+
+    async function startWebcam() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: "user" },
+      });
+      webcam.srcObject = stream;
+      await webcam.play();
+      irisCanvas.width = webcam.videoWidth;
+      irisCanvas.height = webcam.videoHeight;
+    }
+
+    // ---- Main loop ----
+    function loop() {
+      if (!faceLandmarker || webcam.readyState < 2) {
+        requestAnimationFrame(loop);
+        return;
+      }
+
+      const result = faceLandmarker.detectForVideo(webcam, performance.now());
+      ictx.clearRect(0, 0, irisCanvas.width, irisCanvas.height);
+
+      if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+        const lm = result.faceLandmarks[0];
+        currentLandmarks = lm;
+        const w = irisCanvas.width;
+        const h = irisCanvas.height;
+
+        // Draw iris circles and center dots
+        for (const indices of [LEFT_IRIS, RIGHT_IRIS]) {
+          const cx = lm[indices[0]].x * w;
+          const cy = lm[indices[0]].y * h;
+          const rx = Math.abs(lm[indices[2]].x * w - cx);
+          const ry = Math.abs(lm[indices[1]].y * h - cy);
+          const r = (rx + ry) / 2;
+
+          ictx.beginPath();
+          ictx.arc(cx, cy, r, 0, Math.PI * 2);
+          ictx.strokeStyle = "#22c55e";
+          ictx.lineWidth = 2;
+          ictx.stroke();
+
+          ictx.beginPath();
+          ictx.arc(cx, cy, 3, 0, Math.PI * 2);
+          ictx.fillStyle = "#ef4444";
+          ictx.fill();
+        }
+
+        // Draw eye corners
+        for (const idx of [L_EYE_OUT, L_EYE_IN, R_EYE_IN, R_EYE_OUT]) {
+          ictx.beginPath();
+          ictx.arc(lm[idx].x * w, lm[idx].y * h, 3, 0, Math.PI * 2);
+          ictx.fillStyle = "#3b82f6";
+          ictx.fill();
+        }
+
+        // Compute head pose and check against calibration
+        currentHeadPose = estimateHeadPose(lm);
+        irYaw.textContent = currentHeadPose.yaw.toFixed(1) + "\u00B0";
+        irPitch.textContent = currentHeadPose.pitch.toFixed(1) + "\u00B0";
+        irRoll.textContent = currentHeadPose.roll.toFixed(1) + "\u00B0";
+        checkHeadPose();
+        drawHeadGuide(lm, w, h);
+
+        // Compute gaze ratios
+        const lEyeW = lm[L_EYE_IN].x - lm[L_EYE_OUT].x;
+        const rEyeW = lm[R_EYE_OUT].x - lm[R_EYE_IN].x;
+        const lEyeH = lm[L_EYE_BOT].y - lm[L_EYE_TOP].y;
+        const rEyeH = lm[R_EYE_BOT].y - lm[R_EYE_TOP].y;
+
+        const lGazeH = lEyeW > 0 ? (lm[LEFT_IRIS_CENTER].x - lm[L_EYE_OUT].x) / lEyeW : 0.5;
+        const rGazeH = rEyeW > 0 ? (lm[RIGHT_IRIS_CENTER].x - lm[R_EYE_IN].x) / rEyeW : 0.5;
+        const lGazeV = lEyeH > 0 ? (lm[LEFT_IRIS_CENTER].y - lm[L_EYE_TOP].y) / lEyeH : 0.5;
+        const rGazeV = rEyeH > 0 ? (lm[RIGHT_IRIS_CENTER].y - lm[R_EYE_TOP].y) / rEyeH : 0.5;
+
+        const rawH = (lGazeH + rGazeH) / 2;
+        const rawV = (lGazeV + rGazeV) / 2;
+
+        // Savitzky-Golay smooth (replaces EMA — less lag, kills high-freq noise)
+        sgH.push(rawH);
+        sgV.push(rawV);
+        smoothH = sgH.get();
+        smoothV = sgV.get();
+        latestGH = smoothH;
+        latestGV = smoothV;
+
+        // Update detail panel
+        irLg.textContent = lGazeH.toFixed(3);
+        irRg.textContent = rGazeH.toFixed(3);
+        irLv.textContent = lGazeV.toFixed(3);
+        irRv.textContent = rGazeV.toFixed(3);
+        irAh.textContent = smoothH.toFixed(3) + (smoothH < 0.4 ? " (right)" : smoothH > 0.6 ? " (left)" : " (center)");
+        irAv.textContent = smoothV.toFixed(3) + (smoothV < 0.35 ? " (up)" : smoothV > 0.65 ? " (down)" : " (center)");
+
+        // Map to screen if calibrated
+        const scr = gazeToScreen(smoothH, smoothV);
+        if (scr) {
+          irSx.textContent = Math.round(scr.x);
+          irSy.textContent = Math.round(scr.y);
+
+          gazeDot.style.display = "block";
+          gazeDot.style.left = scr.x + "px";
+          gazeDot.style.top = scr.y + "px";
+          stGaze.textContent = `${Math.round(scr.x)}, ${Math.round(scr.y)}`;
+
+          // Which tile?
+          const hit = document.elementFromPoint(scr.x, scr.y);
+          const tileIdx = hit?.dataset?.idx;
+          const newTile = tileIdx != null ? parseInt(tileIdx) : -1;
+          if (newTile !== currentTile) {
+            tiles.forEach(t => t.classList.remove("gazed"));
+            if (newTile >= 0) tiles[newTile].classList.add("gazed");
+            currentTile = newTile;
+          }
+          stTile.textContent = newTile >= 0 ? tiles[newTile].textContent : "-";
+        } else {
+          irSx.textContent = "-";
+          irSy.textContent = "-";
+          stGaze.textContent = "not calibrated";
+        }
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // ---- Init ----
+    async function main() {
+      try {
+        stStatus.textContent = "Loading MediaPipe model...";
+        await Promise.all([initMediaPipe(), startWebcam()]);
+        stStatus.textContent = "Tracking (click Calibrate to map gaze to screen)";
+        loop();
+      } catch (err) {
+        stStatus.textContent = "Error: " + err.message;
+        console.error(err);
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
