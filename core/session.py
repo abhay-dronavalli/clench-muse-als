@@ -2,17 +2,23 @@
 Pointer, the only copy of the highlight. The board just draws what the session sends.
 
 Flow: SCANNING --clench on leaf--> CONFIRMING --clench--> SPEAKING --AUDIO_DONE/timeout--> home.
-Nothing is spoken or sent without the confirming clench (PRD D5).
+Nothing is spoken or sent without the confirming clench (PRD D5). On that clench the sentence is
+spoken on the board and, at the same time, the leaf's action (message, call, room) runs in the
+background through the action registry; its outcome comes back as ACTION_RESULT.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from enum import Enum
+from typing import Any
 
+from core.actions import ActionContext, ActionRegistry, build_registry
 from core.clock import Scheduler, TimerHandle
 from core.contracts import (
+    ActionName,
     AudioDone,
     Clench,
     Confirm,
@@ -24,9 +30,9 @@ from core.contracts import (
     PointingMode,
     Screen,
     Settings,
-    Speak,
     Tile,
 )
+from core.contracts import ActionResult as ActionResultMsg
 from core.db import Db
 from core.menu import Menu, MenuNode
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
@@ -38,6 +44,7 @@ CLENCH_DEBOUNCE_S = 0.3  # a CLENCH within 300 ms of the last accepted one is ig
 SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
 
 Emit = Callable[[Message], None]
+Spawn = Callable[[Coroutine[Any, Any, None]], None]
 
 
 class SessionState(str, Enum):
@@ -57,6 +64,8 @@ class Session:
         scheduler: Scheduler,
         *,
         profile: Profile,
+        actions: ActionRegistry | None = None,
+        spawn: Spawn | None = None,
         db: Db | None = None,
         lang: Lang | None = None,
         scan_ms: int = DEFAULT_SCAN_MS,
@@ -66,6 +75,10 @@ class Session:
         self._emit = emit
         self._scheduler = scheduler
         self.profile = profile
+        # Default: dry-run actions with no keys, so nothing can leave the laptop by accident.
+        self._actions = actions or build_registry(emit, {}, dry_run=True)
+        self._spawn = spawn or self._spawn_task  # tests pass a runner that finishes at once
+        self._tasks: set[asyncio.Task[None]] = set()
         self._db = db  # None = nothing is recorded (some tests)
         self.lang: Lang = lang or profile.lang
         self.scan_ms = scan_ms
@@ -95,6 +108,8 @@ class Session:
     def stop(self) -> None:
         self.pointer.stop()
         self._cancel_speak_timer()
+        for task in list(self._tasks):
+            task.cancel()
 
     def current_view(self) -> Message | None:
         """What a newly connected board should show (reply to READY)."""
@@ -178,12 +193,18 @@ class Session:
     def _confirm_pending(self) -> None:
         node = self._pending
         assert node is not None and node.action is not None
-        self.state = SessionState.SPEAKING
         text = node.phrase(self.lang)
-        self._emit(Speak(text=text, lang=self.lang))
-        self._log_action(node, text)
+        ctx = self._context(text, node.contact)
         self._record(node, confirmed=True, text=text)
         self._use_phrase(text)
+        self._speak(ctx)  # always said aloud in the room
+        if node.action != "speak":
+            self._run_action(node.action, ctx)  # and sent, at the same time
+
+    def _speak(self, ctx: ActionContext) -> None:
+        """Say `ctx.text` on the board; back to home on AUDIO_DONE or after SPEAK_TIMEOUT_S."""
+        self.state = SessionState.SPEAKING
+        self._run_action("speak", ctx, report=False)
         self._cancel_speak_timer()
         self._speak_timer = self._scheduler.call_later(
             SPEAK_TIMEOUT_S, lambda: self._finish_speaking("timeout")
@@ -241,14 +262,34 @@ class Session:
         assert node is not None and node.action is not None
         return Confirm(text=node.phrase(self.lang), action=node.action)
 
-    def _log_action(self, node: MenuNode, text: str) -> None:
-        # TODO(chunk 4): run the real action from the action registry (SMS, call, room control).
-        if node.action == "speak":
-            log.info("speak: %r", text)
-            return
-        contact = self._menu.contacts.get(node.contact) if node.contact else None
-        target = f" to {contact.label_en} ({contact.relation})" if contact else ""
-        log.info("would %s%s: %r (spoken only in this chunk)", node.action, target, text)
+    # --- actions --------------------------------------------------------------
+
+    def _context(self, text: str, contact_id: str | None, *, add_sender: bool = True) -> ActionContext:
+        contact = self._menu.contacts.get(contact_id) if contact_id else None
+        return ActionContext(
+            text=text, lang=self.lang, contact=contact, patient_name=self.profile.name, add_sender=add_sender
+        )
+
+    def _run_action(self, name: ActionName, ctx: ActionContext, *, report: bool = True) -> None:
+        """Run an action in the background. With `report`, send ACTION_RESULT when it finishes."""
+        contact_label = ctx.contact.label(ctx.lang) if ctx.contact else None
+
+        async def run() -> None:
+            result = await self._actions.run(name, ctx)
+            target = f" to {ctx.contact.id}" if ctx.contact else ""
+            if result.ok:
+                log.info("%s%s: %s (%r)", name, target, result.detail, ctx.text)
+            else:
+                log.warning("%s%s FAILED: %s (%r)", name, target, result.detail, ctx.text)
+            if report:
+                self._emit(ActionResultMsg(action=name, ok=result.ok, detail=result.detail, contact=contact_label))
+
+        self._spawn(run())
+
+    def _spawn_task(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._tasks.add(task)  # keep a reference so the task is not garbage-collected mid-send
+        task.add_done_callback(self._tasks.discard)
 
     # --- storage --------------------------------------------------------------
 

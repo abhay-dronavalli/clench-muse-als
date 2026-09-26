@@ -2,7 +2,8 @@
 
 Run:  uv run uvicorn core.main:app --reload --port 8000
 
-  /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SCREEN, CONFIRM, SPEAK out
+  /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SCREEN, CONFIRM, SPEAK,
+               ACTION_RESULT out
   /ws/console  caregiver console: SETTINGS in; mirror of what the board gets out
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
                POINT, SETTINGS in; nothing out
@@ -16,14 +17,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
+from core.config import dry_run_enabled, load_env
 from core.contracts import Lang, Message, Ready, parse_message
 from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
@@ -74,11 +77,14 @@ def create_app(
     scan_ms: int = DEFAULT_SCAN_MS,
     lang: Lang | None = None,
     db_path: str | Path = ":memory:",
+    env: Mapping[str, str] | None = None,
 ) -> FastAPI:
-    """Build the app. Defaults are safe for tests: an in-memory database. The real app (bottom of
-    this file) passes the database file."""
+    """Build the app. Defaults are safe for tests: an in-memory database and no keys, so actions
+    only dry-run. The real app (bottom of this file) passes the database file and .env."""
     menu = menu or load_menu()  # fails loudly at startup on a bad tree
     profile = profile or load_profile(menu.contacts)
+    env = env if env is not None else {}
+    dry_run = dry_run_enabled(env)
     hub = Hub()
 
     @asynccontextmanager
@@ -90,6 +96,7 @@ def create_app(
             hub.broadcast,
             scheduler or AsyncioScheduler(),
             profile=profile,
+            actions=build_registry(hub.broadcast, env, dry_run=dry_run),
             db=db,
             scan_ms=scan_ms,
             lang=lang,
@@ -97,6 +104,10 @@ def create_app(
         app.state.session = session
         session.start()
         log.info("core ready: scanning home, %d ms per tile, lang %s, patient %s", scan_ms, session.lang, profile.name)
+        if dry_run:
+            log.warning("ACTIONS_DRY_RUN is on: messages and calls are only logged (set it to false in .env)")
+        else:
+            log.warning("ACTIONS_DRY_RUN is off: confirmed messages and calls are REALLY sent")
         yield
         session.stop()
         db.close()
@@ -156,6 +167,7 @@ def create_app(
             "ok": True,
             "state": session.state.value,
             "lang": session.lang,
+            "dry_run": dry_run,
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),
@@ -164,4 +176,4 @@ def create_app(
     return app
 
 
-app = create_app(db_path=DB_PATH)
+app = create_app(db_path=DB_PATH, env=load_env())

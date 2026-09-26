@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -51,7 +52,7 @@ def sched():
 
 @pytest.fixture
 def session(menu, profile, sched, db):
-    s = Session(menu, lambda m: None, sched, profile=profile, db=db, lang="en", scan_ms=1000)
+    s = Session(menu, lambda m: None, sched, profile=profile, db=db, spawn=asyncio.run, lang="en", scan_ms=1000)
     s.start()
     return s
 

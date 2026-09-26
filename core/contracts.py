@@ -157,6 +157,16 @@ class PlayAudio(_Msg):
     url: str
 
 
+class ActionResult(_Msg):
+    """How a confirmed action that leaves the laptop went (message, call, room control)."""
+
+    type: Literal["ACTION_RESULT"] = "ACTION_RESULT"
+    action: ActionName
+    ok: bool
+    detail: str  # "dry run" when ACTIONS_DRY_RUN is on; the service's error message on failure
+    contact: str | None  # contact's display name in the current language; None when there is none
+
+
 # --- Union and helpers --------------------------------------------------------
 
 Message = Annotated[
@@ -175,6 +185,7 @@ Message = Annotated[
         Confirm,
         Speak,
         PlayAudio,
+        ActionResult,
     ],
     Field(discriminator="type"),
 ]

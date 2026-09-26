@@ -9,12 +9,12 @@ dependencies = [
     "pydantic>=2",
     "pyyaml",
     "python-dotenv",
+    "httpx",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",
 ]
 
 [tool.uv]

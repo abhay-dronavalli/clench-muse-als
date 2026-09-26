@@ -73,6 +73,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         {"type": "SPEAK", "text": "Tengo hambre. ¿Qué hay de almuerzo?", "lang": "es"},
     ),
     "PLAY_AUDIO": (contracts.PlayAudio, {"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}),
+    "ACTION_RESULT": (
+        contracts.ActionResult,
+        {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
+    ),
 }
 
 MESSAGE_CLASSES = get_args(get_args(Message)[0])
@@ -105,6 +109,8 @@ def test_round_trip(name):
         {"type": "POINT", "source": "webcam", "tile": -1, "t": 1.0},
         {"type": "CONFIRM", "text": "hi", "action": "delete_everything"},
         {"type": "SPEAK", "text": "hi", "lang": "fr"},
+        {"type": "ACTION_RESULT", "action": "send_text", "ok": True, "detail": "", "contact": None},
+        {"type": "ACTION_RESULT", "action": "place_call", "ok": True, "detail": ""},  # contact is required
         {"type": "READY", "board": 1},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
         {

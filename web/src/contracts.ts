@@ -138,6 +138,17 @@ export interface PlayAudio {
   url: string
 }
 
+/** How a confirmed action that leaves the laptop went (message, call, room control). */
+export interface ActionResult {
+  type: 'ACTION_RESULT'
+  action: ActionName
+  ok: boolean
+  /** "dry run" when ACTIONS_DRY_RUN is on; the service's error message on failure */
+  detail: string
+  /** contact's display name in the current language; null when there is none */
+  contact: string | null
+}
+
 // --- Union ---
 
 export type Message =
@@ -155,5 +166,6 @@ export type Message =
   | Confirm
   | Speak
   | PlayAudio
+  | ActionResult
 
 export type MessageType = Message['type']

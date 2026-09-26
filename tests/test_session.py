@@ -1,7 +1,13 @@
+import asyncio
+from urllib.parse import parse_qs
+
+import httpx
 import pytest
 
+from core.actions import build_registry
 from core.clock import ManualScheduler
 from core.contracts import (
+    ActionResult,
     AudioDone,
     Clench,
     Confirm,
@@ -39,9 +45,14 @@ def profile(menu):
     return load_profile(menu.contacts)
 
 
+def run_now(coro) -> None:
+    """Spawn stand-in: run a background action to completion right away."""
+    asyncio.run(coro)
+
+
 @pytest.fixture
 def session(menu, profile, sched, sent):
-    s = Session(menu, sent.append, sched, profile=profile, lang="en", scan_ms=int(SCAN_S * 1000))
+    s = Session(menu, sent.append, sched, profile=profile, spawn=run_now, lang="en", scan_ms=int(SCAN_S * 1000))
     s.start()
     return s
 
@@ -52,6 +63,10 @@ def last_screen(sent) -> Screen:
 
 def spoken(sent) -> list[Speak]:
     return [m for m in sent if isinstance(m, Speak)]
+
+
+def results(sent) -> list[ActionResult]:
+    return [m for m in sent if isinstance(m, ActionResult)]
 
 
 def clench() -> Clench:
@@ -200,7 +215,67 @@ def test_people_text_in_spanish(session, sched, sent):
     assert sent[-1] == Confirm(text="Mija, estoy bien, llámame a las seis.", action="send_message")
     sched.advance(CLENCH_DEBOUNCE_S + 0.05)
     session.handle(clench())
+    # Spoken in the room and sent at the same time; with no keys the default registry dry-runs.
     assert spoken(sent) == [Speak(text="Mija, estoy bien, llámame a las seis.", lang="es")]
+    assert results(sent) == [ActionResult(action="send_message", ok=True, detail="dry run", contact="María")]
+
+
+def test_speak_leaf_has_no_action_result(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    assert len(spoken(sent)) == 1
+    assert results(sent) == []
+
+
+def test_confirmed_call_really_sends(menu, profile, sched, sent):
+    requests: list[httpx.Request] = []
+
+    def twilio(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(201, json={"sid": "CA9"})
+
+    env = {
+        "TWILIO_ACCOUNT_SID": "AC1",
+        "TWILIO_AUTH_TOKEN": "t",
+        "TWILIO_FROM_NUMBER": "+13055550100",
+        "CONTACT_CARLOS_PHONE": "+13055550199",
+    }
+    actions = build_registry(sent.append, env, dry_run=False, transport=httpx.MockTransport(twilio))
+    s = Session(menu, sent.append, sched, profile=profile, actions=actions, spawn=run_now, lang="en")
+    s.start()
+    for tile in ["people", "carlos", "call"]:
+        pick(s, sched, sent, tile)
+    assert requests == []  # nothing before the confirming clench (D5)
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    s.handle(clench())
+    assert len(requests) == 1
+    twiml = parse_qs(requests[0].content.decode())["Twiml"][0]
+    assert "Message from Luis: Carlos, I'd like to see you. Please come by today." in twiml
+    assert results(sent) == [ActionResult(action="place_call", ok=True, detail="call queued (CA9)", contact="Carlos")]
+    assert s.state is SessionState.SPEAKING  # the room hears it too
+
+
+def test_failed_send_reports_error(menu, profile, sched, sent):
+    s = Session(
+        menu,
+        sent.append,
+        sched,
+        profile=profile,
+        actions=build_registry(sent.append, {}, dry_run=False),
+        spawn=run_now,
+        lang="en",
+    )
+    s.start()
+    for tile in ["people", "maria", "text"]:
+        pick(s, sched, sent, tile)
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    s.handle(clench())
+    (result,) = results(sent)
+    assert (result.ok, result.contact) == (False, "Maria")
+    assert result.detail == "Telegram not configured: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID_MARIA missing"
+    assert len(spoken(sent)) == 1  # still said aloud
 
 
 def test_language_switch_while_confirming_resends_confirm(session, sched, sent):

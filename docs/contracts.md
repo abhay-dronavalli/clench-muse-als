@@ -20,7 +20,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SCREEN, CONFIRM, SPEAK, PLAY_AUDIO |
+| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | nothing |
 
@@ -40,6 +40,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Speak a confirmed sentence with browser speech |
 | PLAY_AUDIO | Core | Board, Console | Play an audio file (later, cloud voices) |
+| ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 
 ## Sensor Service -> Core
 
@@ -243,4 +244,22 @@ AUDIO_DONE.
 
 ```json
 {"type": "PLAY_AUDIO", "url": "/audio/abc123.mp3"}
+```
+
+### ACTION_RESULT
+
+Sent when a confirmed action that leaves the laptop finishes: `send_message` (Telegram),
+`place_call` (Twilio voice) or `room_control`. Speaking aloud has no ACTION_RESULT; the board
+already knows from AUDIO_DONE. The help alert sends one for its call and one for its message. The
+board shows it as a toast for 4 s.
+
+| Field | Type | Notes |
+|---|---|---|
+| `action` | same values as CONFIRM `action` | the action that ran |
+| `ok` | bool | true = sent (or, in dry run, would have been sent) |
+| `detail` | string | `"dry run"` when `ACTIONS_DRY_RUN` is on; `"duplicate suppressed"` when the same action, contact and text ran in the last 30 s; otherwise the service's result or error, e.g. `"Twilio error 21219 (HTTP 400): ..."` |
+| `contact` | string \| null | contact's display name in the current language, null when there is none (room control) |
+
+```json
+{"type": "ACTION_RESULT", "action": "send_message", "ok": true, "detail": "sent", "contact": "María"}
 ```
