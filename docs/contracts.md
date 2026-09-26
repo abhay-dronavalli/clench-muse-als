@@ -20,9 +20,11 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
-| `/ws/console` | Caregiver console | SETTINGS | the same Core -> Board messages (mirror) |
-| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | nothing |
+| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, ACTION_RESULT |
+| `/ws/console` | Caregiver console | SETTINGS | SETTINGS and the same Core -> Board messages (mirror) |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS |
+
+Every client gets the current SETTINGS the moment it connects, and again after every change.
 
 | Message | Sender | Receiver | Meaning |
 |---|---|---|---|
@@ -35,7 +37,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
 | READY | Board | Core | Board connected; Core replies with the current view |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
-| SETTINGS | Console, web dev panel | Core | Pointing mode, scan speed, language, speak picks |
+| SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
@@ -174,13 +176,17 @@ matching AUDIO_DONE wins and later ones are ignored.
 {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}
 ```
 
-## Console -> Core
+## Console -> Core, and Core -> every client
 
 ### SETTINGS
 
 Caregiver changes pointing mode, scan speed, language or speak picks. Applies at once, no restart
 (PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks toggle) on
 `/ws/input`.
+
+The Core sends the same message the other way, with every field filled in, to each board, console
+and input client when it connects, and to all of them after every SETTINGS it receives (the sender
+included). Screens show these values instead of assuming defaults.
 
 | Field | Type | Notes |
 |---|---|---|

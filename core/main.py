@@ -2,11 +2,13 @@
 
 Run:  uv run uvicorn core.main:app --reload --port 8000
 
-  /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SCREEN, CONFIRM, SPEAK,
+  /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SETTINGS, SCREEN, CONFIRM, SPEAK,
                PLAY_AUDIO, ACTION_RESULT out
-  /ws/console  caregiver console: SETTINGS in; mirror of what the board gets out
+  /ws/console  caregiver console: SETTINGS in; SETTINGS plus a mirror of what the board gets out
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
-               POINT, SETTINGS in; nothing out
+               POINT, SETTINGS in; SETTINGS out
+
+Every client gets the current SETTINGS as soon as it connects, and again after every change.
   /audio/<sha256>.mp3  cached ElevenLabs audio named in PLAY_AUDIO
 
 Every incoming message is parsed with parse_message. Invalid ones are logged and ignored; a bad
@@ -138,6 +140,7 @@ def create_app(
         hub.add(client)
         writer = asyncio.create_task(client.pump())
         session: Session = app.state.session
+        hub.send_to(client, session.settings())
         try:
             while True:
                 event = await ws.receive()

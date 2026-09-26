@@ -23,6 +23,7 @@ def test_board_gets_confirm_then_speak():
     clock = FakeClock()
     with make_client(clock) as client:
         with client.websocket_connect("/ws/board") as board, client.websocket_connect("/ws/input") as inp:
+            assert board.receive_json()["type"] == "SETTINGS"
             board.send_json({"type": "READY"})
             home = board.receive_json()
             assert home["type"] == "SCREEN"
@@ -78,6 +79,7 @@ def test_invalid_messages_do_not_close_the_connection():
             inp.send_bytes(b"\x00")
             board.send_json({"type": "CLENCH", "t": 1.0, "strength": 1.0})  # wrong route
             # Both sockets still work.
+            assert board.receive_json()["type"] == "SETTINGS"
             board.send_json({"type": "READY"})
             assert board.receive_json()["path"] == []
             clock.t += 1.0
@@ -90,7 +92,9 @@ def test_console_mirrors_board_and_sends_settings():
     clock = FakeClock()
     with make_client(clock) as client:
         with client.websocket_connect("/ws/console") as console:
+            assert console.receive_json()["type"] == "SETTINGS"
             console.send_json({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 600_000, "lang": "es"})
+            assert console.receive_json()["lang"] == "es"  # the new settings first, then the view
             screen = console.receive_json()
             assert screen["type"] == "SCREEN"
             assert screen["lang"] == "es"
@@ -98,6 +102,23 @@ def test_console_mirrors_board_and_sends_settings():
         health = client.get("/health").json()
         assert health["lang"] == "es"
         assert health["state"] == "SCANNING"
+
+
+def test_settings_are_announced_on_connect_and_after_every_change():
+    clock = FakeClock()
+    with make_client(clock) as client:
+        with (
+            client.websocket_connect("/ws/board") as board,
+            client.websocket_connect("/ws/console") as console,
+            client.websocket_connect("/ws/input") as inp,
+        ):
+            current = {"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True}
+            for ws in (board, console, inp):
+                assert ws.receive_json() == current
+            inp.send_json({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "speak_picks": False})
+            changed = {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "lang": "en", "speak_picks": False}
+            for ws in (board, console, inp):  # the sender too, so every dev panel shows the truth
+                assert ws.receive_json() == changed
 
 
 def test_serves_cached_audio_only(tmp_path):

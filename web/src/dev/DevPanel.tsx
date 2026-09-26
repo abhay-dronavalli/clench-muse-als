@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
-import type { Lang, Message } from '../contracts'
+import type { Lang, Message, PointingMode } from '../contracts'
 import type { VoiceSource } from '../board/speech'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket } from '../lib/useSocket'
@@ -15,6 +15,9 @@ import { useSocket } from '../lib/useSocket'
  *
  * Collapsed (the default) it is a small pill in the bottom-left corner, below the tile grid, so it
  * never covers a tile. The keys work whether it is expanded or not.
+ *
+ * The controls show what the Core says (SETTINGS arrives on connect and after every change), so a
+ * change from the console or another tab shows up here too.
  */
 
 const LONG_CLENCH_S = 1.5
@@ -43,20 +46,31 @@ function describe(msg: Message): string {
 }
 
 interface Props {
-  lang: Lang
   /** where the last thing the board said came from; null = nothing said yet */
   voiceSource: VoiceSource | null
 }
 
-export default function DevPanel({ lang, voiceSource }: Props) {
+export default function DevPanel({ voiceSource }: Props) {
   const [open, setOpen] = useState(false)
-  const [scanMs, setScanMs] = useState(1000)
-  // data/profile.yaml turns it on by default; the Core does not report it back, so this assumes on.
-  const [speakPicks, setSpeakPicks] = useState(true)
+  // null until the Core's first SETTINGS arrives: nothing is assumed.
+  const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
+  const [scanMs, setScanMs] = useState<number | null>(null)
+  const [lang, setLang] = useState<Lang | null>(null)
+  const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
   const scanTimer = useRef<number | undefined>(undefined)
-  const { status, send } = useSocket('/ws/input')
+  const sliding = useRef(false)
+  const { status, send } = useSocket('/ws/input', {
+    onMessage: (msg) => {
+      if (msg.type !== 'SETTINGS') return
+      setPointingMode(msg.pointing_mode)
+      if (!sliding.current) setScanMs(msg.scan_ms)
+      if (msg.lang) setLang(msg.lang)
+      if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
+    },
+  })
+  const known = pointingMode !== null && scanMs !== null
 
   const emit = useCallback(
     (msg: Message) => {
@@ -122,23 +136,28 @@ export default function DevPanel({ lang, voiceSource }: Props) {
     }
   }, [clench, doubleBlink, longClench])
 
+  // Every change keeps the other values as the Core last reported them. The Core answers with
+  // SETTINGS, which is what the controls then show.
   const onScanChange = (ms: number) => {
+    if (pointingMode === null) return
     setScanMs(ms)
+    sliding.current = true
     // Send once the slider settles instead of on every step.
     window.clearTimeout(scanTimer.current)
-    scanTimer.current = window.setTimeout(
-      () => emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: ms }),
-      250,
-    )
+    scanTimer.current = window.setTimeout(() => {
+      sliding.current = false
+      emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: ms })
+    }, 250)
   }
 
-  const toggleLang = () =>
-    emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: scanMs, lang: lang === 'en' ? 'es' : 'en' })
+  const toggleLang = () => {
+    if (!known || lang === null) return
+    emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, lang: lang === 'en' ? 'es' : 'en' })
+  }
 
   const toggleSpeakPicks = () => {
-    const next = !speakPicks
-    setSpeakPicks(next)
-    emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: scanMs, speak_picks: next })
+    if (!known || speakPicks === null) return
+    emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, speak_picks: !speakPicks })
   }
 
   // Buttons never take focus, so Space always means "clench", never "press the focused button".
@@ -193,15 +212,16 @@ export default function DevPanel({ lang, voiceSource }: Props) {
 
       <label className="mb-3 block">
         <span className="flex justify-between text-xs text-zinc-400">
-          <span>Scan speed</span>
-          <span>{scanMs} ms / tile</span>
+          <span>Scan speed{pointingMode && pointingMode !== 'auto' ? ` (${pointingMode})` : ''}</span>
+          <span>{scanMs === null ? 'waiting for Core' : `${scanMs} ms / tile`}</span>
         </span>
         <input
           type="range"
           min={300}
           max={3000}
           step={100}
-          value={scanMs}
+          disabled={!known}
+          value={scanMs ?? 1000}
           onChange={(e) => onScanChange(Number(e.target.value))}
           onPointerUp={(e) => e.currentTarget.blur()}
           className="w-full accent-yellow-300"
@@ -222,7 +242,7 @@ export default function DevPanel({ lang, voiceSource }: Props) {
         <button type="button" className={btn} onMouseDown={noFocus} onClick={toggleSpeakPicks}>
           <span className={speakPicks ? 'text-yellow-300' : 'text-zinc-400'}>On</span>
           {' / '}
-          <span className={speakPicks ? 'text-zinc-400' : 'text-yellow-300'}>Off</span>
+          <span className={speakPicks === false ? 'text-yellow-300' : 'text-zinc-400'}>Off</span>
         </button>
       </div>
 

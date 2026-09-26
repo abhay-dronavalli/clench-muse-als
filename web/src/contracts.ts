@@ -93,9 +93,12 @@ export interface AudioDone {
   id: string
 }
 
-// --- Console -> Core (the web dev panel also sends it) ---
+// --- Console -> Core (the web dev panel also sends it), and Core -> every client ---
 
-/** Caregiver settings change. */
+/**
+ * Caregiver settings change. The Core also sends it, fully filled in, to every client on connect
+ * and after every change.
+ */
 export interface Settings {
   type: 'SETTINGS'
   pointing_mode: PointingMode

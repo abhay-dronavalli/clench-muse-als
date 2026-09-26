@@ -107,11 +107,12 @@ class AudioDone(_Msg):
     id: str = Field(min_length=1)  # the SPEAK / PLAY_AUDIO id
 
 
-# --- Console -> Core ----------------------------------------------------------
+# --- Console -> Core, and Core -> every client ----------------------------------
 
 
 class Settings(_Msg):
-    """Caregiver settings change."""
+    """Caregiver settings change. The Core also sends it, fully filled in, to every client on connect
+    and after every change."""
 
     type: Literal["SETTINGS"] = "SETTINGS"
     pointing_mode: PointingMode

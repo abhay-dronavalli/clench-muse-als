@@ -178,6 +178,12 @@ class Session:
             return self._help_screen()
         return None  # SPEAKING: never re-send SPEAK; the next SCREEN follows when speech ends
 
+    def settings(self) -> Settings:
+        """The current settings, as the Core announces them to every client."""
+        return Settings(
+            pointing_mode=self.pointing_mode, scan_ms=self.scan_ms, lang=self.lang, speak_picks=self.speak_picks
+        )
+
     def handle(self, msg: Message) -> None:
         match msg:
             case Clench():
@@ -366,8 +372,11 @@ class Session:
         if s.speak_picks is not None:
             self.speak_picks = s.speak_picks
         self.pointer.apply_settings(s)
-        if s.lang is not None and s.lang != self.lang:
+        lang_changed = s.lang is not None and s.lang != self.lang
+        if s.lang is not None:
             self.lang = s.lang
+        self._emit(self.settings())  # every client sees the real values, whoever changed them
+        if lang_changed:
             view = self.current_view()
             if view is not None:
                 self._emit(view)

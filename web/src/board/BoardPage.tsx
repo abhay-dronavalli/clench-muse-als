@@ -63,6 +63,10 @@ export default function BoardPage() {
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
+      case 'SETTINGS':
+        // Only the language matters here; the dev panel shows the rest from its own socket.
+        if (msg.lang) setLang(msg.lang)
+        break
       default:
         console.warn('board ignored', msg.type)
     }
@@ -104,7 +108,7 @@ export default function BoardPage() {
       {status === 'open' && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       <ToastStack toasts={toasts} />
 
-      <DevPanel lang={lang} voiceSource={voiceSource} />
+      <DevPanel voiceSource={voiceSource} />
     </div>
   )
 }
