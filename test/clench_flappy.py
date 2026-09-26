@@ -338,7 +338,7 @@ def main():
         board.start_stream()
         time.sleep(WINDOW_SECONDS + 0.3)
 
-        calibration = load_calibration(board) if args.load else None
+        calibration = load_calibration(board, args.profile) if args.load else None
         if calibration:
             print(f"Loaded calibration from {calibration['saved_at']}.")
         else:

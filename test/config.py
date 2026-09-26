@@ -51,6 +51,13 @@ def build_parser(description: str) -> argparse.ArgumentParser:
         help="Muse MAC address, if you know it.",
     )
     parser.add_argument(
+        "--profile",
+        default="default",
+        metavar="NAME",
+        help="whose calibration to use, e.g. --profile taher. Each person gets "
+             "their own calibration.<name>.json, so sharing one headband is safe.",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="enable BrainFlow's dev logger (prints the native BLE chatter)",

@@ -181,6 +181,22 @@ controller. Two different physiological signals, deliberately kept apart:
 Neither is brainwaves, and that is exactly why they are good input: they are huge,
 fast, and voluntary, where real EEG intent is small, slow and unreliable.
 
+### Profiles: one headband, several people
+
+Every script takes `--profile NAME`. Each person gets their own
+`calibration.<name>.json`, so calibrating for someone else never touches yours:
+
+```powershell
+python clench_detect.py --profile taher            # calibrate and save as taher
+python clench_flappy.py --profile taher --load     # play as taher
+python clench_flappy.py --profile alex             # calibrate alex, saves separately
+```
+
+Asking for a profile that does not exist tells you which ones do, rather than
+loading the wrong thresholds silently. Synthetic runs write
+`calibration.<name>.synthetic.json`, and a calibration recorded on one board is
+refused on the other.
+
 ### Calibrate every time you put the band on
 
 Microvolt levels depend on skin moisture and how the ear-tips are seated, so a
