@@ -199,6 +199,28 @@ class Db:
                 (hash, text, lang, voice, file_path, self._clock()),
             )
 
+    # --- what the AI is told (PRD D14: a short summary, never the full history) ----
+
+    def top_phrases(self, lang: Lang, limit: int = 20) -> list[str]:
+        """The most used confirmed sentences in `lang`, most used first."""
+        rows = self._conn.execute(
+            """SELECT text FROM phrases WHERE profile_id = ? AND lang = ?
+               ORDER BY uses DESC, last_used DESC LIMIT ?""",
+            (PROFILE_ID, lang, limit),
+        ).fetchall()
+        return [r["text"] for r in rows]
+
+    def recent_messages(self, lang: Lang, limit: int = 5) -> list[str]:
+        """The last confirmed sentences in `lang` (spoken, sent or called), newest first. The help
+        alert is left out: its text is a fixed line, not the patient's words."""
+        rows = self._conn.execute(
+            """SELECT text FROM events
+               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help'
+               ORDER BY t DESC, id DESC LIMIT ?""",
+            (PROFILE_ID, lang, limit),
+        ).fetchall()
+        return [r["text"] for r in rows]
+
     # --- reading (tests, console history later) ------------------------------------
 
     def events(self) -> list[sqlite3.Row]:

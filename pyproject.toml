@@ -10,6 +10,7 @@ dependencies = [
     "pyyaml",
     "python-dotenv",
     "httpx",
+    "google-genai>=2.25.0",
 ]
 
 [dependency-groups]

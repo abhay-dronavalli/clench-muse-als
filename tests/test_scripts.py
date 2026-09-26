@@ -37,6 +37,7 @@ def no_network(monkeypatch):
         ("test_call", []),
         ("test_call", ["carlos", "en"]),
         ("test_voice", []),
+        ("test_gemini", []),
     ],
 )
 def test_scripts_do_nothing_without_send(name, argv, no_network, monkeypatch, capsys):
