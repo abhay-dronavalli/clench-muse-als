@@ -12,6 +12,7 @@ from core.menu import load_menu
 from tests.test_scripts import load
 
 MARIA_ES = "Mija, estoy bien, llámame a las seis."
+MARIA_EN = "Honey, I'm okay, call me at six."
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +48,7 @@ def test_the_week_looks_like_the_core_wrote_it(seed, menu, tmp_path, capsys):
     assert len(confirmed) >= 35
     now = datetime.now().timestamp()
     assert all(now - 8 * 86400 < e["t"] <= now for e in events)  # the last 7 days, nothing in the future
-    maria = [e for e in confirmed if e["node_id"] == "people.maria.text"]
+    maria = [e for e in confirmed if e["node_id"] == "people.maria.text" and e["lang"] == "es"]
     assert all(e["text"] == MARIA_ES and e["contact"] == "maria" and e["action"] == "send_message" for e in maria)
     assert {datetime.fromtimestamp(e["t"]).hour for e in maria} == {12}
     # The picks down the path come first, as on the board.
@@ -86,8 +87,8 @@ def test_no_flags_only_prints_help(seed, tmp_path, capsys):
 
 def test_patterns_must_match_the_menu(seed, menu, tmp_path):
     data = json.loads(seed.SEED_PATH.read_text(encoding="utf-8"))
-    lang, days, patterns = seed.load_patterns(menu)
-    assert lang == "es" and days == 7 and sum(p.focus for p in patterns) == 1
+    days, patterns = seed.load_patterns(menu)
+    assert days == 7 and sum(p.focus for p in patterns) == 1
     data["patterns"][0]["contact"] = "carlos"  # the seed may not invent who a message goes to
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(data), encoding="utf-8")
@@ -96,10 +97,47 @@ def test_patterns_must_match_the_menu(seed, menu, tmp_path):
 
 
 def test_plan_moves_other_habits_away_from_the_focus_hour(seed, menu):
-    _, days, patterns = seed.load_patterns(menu)
+    days, patterns = seed.load_patterns(menu)
     week = seed.plan(patterns, days, 16, random.Random(1))
     for p in week:
         if p.focus:
             assert p.hours == (16, 16) and p.days_per_week == days
         else:
             assert all(min(abs(h - 16) % 24, 24 - abs(h - 16) % 24) > 1 for h in p.hours)
+
+
+def test_the_week_is_written_in_both_languages(seed, menu, tmp_path, capsys):
+    """An English board shows the learned sentences too (the default --lang both)."""
+    path = tmp_path / "demo.db"
+    assert seed.main(["--load", "--db", str(path), "--focus-hour", "15"]) == 0
+    out = capsys.readouterr().out
+    assert f"1. {MARIA_ES}" in out and f"1. {MARIA_EN}" in out
+    db = Db(path)
+    confirmed = [e for e in db.events() if e["confirmed"]]
+    es = [(e["t"], e["node_id"]) for e in confirmed if e["lang"] == "es"]
+    en = [(e["t"], e["node_id"]) for e in confirmed if e["lang"] == "en"]
+    assert es and sorted(es) == sorted(en)  # the same uses, once in each language
+    assert {e["text"] for e in confirmed if e["lang"] == "en" and e["node_id"] == "people.maria.text"} == {MARIA_EN}
+    at = datetime.now().replace(hour=15, minute=30)
+    top, shortcut = seed.preview(db, menu, "en", at)
+    assert top[0] == MARIA_EN and shortcut == MARIA_EN
+    db.close()
+
+
+def test_lang_option_writes_one_language(seed, tmp_path, capsys):
+    path = tmp_path / "demo.db"
+    assert seed.main(["--load", "--lang", "es", "--db", str(path)]) == 0
+    assert "(en)" not in capsys.readouterr().out
+    db = Db(path)
+    assert {e["lang"] for e in db.events()} == {"es"}
+    assert {p["lang"] for p in db.phrases()} == {"es"}
+    db.close()
+
+
+def test_a_wrong_english_phrase_is_refused(seed, menu, tmp_path):
+    data = json.loads(seed.SEED_PATH.read_text(encoding="utf-8"))
+    data["patterns"][0]["phrase_en"] = "Something the menu does not say."
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"\(en\)"):
+        seed.load_patterns(menu, bad)
