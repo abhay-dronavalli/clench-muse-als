@@ -25,7 +25,7 @@ import time
 from brainflow.board_shim import BoardShim, BrainFlowPresets
 
 from clench_detect import (
-    CALIBRATION_FILE,
+    load_calibration,
     CR,
     GestureRecognizer,
     WINDOW_SECONDS,
@@ -199,12 +199,12 @@ def main():
         board.start_stream()
         time.sleep(WINDOW_SECONDS + 0.3)
 
-        if args.load and CALIBRATION_FILE.exists():
-            calibration = json.loads(CALIBRATION_FILE.read_text())
+        calibration = load_calibration(board) if args.load else None
+        if calibration:
             print(f"Loaded calibration from {calibration['saved_at']}.")
         else:
             if args.load:
-                print("No calibration.json yet -- calibrating now.")
+                print("No usable saved calibration -- calibrating now.")
             calibration = calibrate(board, rows, fs, window_samples, args)
         describe(calibration)
 

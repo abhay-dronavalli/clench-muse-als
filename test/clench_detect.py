@@ -44,6 +44,35 @@ from config import (board_label, build_parser, eeg_channels_and_names, get_board
                     prepare_or_explain)
 
 CALIBRATION_FILE = pathlib.Path(__file__).parent / "calibration.json"
+# Synthetic runs write somewhere else. They used to share one file, and a smoke
+# test silently overwrote a real headband calibration -- which then loaded back
+# with completely wrong thresholds and no warning.
+SYNTHETIC_CALIBRATION_FILE = pathlib.Path(__file__).parent / "calibration.synthetic.json"
+
+
+def calibration_file(board):
+    """Where this board's calibration lives. Never mix the two."""
+    from brainflow.board_shim import BoardIds
+    if board.board_id == BoardIds.SYNTHETIC_BOARD:
+        return SYNTHETIC_CALIBRATION_FILE
+    return CALIBRATION_FILE
+
+
+def load_calibration(board):
+    """Read the saved calibration for this board, or None if it is missing//wrong.
+
+    Refuses a calibration recorded on a different board: thresholds from the
+    synthetic generator are meaningless on a real headband and vice versa.
+    """
+    path = calibration_file(board)
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text())
+    if data.get("board") != board_label(board):
+        print(f"  ignoring {path.name}: recorded on {data.get('board')}, "
+              f"this is {board_label(board)}")
+        return None
+    return data
 
 # --- tuning knobs you probably will not need to touch ----------------------
 EMG_BAND = (20.0, 110.0)    # Hz: jaw muscle. Above EEG, below the Nyquist limit.
@@ -200,8 +229,9 @@ def calibrate(board, rows, fs, window_samples, args):
         "blink_peak": blink_peak, "blink_threshold": blink_threshold,
         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
-    CALIBRATION_FILE.write_text(json.dumps(calibration, indent=2))
-    print(f"\nSaved to {CALIBRATION_FILE.name}. Reuse it with --load "
+    path = calibration_file(board)
+    path.write_text(json.dumps(calibration, indent=2))
+    print(f"\nSaved to {path.name}. Reuse it with --load "
           "(only valid while the band stays on your head).")
     return calibration
 
