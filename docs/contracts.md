@@ -179,7 +179,7 @@ No fields besides `type`.
 ### AUDIO_DONE
 
 Sent by the board when a SPEAK or PLAY_AUDIO of kind `phrase` or `system` ends: finished, failed
-(after the browser-speech fallback), or interrupted by a newer one. Never sent for `echo`.
+(after the browser-speech fallback), or cleared by a system line. Never sent for `echo`.
 
 The Core only reacts to the AUDIO_DONE whose `id` is the phrase it is speaking: it then returns to
 home. Any other id (an echo, a system line, an older phrase) is ignored. If the right AUDIO_DONE
@@ -316,14 +316,19 @@ Everything the board says is one utterance with an `id` and a `kind`:
 
 The Core sends PLAY_AUDIO when it has (or can make in time) ElevenLabs audio for the text, and
 SPEAK when it cannot (no key, no internet, too slow, service errors): the board then uses browser
-speech, so nothing is ever left silent.
+speech, so nothing is ever left silent. An echo is never held back: when its audio is not cached
+the Core sends SPEAK at once (in pick order) and makes the audio in the background for next time.
 
-Board rules (one audio player, reused):
+Board rules (one queue, one audio player):
 
-- A new echo interrupts an older echo. An echo that arrives while a phrase or system line is
-  playing is dropped (it never cuts the person's sentence).
-- A phrase or system line interrupts whatever is playing. An interrupted phrase or system line
-  still gets its AUDIO_DONE.
+- Echoes play in order, one after another, never cutting each other off: every picked word is
+  heard, including the last pick before the suggestions or confirm screen.
+- A phrase waits for the echoes queued before it, then plays.
+- A system line clears the queue and plays at once, interrupting whatever is playing. A cleared or
+  interrupted phrase or system line still gets its AUDIO_DONE.
+- At most 6 items wait; on overflow the oldest waiting echo is dropped (and logged).
+- An echo whose PLAY_AUDIO has not started playing within 300 ms is said with browser speech
+  instead, in its place in the queue.
 - If a PLAY_AUDIO file fails to load or play, the board says the same `text` with browser speech,
   then sends AUDIO_DONE.
 

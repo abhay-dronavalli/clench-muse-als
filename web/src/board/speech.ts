@@ -1,14 +1,21 @@
 import type { Lang, UtteranceKind } from '../contracts'
+import { SoundQueue } from './queue'
 
 /**
- * Everything the board says (SPEAK and PLAY_AUDIO) goes through say(): one audio player, reused.
+ * Everything the board says (SPEAK and PLAY_AUDIO) goes through say(): one queue, one audio player.
+ * The order rules live in queue.ts:
  *
- *   - A new echo interrupts an older echo. An echo that arrives while a phrase or system line is
- *     playing is dropped: it never cuts the person's sentence.
- *   - A phrase or system line interrupts whatever is playing.
- *   - Echo plays at 70% volume, phrase and system at 100%.
+ *   - Echoes (picked words) play in order, one after another, never cutting each other off.
+ *   - A phrase waits for the echoes queued before it, then plays.
+ *   - A system line clears the queue and plays at once.
+ *   - At most 6 items wait; on overflow the oldest is dropped (logged).
+ *
+ * And here:
+ *   - An echo whose audio has not started playing within 300 ms is said with browser speech
+ *     instead, in its place in the queue (the Core keeps making the audio for next time).
  *   - If the audio file fails to load or play, the same text is said with browser speech.
- *   - onEnd runs exactly once for every item that started: finished, failed or interrupted.
+ *   - Echo plays at 70% volume, phrase and system at 100%.
+ *   - onEnd runs exactly once for every utterance: finished, failed, dropped or interrupted.
  */
 
 export type VoiceSource = 'ElevenLabs (cached)' | 'ElevenLabs' | 'Browser'
@@ -22,19 +29,23 @@ export interface Utterance {
   audio?: { url: string; cached: boolean }
 }
 
+/** How long an echo's audio may take to start before browser speech says the word instead. */
+export const ECHO_START_MS = 300
+
 const LANG_TAG: Record<Lang, string> = { en: 'en-US', es: 'es-US' }
 const VOLUME: Record<UtteranceKind, number> = { echo: 0.7, phrase: 1, system: 1 }
 
-interface Playing {
+interface Pending {
   u: Utterance
-  end: () => void
+  onEnd: (u: Utterance) => void
+  onSource: (s: VoiceSource) => void
 }
 
-let playing: Playing | null = null
 let player: HTMLAudioElement | null = null
 // Keep a reference to the utterance being spoken: Chrome can garbage-collect it mid-sentence and
 // then never fire onend.
 let current: SpeechSynthesisUtterance | null = null
+let run = 0 // bumps on every start and stop, so callbacks of an older item do nothing
 
 function speechAvailable(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window
@@ -69,9 +80,11 @@ function pickVoice(tag: string): SpeechSynthesisVoice | undefined {
 
 /** Stop the audio player and browser speech without firing any of their callbacks. */
 function stopAll(): void {
+  run++
   if (player) {
     player.onended = null
     player.onerror = null
+    player.onplaying = null
     player.pause()
   }
   if (speechAvailable()) {
@@ -106,46 +119,30 @@ function speakWithBrowser(text: string, lang: Lang, volume: number, onDone: () =
   window.speechSynthesis.speak(u)
 }
 
-/**
- * Say `u` following the rules at the top of this file. Returns false when it was dropped (an echo
- * during a phrase or system line). `onSource` reports where the sound actually comes from.
- */
-export function say(u: Utterance, onEnd: (u: Utterance) => void, onSource: (s: VoiceSource) => void): boolean {
-  if (u.kind === 'echo' && playing && playing.u.kind !== 'echo') return false
-
-  const previous = playing
-  playing = null
+/** Play one utterance; `done` runs once when it ends or fails (never after a stop). */
+function start({ u, onSource }: Pending, done: () => void): void {
   stopAll()
-  previous?.end() // interrupted: its AUDIO_DONE still goes out
-
-  let ended = false
-  const entry: Playing = {
-    u,
-    end: () => {
-      if (ended) return
-      ended = true
-      if (playing === entry) playing = null
-      onEnd(u)
-    },
-  }
-  playing = entry
-  const isCurrent = () => playing === entry
-  const finish = () => {
-    if (isCurrent()) entry.end()
-  }
-
+  const mine = ++run
+  const live = () => run === mine
   let fellBack = false
+  let startTimer: number | undefined
+  const finish = () => {
+    window.clearTimeout(startTimer)
+    if (live()) done()
+  }
   const withBrowser = () => {
-    if (!isCurrent() || fellBack) return
+    if (!live() || fellBack) return
     fellBack = true
+    window.clearTimeout(startTimer)
     stopAll()
+    run = mine // still this item: its browser speech must be able to finish it
     onSource('Browser')
     speakWithBrowser(u.text, u.lang, VOLUME[u.kind], finish)
   }
 
   if (!u.audio) {
     withBrowser()
-    return true
+    return
   }
   const { url, cached } = u.audio
   onSource(cached ? 'ElevenLabs (cached)' : 'ElevenLabs')
@@ -155,12 +152,32 @@ export function say(u: Utterance, onEnd: (u: Utterance) => void, onSource: (s: V
     console.warn('audio failed, using browser speech:', url)
     withBrowser()
   }
+  audio.onplaying = () => window.clearTimeout(startTimer)
+  if (u.kind === 'echo') {
+    // A picked word that is not playing within 300 ms is said by the browser, in its place.
+    startTimer = window.setTimeout(() => {
+      console.info(`echo audio not playing after ${ECHO_START_MS} ms, using browser speech:`, u.text)
+      withBrowser()
+    }, ECHO_START_MS)
+  }
   audio.volume = VOLUME[u.kind]
   audio.src = url
   audio.play().catch((e: unknown) => {
-    if (!isCurrent()) return // a newer item interrupted this one (AbortError)
+    if (!live()) return // stopped or replaced meanwhile (AbortError)
     console.warn('audio play failed, using browser speech:', e)
     withBrowser()
   })
-  return true
+}
+
+const queue = new SoundQueue<Pending & { kind: UtteranceKind }>(
+  { start, stop: stopAll },
+  (p) => p.onEnd(p.u),
+)
+
+/**
+ * Queue `u` following the rules at the top of this file. `onEnd` runs once when it has ended (or was
+ * dropped or interrupted); `onSource` reports where the sound actually comes from.
+ */
+export function say(u: Utterance, onEnd: (u: Utterance) => void, onSource: (s: VoiceSource) => void): void {
+  queue.add({ kind: u.kind, u, onEnd, onSource })
 }
