@@ -76,6 +76,7 @@ export function TileGrid({ screen }: { screen: Screen }) {
           return (
             <div
               key={tile.id}
+              data-tile-index={i} // webcam pointing measures the tiles on screen (facetrack/)
               aria-current={on}
               aria-busy={on && loading}
               className={[

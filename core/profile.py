@@ -1,5 +1,5 @@
-"""The patient profile (PRD A7): name, starting language, who the help alert reaches, and how the
-ranking learns (PRD section 9: weights, the stability margin, learning on or Day 1 mode).
+"""The patient profile (PRD A7): name, starting language, who the help alert reaches, the clench
+look-back for head pointing, and how the ranking learns (PRD section 9: weights, the stability margin, learning on or Day 1 mode).
 
 Loaded from data/profile.yaml at startup. Loading fails loudly (ProfileError) on a bad file.
 """
@@ -41,6 +41,9 @@ class Profile(BaseModel):
     help_contact: str  # contact id in data/contacts.yaml
     speak_picks: bool = True  # say each picked tile aloud as it is picked (switchable live)
     learning: bool = True  # false = Day 1 mode: yaml order, fixed Suggested list (switchable live)
+    # When the highlight follows the head, a CLENCH picks the tile highlighted this long before it
+    # arrived: clenching can move the head (PRD 3a "freeze on clench"). 0 = the tile at the clench.
+    clench_lookback_ms: int = Field(default=250, ge=0, le=1000)
     ranking: Ranking = Field(default_factory=Ranking)
 
 

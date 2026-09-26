@@ -9,10 +9,13 @@ Tile indexes (`tile`, `highlight`) are 0-based positions in the current SCREEN's
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 PointingMode = Literal["auto", "scan", "webcam", "headtilt"]
 PointSource = Literal["webcam", "headtilt"]
+# Where the highlight is coming from right now: Auto shows "scan" after falling back, and Head tilt
+# shows "scan" until it is built.
+ActivePointer = Literal["scan", "webcam", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
@@ -79,11 +82,13 @@ class Signal(_Msg):
 
 
 class Point(_Msg):
-    """The person is facing tile `tile`. Sent only when the tile changes."""
+    """The person is facing tile `tile` of the SCREEN numbered `seq`. Sent when the tile changes and
+    once for every new SCREEN. The Core ignores a POINT whose `seq` is not the current screen's."""
 
     type: Literal["POINT"] = "POINT"
     source: PointSource
     tile: int = Field(ge=0)
+    seq: int = Field(ge=0)  # the SCREEN `seq` the tile index belongs to
     t: float
 
 
@@ -140,6 +145,8 @@ class Screen(_Msg):
 
     type: Literal["SCREEN"] = "SCREEN"
     screen: ScreenName
+    # Goes up every time the tiles change (not when only the highlight moves); POINT echoes it.
+    seq: int = Field(ge=0)
     tiles: list[Tile] = Field(max_length=6)  # PRD D8: no more than six options
     highlight: int | None = Field(ge=0)  # None = nothing highlighted
     lang: Lang
@@ -148,6 +155,9 @@ class Screen(_Msg):
     countdown: int | None = Field(default=None, ge=0)
     # True while the Core waits (at most 4 s) for AI options after a pick; scanning is paused.
     loading: bool = False
+    # Where the highlight comes from right now (None on the help countdown). "scan" in Auto or Head
+    # tilt mode means the fallback is on: the board shows a small "Scanning" badge.
+    pointer: ActivePointer | None = None
 
 
 class Confirm(_Msg):
@@ -206,6 +216,35 @@ class Metrics(_Msg):
     scan_steps: int = Field(ge=0)  # highlight moves waited through before the picks
     day1_selections: int = Field(ge=1)
     day1_scan_steps: int = Field(ge=0)
+
+
+# --- Board <-> Core over REST (not a WebSocket message) ---------------------------
+
+MIN_HEAD_SPAN_DEG = 2.0  # a calibrated side closer than this to the center is a failed calibration
+
+
+class HeadRange(_Msg):
+    """The person's comfortable head range from the calibration overlay, in degrees of head yaw and
+    pitch as the board measures them (GET / PUT /api/head-range). Saved in the database profile
+    (PRD A7 `head_range_json`). Left and right lie on opposite sides of the center, as do up and down;
+    the sign convention is the board's, so the Core only checks that shape."""
+
+    center_yaw: float
+    center_pitch: float
+    left_yaw: float
+    right_yaw: float
+    up_pitch: float
+    down_pitch: float
+
+    @model_validator(mode="after")
+    def _around_center(self) -> "HeadRange":
+        for name, a, b, c in (
+            ("yaw", self.left_yaw, self.center_yaw, self.right_yaw),
+            ("pitch", self.up_pitch, self.center_pitch, self.down_pitch),
+        ):
+            if (a - b) * (c - b) >= 0 or min(abs(a - b), abs(c - b)) < MIN_HEAD_SPAN_DEG:
+                raise ValueError(f"{name}: each side must be at least {MIN_HEAD_SPAN_DEG} degrees from the center")
+        return self
 
 
 # --- Union and helpers --------------------------------------------------------

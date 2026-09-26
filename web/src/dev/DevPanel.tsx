@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
-import type { Lang, Message, Metrics, PointingMode } from '../contracts'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react'
+import { POINTING_MODES, type HeadRange, type Lang, type Message, type Metrics, type PointingMode } from '../contracts'
 import type { VoiceSource } from '../board/speech'
+import { showCursor } from '../facetrack/stores'
+import { tracker } from '../facetrack/tracker'
+import { useTrackerStatus } from '../facetrack/useTrackerStatus'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket } from '../lib/useSocket'
+import { CameraPreview } from './CameraPreview'
 
 /**
  * Keyboard stand-in for the headband (PRD D15, P0). Sends the same CLENCH / DOUBLE_BLINK /
@@ -22,10 +26,14 @@ import { useSocket } from '../lib/useSocket'
  * After every confirmed message the Core sends METRICS: the panel shows what it took against Day 1
  * mode ("Took 2 clenches, 0 s waiting (Day 1: 5 clenches, 6 s)"), and the collapsed pill keeps a
  * short "2 vs 5 clenches" so the demo can show it without opening the panel.
+ *
+ * Pointing (PRD D2): the pointing mode selector (Auto / Scan / Webcam / Head tilt), a small camera
+ * preview with the head's yaw and pitch, "Calibrate head range" and the cursor dot toggle.
  */
 
 const LONG_CLENCH_S = 1.5
 const MAX_LOG = 10
+const MODE_LABEL: Record<PointingMode, string> = { auto: 'Auto', scan: 'Scan', webcam: 'Webcam', headtilt: 'Head tilt' }
 
 interface LogEntry {
   id: number
@@ -43,7 +51,7 @@ function describe(msg: Message): string {
     case 'SETTINGS': {
       const picks = msg.speak_picks === undefined ? '' : ` speak picks ${msg.speak_picks ? 'on' : 'off'}`
       const learning = msg.learning === undefined ? '' : msg.learning ? ' learning' : ' day 1'
-      return `SETTINGS ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}${picks}${learning}`
+      return `SETTINGS ${msg.pointing_mode} ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}${picks}${learning}`
     }
     default:
       return msg.type
@@ -63,9 +71,15 @@ function clenches(n: number): string {
 interface Props {
   /** where the last thing the board said came from; null = nothing said yet */
   voiceSource: VoiceSource | null
+  /** the saved head range; null = not calibrated, the defaults are in use */
+  headRange: HeadRange | null
+  /** the board wants the camera on (Webcam or Auto mode) */
+  cameraWanted: boolean
+  /** open the head-range calibration overlay on the board */
+  onCalibrate: () => void
 }
 
-export default function DevPanel({ voiceSource }: Props) {
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate }: Props) {
   const [open, setOpen] = useState(false)
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
@@ -93,6 +107,8 @@ export default function DevPanel({ voiceSource }: Props) {
     },
   })
   const known = pointingMode !== null && scanMs !== null
+  const camera = useTrackerStatus()
+  const cursorDot = useSyncExternalStore(showCursor.subscribe, showCursor.get)
 
   const emit = useCallback(
     (msg: Message) => {
@@ -182,6 +198,11 @@ export default function DevPanel({ voiceSource }: Props) {
     emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, speak_picks: !speakPicks })
   }
 
+  const setMode = (mode: PointingMode) => {
+    if (!known || mode === pointingMode) return
+    emit({ type: 'SETTINGS', pointing_mode: mode, scan_ms: scanMs })
+  }
+
   // Day 1 mode = learning off: menu.yaml order, the fixed Suggested list, no shortcut.
   const toggleDay1 = () => {
     if (!known || learning === null) return
@@ -247,6 +268,51 @@ export default function DevPanel({ voiceSource }: Props) {
         </button>
         <button type="button" className={btn} onMouseDown={noFocus} onClick={longClench}>
           Long
+        </button>
+      </div>
+
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs text-zinc-400">Pointing</span>
+        <span className="flex gap-1">
+          {POINTING_MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onMouseDown={noFocus}
+              onClick={() => setMode(m)}
+              disabled={!known}
+              className={`rounded-md px-1.5 py-1 text-xs font-semibold ${
+                m === pointingMode ? 'bg-yellow-300 text-zinc-900' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+              }`}
+            >
+              {MODE_LABEL[m]}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      {(cameraWanted || camera.kind !== 'off') && <CameraPreview onRetry={() => void tracker.start()} />}
+
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className={`${btn} text-xs disabled:opacity-40`}
+          onMouseDown={noFocus}
+          onClick={onCalibrate}
+          disabled={camera.kind !== 'on'}
+          title={camera.kind === 'on' ? 'Center, left, right, up, down: about 8 s' : 'Needs the camera: Auto or Webcam mode'}
+        >
+          Calibrate head range
+        </button>
+        <span className="text-xs text-zinc-400">{headRange ? 'calibrated' : 'defaults'}</span>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs text-zinc-400">Cursor dot</span>
+        <button type="button" className={btn} onMouseDown={noFocus} onClick={() => showCursor.set(!cursorDot)}>
+          <span className={cursorDot ? 'text-yellow-300' : 'text-zinc-400'}>On</span>
+          {' / '}
+          <span className={cursorDot ? 'text-zinc-400' : 'text-yellow-300'}>Off</span>
         </button>
       </div>
 

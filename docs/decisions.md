@@ -275,5 +275,84 @@ Status: **done** = built, **planned** = agreed, not built yet.
   fixed random seed (same week every time). `--focus-hour H` sends the María text twice at H every
   day and moves any other habit within an hour of H two hours away, so the text is the top Suggested
   phrase and the shortcut is on at H. The seed is Spanish (Luis's language); an English board ranks
-  menu tiles from it but shows no history sentences.
+  menu tiles from it but shows no history sentences. (Chunk 7: the seed is bilingual now, see
+  "Smaller choices (chunk 7)".)
 - The CircuitBreaker from the voice service is shared (it takes a name and fallback text now).
+
+## 9. Webcam pointing: POINT carries the screen, and a clench looks back (chunk 7, done)
+
+- PRD: D2 / A3.3a (pointing modes; the board "maps the angle to a tile, smooths it and sends POINT
+  only when the tile changes"; calibrate center and edges; sticky edges; "freeze on clench: lock the
+  highlight for about 300 ms"), A6 (head turn to highlight under 150 ms), A7 (`head_range_json`),
+  section 11 (video never leaves the laptop, a light while the camera is on).
+- SCREEN has a `seq` that goes up whenever its tiles change (ids, labels or kinds; not when only the
+  highlight moves), and POINT names the `seq` its tile belongs to. The Core ignores any other `seq`,
+  so a POINT measured on the old tiles can never highlight a tile on a new screen. The board sends a
+  POINT once for every new `seq`, then only when the tile changes.
+- SCREEN also has an optional `pointer` ("scan" | "webcam" | "headtilt", null on the help countdown):
+  where the highlight comes from right now. The board shows the "Scanning" badge when it is "scan" in
+  Auto or Head tilt mode.
+- Freeze on clench is built as a look-back instead of a lock: the session keeps the last 2 s of
+  highlight changes, and when the highlight follows the head a CLENCH picks the tile that was
+  highlighted 250 ms before it arrived (`clench_lookback_ms` in `data/profile.yaml`, 0 = off). A lock
+  would have to start before the clench is known; the look-back gets the same result after the fact.
+  It is measured from when the CLENCH reaches the Core (localhost, a few ms), not from the event's
+  `t`, so a sensor clock that disagrees cannot pick a tile from another screen. It never reaches past
+  the current screen (a screen younger than 250 ms picks the tile it started with). Scan mode picks
+  the highlighted tile, as before. The prompt asked for 250 ms; the PRD says about 300 ms.
+- The board maps the head pose to a point on the screen, not to a fixed grid: calibrated yaw to x and
+  pitch to y, piece by piece either side of the center (so an uneven range works), then the tile
+  whose box on screen holds the point, or the nearest. So it works for any layout, including long
+  sentence tiles.
+- Sticky edges: a new tile is taken only once the point is 15% of that tile's own width / height
+  inside it. A point in a gap between tiles never moves the highlight; a point past the grid's edge
+  moves to the nearest tile only if even its shrunk box is closer than the current tile.
+- The head range is saved in the database profile (`profile.head_range_json`, PRD A7) through REST
+  (`GET` / `PUT /api/head-range`, a `HeadRange` model in both contract files) rather than in
+  `data/profile.yaml`: the YAML is hand-written and in git (writing it back would drop its comments),
+  and a calibration belongs to the person and seat on this laptop, like the history. Before the first
+  calibration the board uses defaults for a laptop camera above the screen (18 degrees either side,
+  center 8 degrees down, 12 up or down).
+
+## Smaller choices (chunk 7)
+
+- Auto starts scanning, and switches to webcam only when FACE_OK is true and a POINT arrives (as the
+  prompt says), so the highlight moves at once even while the camera is starting or refused. It falls
+  back after 3 s without a face, from the tile that was highlighted. A face back within 3 s cancels
+  the fallback. The session remembers the last FACE_OK and hands it to a new pointer when the mode
+  changes. When the last board disconnects the Core treats it as FACE_OK false.
+- Webcam mode never falls back (that is what Auto is for): with no face the highlight stays where it
+  is, and a camera problem says "Set Pointing mode to Auto or Scan" on the board.
+- On new tiles the Webcam pointer keeps the same index (the head has not moved, and the 3x2 grid
+  puts it in the same place) until the board's POINT for the new `seq` corrects it, instead of
+  jumping to tile 0 for a moment.
+- Head tilt is a ScanPointer that logs one warning when chosen; POINT with source "headtilt" is not
+  used yet. The badge reads "Head tilt is not ready yet: scanning".
+- Head turns are not "scan steps": METRICS counts only highlight moves made by the scan timer.
+- A mode change applies at once while scanning (same tiles, same highlight, a new SCREEN with the new
+  `pointer`); while confirming, speaking or on the help countdown it applies from the next screen.
+- Head pose: yaw and pitch come from the third column of MediaPipe's facial transformation matrix
+  (read column-major, as MediaPipe's own three.js samples do). Smoothing: exponential, 35% of each
+  new frame at about 25 frames a second. The GPU delegate is tried first; the CPU is used if it fails
+  to start or a frame fails on it.
+- FACE_OK is debounced 300 ms (a blink or a hand does not flip Auto), sent again on every reconnect
+  (the Core may have restarted), and sent as false when the camera stops or fails. POINT goes out
+  only while a face is reported, never during calibration.
+- Calibration: 1.5 s "get ready", then 1.5 s per dot (center, left, right, top, bottom), keeping the
+  frames after the first 0.5 s of each step; the median of each step is the range. It fails (nothing
+  saved, the overlay says why) when a step saw fewer than 5 face frames or a side is not at least 2
+  degrees from the center on the opposite side; the Core checks the same rule before saving.
+- The MediaPipe wasm is copied from `node_modules/@mediapipe/tasks-vision` (the same version as the
+  JS) and the model is downloaded from Google's model storage by `web/scripts/mediapipe-assets.mjs`
+  after `npm install` and before `dev` / `build`; both land in `web/public/mediapipe/`, git-ignored.
+  A failed download never fails the npm command; the board then says face tracking could not start.
+- The cursor dot toggle is a per-browser convenience (localStorage), not a Core setting.
+- vitest 5 was added for the web's pure functions (`web/src/facetrack/*.test.ts`); MediaPipe itself is
+  not in unit tests. npm 10.9 crashes resolving vitest 5's optional peers, so it was installed with
+  npm 11 (`npx npm@11 install -D vitest`); `npm install` inside `web/` and `npm --prefix web ci`
+  work from the lockfile with npm 10.9. (`npm --prefix web install`, the old setup line, fails with
+  ENOENT on npm 10.9 even before this chunk; CLAUDE.md now says `npm --prefix web ci`.)
+- Demo seed: every pattern has `phrase_en` and `phrase_es` (both checked against the menu), and
+  `--load` writes each simulated use once in each language by default (`--lang es|en|both`). Writing
+  both languages doubles the evidence per path, but every score part is scaled across the candidates
+  being ranked, so menus, Suggested and the shortcut come out the same as a one-language week.

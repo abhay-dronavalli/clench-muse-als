@@ -16,6 +16,8 @@ export default defineConfig({
       },
       // Cached ElevenLabs audio named in PLAY_AUDIO
       '/audio': 'http://127.0.0.1:8000',
+      // REST: the calibrated head range (GET / PUT /api/head-range)
+      '/api': 'http://127.0.0.1:8000',
     },
   },
 })

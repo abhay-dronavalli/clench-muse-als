@@ -6,7 +6,7 @@ import logging
 
 from core.clock import Scheduler, TimerHandle
 from core.contracts import Settings
-from core.pointer.base import OnHighlight, Pointer
+from core.pointer.base import OnHighlight, OnSource, Pointer
 
 log = logging.getLogger("clench.pointer")
 
@@ -14,8 +14,16 @@ DEFAULT_SCAN_MS = 1000
 
 
 class ScanPointer(Pointer):
-    def __init__(self, scheduler: Scheduler, on_highlight: OnHighlight, scan_ms: int = DEFAULT_SCAN_MS) -> None:
-        super().__init__(on_highlight)
+    source = "scan"
+
+    def __init__(
+        self,
+        scheduler: Scheduler,
+        on_highlight: OnHighlight,
+        scan_ms: int = DEFAULT_SCAN_MS,
+        on_source: OnSource | None = None,
+    ) -> None:
+        super().__init__(on_highlight, on_source)
         self._scheduler = scheduler
         self.scan_ms = scan_ms
         self._timer: TimerHandle | None = None
