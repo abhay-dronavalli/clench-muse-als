@@ -10,9 +10,10 @@ import { useSocket } from '../lib/useSocket'
  *   Space            CLENCH (strength 1.0)
  *   hold Space 1.5 s LONG_CLENCH instead of CLENCH (sent the moment 1.5 s is reached)
  *   B                DOUBLE_BLINK
- *   `                show / hide this panel
+ *   `                expand / collapse this panel
  *
- * The keys work whether or not the panel is visible.
+ * Collapsed (the default) it is a small pill in the bottom-left corner, below the tile grid, so it
+ * never covers a tile. The keys work whether it is expanded or not.
  */
 
 const LONG_CLENCH_S = 1.5
@@ -39,7 +40,7 @@ function describe(msg: Message): string {
 }
 
 export default function DevPanel({ lang }: { lang: Lang }) {
-  const [visible, setVisible] = useState(import.meta.env.DEV)
+  const [open, setOpen] = useState(false)
   const [scanMs, setScanMs] = useState(1000)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
@@ -88,7 +89,7 @@ export default function DevPanel({ lang }: { lang: Lang }) {
       } else if (e.code === 'KeyB') {
         if (!e.repeat) doubleBlink()
       } else if (e.code === 'Backquote') {
-        if (!e.repeat) setVisible((v) => !v)
+        if (!e.repeat) setOpen((v) => !v)
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
@@ -123,19 +124,38 @@ export default function DevPanel({ lang }: { lang: Lang }) {
   const toggleLang = () =>
     emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: scanMs, lang: lang === 'en' ? 'es' : 'en' })
 
-  if (!visible) return null
-
   // Buttons never take focus, so Space always means "clench", never "press the focused button".
   const noFocus = (e: MouseEvent) => e.preventDefault()
   const btn = 'rounded-md bg-zinc-700 px-2 py-1.5 font-semibold hover:bg-zinc-600 active:bg-zinc-500'
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onMouseDown={noFocus}
+        onClick={() => setOpen(true)}
+        title="Dev input: click or press ` to expand"
+        className="fixed bottom-1.5 left-2 z-50 flex items-center gap-1.5 rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-600 hover:bg-zinc-700"
+      >
+        <StatusDot status={status} label="Input" /> Dev <span className="text-zinc-500">`</span>
+      </button>
+    )
+  }
+
   return (
-    <aside className="fixed bottom-4 right-4 z-50 w-80 rounded-xl bg-zinc-800/95 p-4 text-sm text-zinc-100 shadow-2xl ring-1 ring-zinc-600">
+    <aside className="fixed bottom-2 left-2 z-50 w-80 rounded-xl bg-zinc-800/95 p-4 text-sm text-zinc-100 shadow-2xl ring-1 ring-zinc-600">
       <header className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2 font-bold">
           <StatusDot status={status} label="Input" /> Dev input
         </span>
-        <span className="text-xs text-zinc-400">` to hide</span>
+        <button
+          type="button"
+          onMouseDown={noFocus}
+          onClick={() => setOpen(false)}
+          className="rounded px-1.5 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+        >
+          collapse `
+        </button>
       </header>
 
       <p className="mb-3 text-xs text-zinc-400">

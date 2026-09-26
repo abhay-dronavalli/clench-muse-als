@@ -15,10 +15,13 @@ export function Breadcrumb({ screen }: { screen: Screen }) {
   )
 }
 
-/** Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are. */
+/**
+ * Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are.
+ * The deeper bottom padding keeps the collapsed dev panel pill clear of the highlighted tile's ring.
+ */
 export function TileGrid({ screen }: { screen: Screen }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 p-8">
+    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8">
       {screen.tiles.map((tile, i) => {
         const on = i === screen.highlight
         return (
