@@ -9,7 +9,7 @@ import {
   type ShortcutDebug,
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
-import { showCursor } from '../facetrack/stores'
+import { gazeConnected, showCursor } from '../facetrack/stores'
 import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
 import { tracker } from '../facetrack/tracker'
 import { useTrackerStatus } from '../facetrack/useTrackerStatus'
@@ -37,13 +37,19 @@ import { CameraPreview } from './CameraPreview'
  * mode ("Took 2 clenches, 0 s waiting (Day 1: 5 clenches, 6 s)"), and the collapsed pill keeps a
  * short "2 vs 5 clenches" so the demo can show it without opening the panel.
  *
- * Pointing (PRD D2): the pointing mode selector (Auto / Scan / Webcam / Head tilt), a small camera
+ * Pointing (PRD D2): the pointing mode selector (Auto / Scan / Webcam / Gaze / Head tilt), a small camera
  * preview with the head's yaw and pitch, "Calibrate head range" and the cursor dot toggle.
  */
 
 const DEFAULT_LONG_CLENCH_MS = 2500 // until the Core's SETTINGS says otherwise
 const MAX_LOG = 10
-const MODE_LABEL: Record<PointingMode, string> = { auto: 'Auto', scan: 'Scan', webcam: 'Webcam', headtilt: 'Head tilt' }
+const MODE_LABEL: Record<PointingMode, string> = {
+  auto: 'Auto',
+  scan: 'Scan',
+  webcam: 'Webcam',
+  gaze: 'Gaze',
+  headtilt: 'Head tilt',
+}
 
 interface LogEntry {
   id: number
@@ -143,6 +149,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const known = pointingMode !== null && scanMs !== null
   const camera = useTrackerStatus()
   const cursorDot = useSyncExternalStore(showCursor.subscribe, showCursor.get)
+  const eyeTracker = useSyncExternalStore(gazeConnected.subscribe, gazeConnected.get)
 
   const emit = useCallback(
     (msg: Message) => {
@@ -350,6 +357,15 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       </div>
 
       {(cameraWanted || camera.kind !== 'off') && <CameraPreview onRetry={() => void tracker.start()} />}
+
+      {(pointingMode === 'gaze' || pointingMode === 'auto') && (
+        <p className="mb-3 text-xs text-zinc-400" title="docs/eye-tracking.md: feed window.clenchGaze">
+          Eye tracker:{' '}
+          <span className={eyeTracker ? 'text-emerald-300' : 'text-zinc-200'}>
+            {eyeTracker ? 'connected (gaze slot)' : 'not connected'}
+          </span>
+        </p>
+      )}
 
       <div className="mb-3 flex items-center justify-between gap-2">
         <button

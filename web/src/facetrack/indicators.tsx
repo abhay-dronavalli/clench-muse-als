@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { Lang, PointingMode, Screen } from '../contracts'
 import { STRINGS } from '../board/strings'
-import { cursor, showCursor } from './stores'
+import { cursor, gazeConnected, showCursor } from './stores'
 import { useTrackerStatus } from './useTrackerStatus'
 
 /** PRD section 11: a light on screen whenever the camera is on. */
@@ -42,7 +42,18 @@ export function CameraNotice({ lang, mode }: { lang: Lang; mode: PointingMode | 
   )
 }
 
-/** A subtle dot where the head is pointing (dev panel toggle). */
+/** Gaze mode with no eye tracker feeding the gaze slot: the highlight cannot move. */
+export function GazeNotice({ lang, mode }: { lang: Lang; mode: PointingMode | null }) {
+  const live = useSyncExternalStore(gazeConnected.subscribe, gazeConnected.get)
+  if (mode !== 'gaze' || live) return null
+  return (
+    <p role="alert" className="max-w-xl rounded-2xl bg-amber-950/95 px-4 py-2 text-lg text-amber-100 ring-2 ring-amber-500">
+      {STRINGS[lang].pointing.noGaze}
+    </p>
+  )
+}
+
+/** A subtle dot where the head or the gaze is pointing (dev panel toggle). */
 export function CursorDot() {
   const point = useSyncExternalStore(cursor.subscribe, cursor.get)
   const on = useSyncExternalStore(showCursor.subscribe, showCursor.get)

@@ -1,7 +1,8 @@
 // Two tiny shared stores for the board and the dev panel (read with useSyncExternalStore):
 //
-//   cursor      where the head points right now (null = no face / camera off), for the cursor dot
-//   showCursor  the dev panel's "Cursor dot" toggle, remembered in this browser only
+//   cursor         where the head or the gaze points right now (null = not seen / off), for the cursor dot
+//   showCursor     the dev panel's "Cursor dot" toggle, remembered in this browser only
+//   gazeConnected  an eye tracker is feeding the gaze slot (gaze.ts)
 
 import type { ScreenPoint } from './pose'
 
@@ -27,6 +28,8 @@ function store<T>(initial: T) {
 }
 
 export const cursor = store<ScreenPoint | null>(null)
+
+export const gazeConnected = store<boolean>(false)
 
 const CURSOR_KEY = 'clench.cursorDot'
 

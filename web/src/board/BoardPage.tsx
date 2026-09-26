@@ -3,10 +3,10 @@ import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '..
 import DevPanel from '../dev/DevPanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
-import { CameraLight, CameraNotice, CursorDot, PointerBadge } from '../facetrack/indicators'
+import { CameraLight, CameraNotice, CursorDot, GazeNotice, PointerBadge } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import { STICKY_MARGIN } from '../facetrack/tiles'
-import { useHeadPointing } from '../facetrack/useHeadPointing'
+import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket, type Send } from '../lib/useSocket'
 import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './speech'
@@ -32,8 +32,9 @@ type View =
  * the "Other..." click and system lines play over whatever is on screen, through one queue (speech.ts). AUDIO_DONE goes back for phrases and system
  * lines, never for echoes.
  *
- * Webcam pointing (facetrack/): the camera is on only while the pointing mode is Webcam or Auto,
- * with a "Camera on" light; face tracking runs in this page and only POINT / FACE_OK are sent.
+ * Pointing (facetrack/): the head (camera on only in Webcam or Auto mode, with a "Camera on" light)
+ * or an eye tracker plugged into the gaze slot (Gaze or Auto mode, docs/eye-tracking.md). Tracking
+ * runs in this page and only POINT / FACE_OK are sent.
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
@@ -118,9 +119,10 @@ export default function BoardPage() {
     }
   }, [connected])
 
-  const camera = started && (mode === 'webcam' || mode === 'auto')
+  const camera = started && headCamera(mode)
+  const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
-  useHeadPointing({ camera, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
 
   const start = () => {
     unlockSpeech()
@@ -138,6 +140,7 @@ export default function BoardPage() {
           <StatusDot status={started ? status : 'closed'} label="Core" />
         </div>
         {started && <CameraNotice lang={lang} mode={mode} />}
+        {started && <GazeNotice lang={lang} mode={mode} />}
       </div>
 
       {/* Never show a stale highlight while disconnected: the Core may have moved on. */}
@@ -150,7 +153,7 @@ export default function BoardPage() {
         <>
           <Breadcrumb screen={screen} />
           <TileGrid screen={screen} />
-          {camera && <CursorDot />}
+          {pointing && <CursorDot />}
         </>
       )}
       {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
