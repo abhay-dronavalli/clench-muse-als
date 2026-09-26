@@ -183,6 +183,11 @@ def test_a_recent_cancel_turns_the_shortcut_off(menu, profile, db, loop):
     s, sent = make(menu, profile, db, loop)
     pick(s, sent, "Suggested")
     s.handle(DoubleBlink(t=0.0))  # cancelled the guess
+    # The session logs the cancel at the wall clock; the ranker's clock is NOW. Put the cancel a
+    # minute before NOW so the test does not depend on the time of day it runs at.
+    with db._conn:
+        db._conn.execute("UPDATE events SET t = ? WHERE rejected = 1", (NOW - 60,))
+    s.ranker._index = None  # re-read the history
     s.handle(DoubleBlink(t=0.0))
     pick(s, sent, "Suggested")
     assert s.state is SessionState.SCANNING  # the list, not the same guess again
