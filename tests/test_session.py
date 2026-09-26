@@ -1,4 +1,5 @@
 import asyncio
+import json
 from urllib.parse import parse_qs
 
 import httpx
@@ -20,7 +21,7 @@ from core.contracts import (
 from core.menu import load_menu
 from core.pointer import ScanPointer
 from core.profile import load_profile
-from core.session import CLENCH_DEBOUNCE_S, SPEAK_TIMEOUT_S, Session, SessionState
+from core.session import CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, SPEAK_TIMEOUT_S, Session, SessionState
 
 SCAN_S = 1.0
 
@@ -174,9 +175,11 @@ def test_nothing_spoken_without_confirm(session, sched, sent):
     pick(session, sched, sent, "hungry")
     session.handle(blink())
     session.handle(LongClench(t=0.0, duration=1.6))
+    session.handle(blink())  # help countdown cancelled
     session.handle(AudioDone())
     sched.advance(60)
     assert spoken(sent) == []
+    assert results(sent) == []
 
 
 def test_speaking_times_out_to_home(session, sched, sent):
@@ -200,11 +203,126 @@ def test_late_audio_done_is_ignored(session, sched, sent):
     assert last_screen(sent).path == []
 
 
-def test_long_clench_is_ignored(session, sent):
-    n = len(sent)
-    session.handle(LongClench(t=0.0, duration=1.6))
-    assert len(sent) == n
+def long_clench() -> LongClench:
+    return LongClench(t=0.0, duration=1.6)
+
+
+def countdowns(sent) -> list[int | None]:
+    return [m.countdown for m in sent if isinstance(m, Screen) and m.screen == "help_countdown"]
+
+
+def test_help_countdown_fires_call_and_message(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(long_clench())
+    assert session.state is SessionState.HELP_COUNTDOWN
+    assert sent[-1] == Screen(screen="help_countdown", tiles=[], highlight=None, lang="en", path=[], countdown=5)
+    sched.advance(4.0)
+    assert countdowns(sent) == [5, 4, 3, 2, 1]
+    assert results(sent) == [] and spoken(sent) == []
+    assert [m for m in sent if isinstance(m, Screen) and m.screen == "menu"][-1].path == ["I need"]  # frozen
+
+    sched.advance(1.0)  # 0: fire (the countdown is the confirmation, no CONFIRM screen)
+    assert not any(isinstance(m, Confirm) for m in sent)
+    assert results(sent) == [
+        ActionResult(action="place_call", ok=True, detail="dry run", contact="Maria"),
+        ActionResult(action="send_message", ok=True, detail="dry run", contact="Maria"),
+    ]
+    assert spoken(sent) == [Speak(text="Calling Maria", lang="en")]
+    assert session.state is SessionState.SPEAKING
+    session.handle(AudioDone())
     assert session.state is SessionState.SCANNING
+    assert last_screen(sent).path == []  # home
+
+
+def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
+    requests: list[httpx.Request] = []
+
+    def service(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(201, json={"ok": True, "sid": "CA1"})
+
+    env = {
+        "TELEGRAM_BOT_TOKEN": "1:x",
+        "TELEGRAM_CHAT_ID_MARIA": "42",
+        "TWILIO_ACCOUNT_SID": "AC1",
+        "TWILIO_AUTH_TOKEN": "t",
+        "TWILIO_FROM_NUMBER": "+13055550100",
+        "CONTACT_MARIA_PHONE": "+13055550123",
+    }
+    actions = build_registry(sent.append, env, dry_run=False, transport=httpx.MockTransport(service))
+    s = Session(menu, sent.append, sched, profile=profile, actions=actions, spawn=run_now)  # profile lang: es
+    s.start()
+    s.handle(long_clench())
+    sched.advance(HELP_COUNTDOWN_S)
+    call, message = requests
+    assert call.url.host == "api.twilio.com"
+    say = '<Say language="es-MX">Luis necesita ayuda ahora</Say>'
+    assert parse_qs(call.content.decode())["Twiml"] == [f'<Response>{say}<Pause length="1"/>{say}</Response>']
+    assert message.url.host == "api.telegram.org"
+    assert json.loads(message.content) == {"chat_id": "42", "text": "Luis necesita ayuda ahora"}
+    assert spoken(sent) == [Speak(text="Llamando a María", lang="es")]
+    assert [(r.action, r.ok, r.contact) for r in results(sent)] == [
+        ("place_call", True, "María"),
+        ("send_message", True, "María"),
+    ]
+
+
+def test_double_blink_cancels_help_back_to_scanning(session, sched, sent):
+    pick(session, sched, sent, "need")
+    sched.advance(2 * SCAN_S)
+    assert session.highlight == 2
+    session.handle(long_clench())
+    sched.advance(2.5)
+    session.handle(blink())
+    assert session.state is SessionState.SCANNING
+    screen = last_screen(sent)
+    assert (screen.screen, screen.path, screen.highlight) == ("menu", ["I need"], 2)  # where it was
+    sched.advance(30)
+    assert results(sent) == [] and spoken(sent) == []
+    assert countdowns(sent) == [5, 4, 3]
+
+
+def test_double_blink_cancels_help_back_to_confirm(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "hungry")
+    session.handle(long_clench())
+    sched.advance(1.0)
+    session.handle(blink())
+    assert session.state is SessionState.CONFIRMING
+    assert sent[-1] == Confirm(text="I'm hungry. What's for lunch?", action="speak")
+    session.handle(clench())  # the confirm screen works as before
+    assert spoken(sent) == [Speak(text="I'm hungry. What's for lunch?", lang="en")]
+
+
+def test_help_ignores_clench_and_repeat_long_clench(session, sched, sent):
+    session.handle(long_clench())
+    sched.advance(1.5)
+    session.handle(clench())
+    session.handle(long_clench())
+    assert session.state is SessionState.HELP_COUNTDOWN
+    sched.advance(0.5)
+    assert countdowns(sent) == [5, 4, 3]  # not restarted
+
+
+def test_long_clench_while_speaking_is_ignored(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    session.handle(long_clench())
+    assert session.state is SessionState.SPEAKING
+    sched.advance(HELP_COUNTDOWN_S + 1)
+    assert countdowns(sent) == []
+
+
+def test_help_countdown_view_and_language_switch(session, sched, sent):
+    session.handle(long_clench())
+    sched.advance(2.0)
+    assert session.current_view() == Screen(
+        screen="help_countdown", tiles=[], highlight=None, lang="en", path=[], countdown=3
+    )
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000, lang="es"))
+    assert sent[-1] == Screen(screen="help_countdown", tiles=[], highlight=None, lang="es", path=[], countdown=3)
 
 
 def test_people_text_in_spanish(session, sched, sent):

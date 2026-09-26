@@ -5,6 +5,10 @@ Flow: SCANNING --clench on leaf--> CONFIRMING --clench--> SPEAKING --AUDIO_DONE/
 Nothing is spoken or sent without the confirming clench (PRD D5). On that clench the sentence is
 spoken on the board and, at the same time, the leaf's action (message, call, room) runs in the
 background through the action registry; its outcome comes back as ACTION_RESULT.
+
+Help alert (PRD D3): LONG_CLENCH while SCANNING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one SCREEN
+per second. DOUBLE_BLINK cancels back to where the person was. At 0 the help contact gets a call
+and a message (the countdown is the confirmation), the board says "Calling Maria", then home.
 """
 
 from __future__ import annotations
@@ -42,6 +46,11 @@ log = logging.getLogger("clench.session")
 
 CLENCH_DEBOUNCE_S = 0.3  # a CLENCH within 300 ms of the last accepted one is ignored
 SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
+HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
+
+HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
+HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
+HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
 
 Emit = Callable[[Message], None]
 Spawn = Callable[[Coroutine[Any, Any, None]], None]
@@ -51,7 +60,7 @@ class SessionState(str, Enum):
     SCANNING = "SCANNING"
     CONFIRMING = "CONFIRMING"
     SPEAKING = "SPEAKING"
-    # TODO(chunk: help alert): HELP_COUNTDOWN, entered on LONG_CLENCH, 5 s cancel window (PRD D3).
+    HELP_COUNTDOWN = "HELP_COUNTDOWN"
     # TODO(chunk: rest pause): PAUSED, entered on eyes closed / no input, left on CLENCH (PRD D13).
     # TODO(chunk: calibration): CALIBRATING and IDLE (PRD A3.2).
 
@@ -88,6 +97,9 @@ class Session:
         self._pending: MenuNode | None = None  # leaf being confirmed or spoken
         self._last_clench: float | None = None
         self._speak_timer: TimerHandle | None = None
+        self._help_timer: TimerHandle | None = None
+        self._help_left = 0  # seconds left in the help countdown
+        self._help_from = SessionState.SCANNING  # where a cancelled countdown goes back to
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms)
 
     # --- public ---------------------------------------------------------------
@@ -108,6 +120,7 @@ class Session:
     def stop(self) -> None:
         self.pointer.stop()
         self._cancel_speak_timer()
+        self._cancel_help_timer()
         for task in list(self._tasks):
             task.cancel()
 
@@ -117,6 +130,8 @@ class Session:
             return self._screen()
         if self.state is SessionState.CONFIRMING:
             return self._confirm_msg()
+        if self.state is SessionState.HELP_COUNTDOWN:
+            return self._help_screen()
         return None  # SPEAKING: never re-send SPEAK; the next SCREEN follows when speech ends
 
     def handle(self, msg: Message) -> None:
@@ -126,8 +141,10 @@ class Session:
             case DoubleBlink():
                 self._on_double_blink()
             case LongClench():
-                # TODO(chunk: help alert): start HELP_COUNTDOWN.
-                log.info("LONG_CLENCH (%.1f s) ignored: help alert comes in a later chunk", msg.duration)
+                if self.state in (SessionState.SCANNING, SessionState.CONFIRMING):
+                    self._start_help()
+                else:
+                    log.info("LONG_CLENCH (%.1f s) ignored while %s", msg.duration, self.state.value)
             case AudioDone():
                 if self.state is SessionState.SPEAKING:
                     self._finish_speaking("audio done")
@@ -168,6 +185,8 @@ class Session:
             self._record(node, rejected=True, text=node.phrase(self.lang))
             self._pending = None
             self._enter_level()  # back to the level the leaf was on
+        elif self.state is SessionState.HELP_COUNTDOWN:
+            self._cancel_help()
         else:
             log.info("DOUBLE_BLINK ignored while %s", self.state.value)
 
@@ -222,6 +241,67 @@ class Session:
         self.pointer.on_tiles_changed(len(self.level.children or []))
         self.pointer.start()
         self._emit(self._screen())
+
+    # --- help alert -----------------------------------------------------------
+
+    def _start_help(self) -> None:
+        self._help_from = self.state
+        self.state = SessionState.HELP_COUNTDOWN
+        self.pointer.stop()
+        self._help_left = HELP_COUNTDOWN_S
+        log.warning("LONG_CLENCH: help alert in %d s unless cancelled with a double blink", HELP_COUNTDOWN_S)
+        self._emit(self._help_screen())
+        self._help_timer = self._scheduler.call_later(1.0, self._help_tick)
+
+    def _help_tick(self) -> None:
+        self._help_timer = None
+        self._help_left -= 1
+        if self._help_left > 0:
+            self._emit(self._help_screen())
+            self._help_timer = self._scheduler.call_later(1.0, self._help_tick)
+        else:
+            self._fire_help()
+
+    def _cancel_help(self) -> None:
+        self._cancel_help_timer()
+        log.info("help alert cancelled with %d s left", self._help_left)
+        self._log_event(node_id="help", path=[HELP_LABEL[self.lang]], action="help_alert", rejected=True)
+        if self._help_from is SessionState.CONFIRMING:
+            self.state = SessionState.CONFIRMING
+            self._emit(self._confirm_msg())
+        else:
+            # Same level, same tile: the highlight carries on from where it stopped.
+            self.state = SessionState.SCANNING
+            self.pointer.start()
+            self._emit(self._screen())
+
+    def _fire_help(self) -> None:
+        contact = self._menu.contacts[self.profile.help_contact]
+        text = HELP_MESSAGE[self.lang].format(name=self.profile.name)
+        log.warning("HELP ALERT: calling and messaging %s: %r", contact.id, text)
+        self._log_event(
+            node_id="help",
+            path=[HELP_LABEL[self.lang]],
+            action="help_alert",
+            confirmed=True,
+            text=text,
+            contact=contact.id,
+        )
+        self._pending = None
+        ctx = self._context(text, contact.id, add_sender=False)  # the text already names the patient
+        self._run_action("place_call", ctx)
+        self._run_action("send_message", ctx)
+        self._speak(self._context(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), None))
+
+    def _help_screen(self) -> Screen:
+        return Screen(
+            screen="help_countdown", tiles=[], highlight=None, lang=self.lang, path=[], countdown=self._help_left
+        )
+
+    def _cancel_help_timer(self) -> None:
+        if self._help_timer is not None:
+            self._help_timer.cancel()
+            self._help_timer = None
 
     # --- settings and pointer -------------------------------------------------
 
@@ -294,24 +374,46 @@ class Session:
     # --- storage --------------------------------------------------------------
 
     def _record(self, node: MenuNode, *, confirmed: bool = False, rejected: bool = False, text: str | None = None) -> None:
-        """Log a pick, confirm or cancel of `node`, a child of the current level. Never raises."""
-        if self._db is None:
-            return
+        """Log a pick, confirm or cancel of `node`, a child of the current level."""
         ids = [n.id for n in self._path[1:]] + [node.id]
         labels = [n.label(self.lang) for n in self._path[1:]] + [node.label(self.lang)]
+        self._log_event(
+            node_id=".".join(ids),
+            path=labels,
+            action=node.action,
+            confirmed=confirmed,
+            rejected=rejected,
+            text=text,
+            contact=node.contact,
+        )
+
+    def _log_event(
+        self,
+        *,
+        node_id: str,
+        path: list[str],
+        action: str | None,
+        confirmed: bool = False,
+        rejected: bool = False,
+        text: str | None = None,
+        contact: str | None = None,
+    ) -> None:
+        """Append an events row. Never raises: a storage problem must not stop the person talking."""
+        if self._db is None:
+            return
         try:
             self._db.log_event(
-                node_id=".".join(ids),
-                path=labels,
-                action=node.action,
+                node_id=node_id,
+                path=path,
+                action=action,
                 lang=self.lang,
                 confirmed=confirmed,
                 rejected=rejected,
                 text=text,
-                contact=node.contact,
+                contact=contact,
             )
         except Exception:
-            log.exception("could not record event for %s", ".".join(ids))
+            log.exception("could not record event for %s", node_id)
 
     def _use_phrase(self, text: str) -> None:
         if self._db is None:

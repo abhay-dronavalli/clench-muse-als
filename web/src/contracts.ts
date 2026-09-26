@@ -116,6 +116,8 @@ export interface Screen {
   lang: Lang
   /** breadcrumb labels from home down to this level; [] at home */
   path: string[]
+  /** seconds left before the help alert fires; set only when screen is 'help_countdown' (tiles = []) */
+  countdown?: number | null
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */

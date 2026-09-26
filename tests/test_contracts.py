@@ -58,6 +58,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "highlight": 2,
             "lang": "es",
             "path": [],
+            "countdown": None,
         },
     ),
     "CONFIRM": (
@@ -110,6 +111,7 @@ def test_round_trip(name):
         {"type": "CONFIRM", "text": "hi", "action": "delete_everything"},
         {"type": "SPEAK", "text": "hi", "lang": "fr"},
         {"type": "ACTION_RESULT", "action": "send_text", "ok": True, "detail": "", "contact": None},
+        {"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": None, "lang": "en", "path": [], "countdown": -1},
         {"type": "ACTION_RESULT", "action": "place_call", "ok": True, "detail": ""},  # contact is required
         {"type": "READY", "board": 1},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},

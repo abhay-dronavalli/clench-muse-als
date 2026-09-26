@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from core.clock import ManualScheduler
-from core.contracts import AudioDone, Clench, DoubleBlink
+from core.contracts import AudioDone, Clench, DoubleBlink, LongClench
 from core.db import Db
 from core.menu import load_menu
 from core.profile import ProfileError, load_profile
@@ -163,3 +163,19 @@ def test_database_file_persists(tmp_path: Path, wall):
     d.use_phrase("Hola", "es")
     assert d.phrases()[0]["uses"] == 2
     d.close()
+
+
+def test_help_alert_and_cancel_are_logged(session, sched, db):
+    db.sync_profile("Luis", "es", [])
+    session.handle(LongClench(t=0.0, duration=1.6))
+    sched.advance(2.0)
+    session.handle(DoubleBlink(t=0.0))  # cancelled
+    session.handle(LongClench(t=0.0, duration=1.6))
+    sched.advance(5.0)  # fires
+    rows = [dict(r) for r in db.events()]
+    assert [(r["node_id"], r["action"], r["confirmed"], r["rejected"]) for r in rows] == [
+        ("help", "help_alert", 0, 1),
+        ("help", "help_alert", 1, 0),
+    ]
+    assert (rows[1]["text"], rows[1]["contact"], json.loads(rows[1]["path"])) == ("Luis needs help now", "maria", ["Help"])
+    assert db.phrases() == []  # the alert is not one of the person's phrases

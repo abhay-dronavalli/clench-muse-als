@@ -28,7 +28,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 |---|---|---|---|
 | CLENCH | Sensor Service, web dev panel | Core | Pick the highlighted tile |
 | DOUBLE_BLINK | Sensor Service, web dev panel | Core | Go back / No / Cancel |
-| LONG_CLENCH | Sensor Service, web dev panel | Core | Start the help alert countdown |
+| LONG_CLENCH | Sensor Service, web dev panel | Core | Start the help alert countdown (5 s, DOUBLE_BLINK cancels) |
 | STATE | Sensor Service | Core | Body state (only reorders options) |
 | SIGNAL | Sensor Service | Core, relayed to Console | Thinned signal for the live chart |
 | POINT | Board (Webcam), Sensor Service (Head tilt) | Core | Person is facing a tile |
@@ -190,7 +190,8 @@ web dev panel also sends it (scan speed slider, EN/ES toggle) on `/ws/input`.
 ### SCREEN
 
 What the board should draw. The board is "dumb": the Core owns the highlight position. Sent after
-every change while scanning (level change, highlight move, language change).
+every change while scanning (level change, highlight move, language change), and once a second
+during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -199,9 +200,21 @@ every change while scanning (level change, highlight move, language change).
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home |
+| `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
 
 ```json
-{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco"}, {"id": "need.pain.back.a_lot", "label": "Mucho"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"]}
+{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco"}, {"id": "need.pain.back.a_lot", "label": "Mucho"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null}
+```
+
+**Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
+screen starts a 5 second countdown. The Core sends this SCREEN with `countdown` 5, 4, 3, 2, 1, one
+per second, with no tiles. A DOUBLE_BLINK cancels it and the board goes back to where it was. At
+0 the Core calls and messages the profile's help contact (the countdown is the confirmation, so no
+CONFIRM screen), sends SPEAK "Calling Maria" / "Llamando a María", and returns home after
+AUDIO_DONE. Each of the call and the message then reports an ACTION_RESULT.
+
+```json
+{"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5}
 ```
 
 ### CONFIRM

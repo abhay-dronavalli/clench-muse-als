@@ -132,6 +132,8 @@ class Screen(_Msg):
     highlight: int | None = Field(ge=0)  # None = nothing highlighted
     lang: Lang
     path: list[str]  # breadcrumb labels from home down to this level; [] at home
+    # Seconds left before the help alert fires; set only when screen="help_countdown" (tiles=[]).
+    countdown: int | None = Field(default=None, ge=0)
 
 
 class Confirm(_Msg):
