@@ -7,9 +7,15 @@ spoken on the board and, at the same time, the leaf's action (message, call, roo
 background through the action registry; its outcome comes back as ACTION_RESULT. Every utterance
 has an id; SPEAKING only ends on the AUDIO_DONE with the id of the utterance it is waiting for.
 
+Speak picks (decisions.md #4): with speak_picks on, every CLENCH pick while scanning says the picked
+tile's label (an "echo") before the next level shows. Scanning never waits for it, and it is never
+said on DOUBLE_BLINK or on the confirm clench.
+
 Help alert (PRD D3): LONG_CLENCH while SCANNING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one SCREEN
-per second. DOUBLE_BLINK cancels back to where the person was. At 0 the help contact gets a call
-and a message (the countdown is the confirmation), the board says "Calling Maria", then home.
+per second, and the board says "Calling for help. Double blink to cancel.". DOUBLE_BLINK cancels
+back to where the person was. At 0 the help contact gets a call and a message (the countdown is the
+confirmation), the board says "Calling Maria" and the session goes home at once. Echoes and these
+system lines never change the session state; only a confirmed phrase makes it wait (SPEAKING).
 """
 
 from __future__ import annotations
@@ -36,7 +42,6 @@ from core.contracts import (
     Screen,
     Settings,
     Tile,
-    UtteranceKind,
 )
 from core.contracts import ActionResult as ActionResultMsg
 from core.db import Db
@@ -54,6 +59,10 @@ HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
 HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
+HELP_START: dict[Lang, str] = {
+    "en": "Calling for help. Double blink to cancel.",
+    "es": "Pidiendo ayuda. Parpadea dos veces para cancelar.",
+}
 
 Emit = Callable[[Message], None]
 Spawn = Callable[[Coroutine[Any, Any, None]], None]
@@ -76,7 +85,8 @@ def voice_lines(menu: Menu, profile: Profile) -> list[tuple[str, Lang]]:
 
     walk(menu.root)
     contact = menu.contacts[profile.help_contact]
-    system = [(HELP_SPEECH[lang].format(contact=contact.label(lang)), lang) for lang in LANGS]
+    system = [(HELP_START[lang], lang) for lang in LANGS]
+    system += [(HELP_SPEECH[lang].format(contact=contact.label(lang)), lang) for lang in LANGS]
     return list(dict.fromkeys(labels + system + phrases))
 
 
@@ -236,6 +246,8 @@ class Session:
             return
         node = children[index]
         self._record(node)
+        if self.speak_picks:
+            self._voice.speak(node.label(self.lang), self.lang, "echo")  # before the next level shows
         if node.is_leaf:
             self._pending = node
             self.state = SessionState.CONFIRMING
@@ -252,14 +264,14 @@ class Session:
         ctx = self._context(text, node.contact)
         self._record(node, confirmed=True, text=text)
         self._use_phrase(text)
-        self._speak(text, "phrase")  # always said aloud in the room
+        self._speak_phrase(text)  # always said aloud in the room
         if node.action != "speak":
             self._run_action(node.action, ctx)  # and sent, at the same time
 
-    def _speak(self, text: str, kind: UtteranceKind) -> None:
-        """Say `text` on the board; back to home on its AUDIO_DONE or after SPEAK_TIMEOUT_S."""
+    def _speak_phrase(self, text: str) -> None:
+        """Say the confirmed sentence; back to home on its AUDIO_DONE or after SPEAK_TIMEOUT_S."""
         self.state = SessionState.SPEAKING
-        self._speaking_id = self._voice.speak(text, self.lang, kind)
+        self._speaking_id = self._voice.speak(text, self.lang, "phrase")
         self._cancel_speak_timer()
         self._speak_timer = self._scheduler.call_later(
             SPEAK_TIMEOUT_S, lambda: self._finish_speaking("timeout")
@@ -287,6 +299,7 @@ class Session:
         self.pointer.stop()
         self._help_left = HELP_COUNTDOWN_S
         log.warning("LONG_CLENCH: help alert in %d s unless cancelled with a double blink", HELP_COUNTDOWN_S)
+        self._voice.speak(HELP_START[self.lang], self.lang, "system")
         self._emit(self._help_screen())
         self._help_timer = self._scheduler.call_later(1.0, self._help_tick)
 
@@ -328,7 +341,9 @@ class Session:
         ctx = self._context(text, contact.id, add_sender=False)  # the text already names the patient
         self._run_action("place_call", ctx)
         self._run_action("send_message", ctx)
-        self._speak(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), "system")
+        self._voice.speak(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), self.lang, "system")
+        self._path = [self._menu.root]
+        self._enter_level()  # straight home: a system line never holds the session
 
     def _help_screen(self) -> Screen:
         return Screen(

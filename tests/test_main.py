@@ -34,11 +34,15 @@ def test_board_gets_confirm_then_speak():
                 inp.send_json({"type": "CLENCH", "t": clock.t, "strength": 1.0})
 
             clench()  # Suggested
+            echo = board.receive_json()  # the picked tile is said first (speak picks)
+            assert echo == {"type": "SPEAK", "id": echo["id"], "kind": "echo", "text": "Suggested", "lang": "en"}
             level = board.receive_json()
             assert level["type"] == "SCREEN"
             assert level["path"] == ["Suggested"]
 
             clench()  # I'm hungry
+            assert board.receive_json()["kind"] == "echo"
+            board.send_json({"type": "AUDIO_DONE", "id": echo["id"]})  # echoes change nothing
             confirm = board.receive_json()
             assert confirm == {
                 "type": "CONFIRM",
@@ -78,6 +82,7 @@ def test_invalid_messages_do_not_close_the_connection():
             assert board.receive_json()["path"] == []
             clock.t += 1.0
             inp.send_json({"type": "CLENCH", "t": clock.t, "strength": 1.0})
+            assert board.receive_json()["kind"] == "echo"
             assert board.receive_json()["path"] == ["Suggested"]
 
 

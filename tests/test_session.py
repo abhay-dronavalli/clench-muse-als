@@ -23,7 +23,7 @@ from core.menu import load_menu
 from core.pointer import ScanPointer
 from core.profile import load_profile
 from core.voice import Voice
-from core.session import CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, SPEAK_TIMEOUT_S, Session, SessionState
+from core.session import CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, SPEAK_TIMEOUT_S, Session, SessionState, voice_lines
 
 SCAN_S = 1.0
 
@@ -64,15 +64,23 @@ def last_screen(sent) -> Screen:
     return next(m for m in reversed(sent) if isinstance(m, Screen))
 
 
+def utterances(sent, kind: str) -> list[Speak | PlayAudio]:
+    return [m for m in sent if isinstance(m, (Speak, PlayAudio)) and m.kind == kind]
+
+
+def said(sent, kind: str) -> list[tuple[str, str]]:
+    """(text, lang) of every utterance of `kind` said on the board."""
+    return [(m.text, m.lang) for m in utterances(sent, kind)]
+
+
 def spoken(sent) -> list[tuple[str, str]]:
-    """(text, lang) of every phrase and system line said on the board; echoes are left out."""
-    return [(m.text, m.lang) for m in sent if isinstance(m, (Speak, PlayAudio)) and m.kind != "echo"]
+    """Confirmed phrases only (no echoes, no system lines)."""
+    return said(sent, "phrase")
 
 
 def done(sent) -> AudioDone:
-    """The board's AUDIO_DONE for the last phrase or system line."""
-    last = next(m for m in reversed(sent) if isinstance(m, (Speak, PlayAudio)) and m.kind != "echo")
-    return AudioDone(id=last.id)
+    """The board's AUDIO_DONE for the last phrase."""
+    return AudioDone(id=utterances(sent, "phrase")[-1].id)
 
 
 def results(sent) -> list[ActionResult]:
@@ -236,11 +244,15 @@ def test_help_countdown_fires_call_and_message(session, sched, sent):
         ActionResult(action="place_call", ok=True, detail="dry run", contact="Maria"),
         ActionResult(action="send_message", ok=True, detail="dry run", contact="Maria"),
     ]
-    assert spoken(sent) == [("Calling Maria", "en")]
-    assert session.state is SessionState.SPEAKING
-    session.handle(done(sent))
+    assert spoken(sent) == []
+    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en"), ("Calling Maria", "en")]
+    # A system line never holds the session: straight home.
     assert session.state is SessionState.SCANNING
-    assert last_screen(sent).path == []  # home
+    assert last_screen(sent).path == []
+    assert last_screen(sent).screen == "menu"
+    n = len(sent)
+    session.handle(AudioDone(id=utterances(sent, "system")[-1].id))  # ignored
+    assert len(sent) == n
 
 
 def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
@@ -269,7 +281,10 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
     assert parse_qs(call.content.decode())["Twiml"] == [f'<Response>{say}<Pause length="1"/>{say}</Response>']
     assert message.url.host == "api.telegram.org"
     assert json.loads(message.content) == {"chat_id": "42", "text": "Luis necesita ayuda ahora"}
-    assert spoken(sent) == [("Llamando a María", "es")]
+    assert said(sent, "system") == [
+        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
+        ("Llamando a María", "es"),
+    ]
     assert [(r.action, r.ok, r.contact) for r in results(sent)] == [
         ("place_call", True, "María"),
         ("send_message", True, "María"),
@@ -288,6 +303,7 @@ def test_double_blink_cancels_help_back_to_scanning(session, sched, sent):
     assert (screen.screen, screen.path, screen.highlight) == ("menu", ["I need"], 2)  # where it was
     sched.advance(30)
     assert results(sent) == [] and spoken(sent) == []
+    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en")]  # no "Calling Maria"
     assert countdowns(sent) == [5, 4, 3]
 
 
@@ -457,3 +473,83 @@ def test_speak_picks_setting(session):
     assert session.speak_picks is False
     session.handle(Settings(pointing_mode="auto", scan_ms=1000))  # omitted: kept
     assert session.speak_picks is False
+
+
+def test_each_pick_is_echoed_before_the_next_level(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    assert said(sent, "echo") == [("I need", "en"), ("Pain", "en"), ("Back", "en"), ("A lot", "en")]
+    # Each echo goes out right before the view it opens: the next level, or the confirm screen.
+    after = [sent[sent.index(echo) + 1] for echo in utterances(sent, "echo")]
+    assert [m.path[-1] for m in after[:3]] == ["I need", "Pain", "Back"]
+    assert isinstance(after[3], Confirm)
+    assert spoken(sent) == []  # the sentence itself still waits for the confirm (D5)
+
+
+def test_scanning_does_not_wait_for_the_echo(session, sched, sent):
+    pick(session, sched, sent, "need")
+    assert session.state is SessionState.SCANNING
+    sched.advance(SCAN_S)
+    assert last_screen(sent).highlight == 1  # the highlight moves on at once
+
+
+def test_no_echo_on_double_blink_or_confirm_clench(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    session.handle(blink())  # back from the confirm screen
+    session.handle(blink())  # up to home
+    assert said(sent, "echo") == [("Suggested", "en"), ("Water, please", "en")]
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())  # confirm
+    assert len(said(sent, "echo")) == 4
+    assert spoken(sent) == [("I'd like some water, please.", "en")]
+
+
+def test_echo_audio_done_does_not_end_speaking(session, sched, sent):
+    pick(session, sched, sent, "suggested")
+    pick(session, sched, sent, "water")
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    for echo in utterances(sent, "echo"):
+        session.handle(AudioDone(id=echo.id))
+    assert session.state is SessionState.SPEAKING
+    session.handle(done(sent))
+    assert session.state is SessionState.SCANNING
+
+
+def test_speak_picks_off_means_no_echo(session, sched, sent):
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000, speak_picks=False))
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    assert said(sent, "echo") == []
+    session.handle(Settings(pointing_mode="auto", scan_ms=1000, speak_picks=True))
+    session.handle(blink())
+    pick(session, sched, sent, "a_little")
+    assert said(sent, "echo") == [("A little", "en")]
+
+
+def test_echo_in_spanish(menu, profile, sched, sent):
+    s = Session(menu, sent.append, sched, profile=profile, spawn=run_now, lang="es", speak_picks=True)
+    s.start()
+    pick(s, sched, sent, "need")
+    assert said(sent, "echo") == [("Necesito", "es")]
+
+
+def test_voice_lines_cover_labels_system_lines_and_phrases(menu, profile):
+    lines = voice_lines(menu, profile)
+    assert len(lines) == len(set(lines))
+    for line in [
+        ("Necesito", "es"),
+        ("I need", "en"),
+        ("A lot", "en"),
+        ("My back hurts a lot. Can you help me turn over?", "en"),
+        ("Mija, estoy bien, llámame a las seis.", "es"),
+        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
+        ("Calling for help. Double blink to cancel.", "en"),
+        ("Llamando a María", "es"),
+        ("Calling Maria", "en"),
+    ]:
+        assert line in lines
+    assert lines.index(("A lot", "en")) < lines.index(("Calling Maria", "en"))  # labels first
