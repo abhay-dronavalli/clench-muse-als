@@ -24,18 +24,29 @@ Status: **done** = built, **planned** = agreed, not built yet.
   The action is renamed `send_text` -> `send_message`.
 - Why: the demo needs a message that really arrives. Telegram works in minutes and is free.
 
-## 3. Voice output moves to ElevenLabs (planned)
+## 3. Voice output moves to ElevenLabs (chunk 4, done)
 
 - PRD: A2 / A3.2 voice with Google Cloud TTS.
-- Plan: ElevenLabs (`eleven_flash_v2_5`), audio cached on the laptop, browser speech as the offline
-  fallback.
+- Now: ElevenLabs (`eleven_flash_v2_5`) through `core/voice.py`, audio cached on the laptop
+  (`data/audio_cache/`, `audio_cache` table), browser speech as the automatic fallback with no key,
+  no internet, a slow answer or service errors. Every menu label, leaf phrase and help line is made
+  in the background at startup (prewarm), so the demo plays from disk.
+- Phone calls still use Twilio's own `<Say>` voice. Playing ElevenLabs audio on a call needs
+  `<Play>` with a public URL, and the audio lives on the laptop (the Core is not reachable from the
+  internet). Hosting it would mean uploading the patient's sentences, against D14.
 
-## 4. Each picked word is spoken as it is picked (planned)
+## 4. Each picked word is spoken as it is picked (chunk 4, done)
 
 - PRD: D5 says nothing is spoken without the confirm screen.
-- Plan: auditory feedback, on by default and switchable in settings, speaks each picked tile's label
-  as it is picked. D5 still applies to AI-written sentences and to anything sent to a phone. A single
-  picked word is the patient's own deliberate choice, so echoing it is allowed.
+- Now: auditory feedback ("speak picks", `speak_picks` in `data/profile.yaml`, on by default,
+  switchable live with SETTINGS) says each picked tile's label (kind `echo`) as it is picked, before
+  the next level shows. D5 still applies to the sentence and to anything sent to a phone. A single
+  picked word is the patient's own deliberate choice, so echoing it is allowed. No echo on a double
+  blink or on the confirm clench.
+- Interrupt rules on the board (one audio player): a new echo interrupts an older echo; a phrase or
+  system line interrupts anything; an echo that arrives while a phrase or system line is playing is
+  dropped, so it never cuts the person's sentence. Echoes play at 70% volume. The Core also drops an
+  echo whose audio arrives after something newer was said, since a late word is only confusing.
 
 ## 5. "Other..." tile on every level (planned)
 
@@ -69,3 +80,26 @@ Status: **done** = built, **planned** = agreed, not built yet.
   send would lack, and the board shows the gray demo toast. A fresh clone runs with no `.env`.
 - Dedupe counts every attempt, successful or not, and also applies in dry run, so demo mode behaves
   like the real thing. A suppressed repeat returns `ok=false, "duplicate suppressed"`.
+
+## Smaller choices (chunk 4)
+
+- Utterance ids are 12 hex characters from a random UUID. `AUDIO_DONE` names the id; the session
+  only leaves SPEAKING on the id of the phrase it is waiting for.
+- PLAY_AUDIO has one field more than planned: `cached`, so the dev panel can show "ElevenLabs
+  (cached)" versus "ElevenLabs" without asking the Core.
+- System lines never hold the session. When the help alert fires, the board goes home at once while
+  "Calling Maria" plays, instead of waiting in SPEAKING as in chunk 3. The toasts still show the
+  call and the message. The countdown start line ("Calling for help. Double blink to cancel.") plays
+  over the red countdown screen. Only a phrase shows the speaking screen.
+- The ElevenLabs request also sends `language_code` ("en" / "es") for the models that accept it
+  (Flash and Turbo v2.5), so one-word labels such as "Dolor" get the right accent. Output is
+  `mp3_44100_128`.
+- A cache hit is decided by the file on disk; the `audio_cache` row is the record (PRD A7 columns plus
+  `created_at`; `voice` holds the voice id, the model is part of the hash).
+- Two requests for the same text share one ElevenLabs call (prewarm and a live pick, or a repeat).
+  Prewarm sends one request at a time, labels first, and stops if the circuit breaker opens.
+- The circuit breaker counts a 401, a 402 or any error whose status or message says "quota" as fatal
+  (off for 5 minutes at once); other errors, including network errors, open it after 3 in a row. A
+  success resets the count. A request that only missed the live timeout is not an error.
+- The dev panel's Speak picks toggle starts at On (the profile default) because the Core does not
+  report settings back to the board yet.

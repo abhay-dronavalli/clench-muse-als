@@ -38,9 +38,10 @@ Key files so far: `core/main.py` (FastAPI app, WebSocket routes), `core/session.
 owns the highlight, help countdown), `core/pointer/` (Pointer interface, ScanPointer), `core/menu.py`
 (loads `data/menu.yaml` + `data/contacts.yaml`), `core/profile.py` (`data/profile.yaml`),
 `core/actions/` (action registry: speak, send_message via Telegram, place_call via Twilio Voice,
-room_control mock), `core/db.py` (SQLite events and phrases), `core/config.py` (.env loading),
+room_control mock), `core/voice.py` (everything the board says: ElevenLabs TTS, disk audio cache,
+circuit breaker, prewarm, browser-speech fallback), `core/db.py` (SQLite events, phrases, audio_cache), `core/config.py` (.env loading),
 `core/hub.py` (broadcast to boards/consoles), `core/clock.py` (injectable timers for tests),
-`web/src/board/` (patient board, browser speech, toasts, help countdown), `web/src/dev/DevPanel.tsx`
+`web/src/board/` (patient board, audio player and browser speech in `speech.ts`, toasts, help countdown), `web/src/dev/DevPanel.tsx`
 (keyboard stand-in), `web/src/lib/useSocket.ts` (auto-reconnect).
 
 **Changes from the PRD** are logged in `docs/decisions.md`. The two that shape the code most: the
@@ -106,6 +107,37 @@ to start on a bad file. `--reload` only watches `.py` files; restart the core af
 Every pick, confirmed send, cancelled confirm and help alert is written to `data/clench.db` (delete
 the file to start fresh). The board starts in the profile's language (Spanish for Luis).
 
+### Voice (ElevenLabs, optional)
+
+With no ElevenLabs keys everything is said with the browser's voice and the app works the same.
+For the natural voice:
+
+1. In `.env` set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` (`ELEVENLABS_MODEL` defaults to
+   `eleven_flash_v2_5`). Test the key on its own (always calls ElevenLabs, 62 characters):
+
+   ```powershell
+   uv run python scripts/test_voice.py     # prints OK (es) / OK (en) with the saved file paths
+   ```
+
+2. Restart the core. It logs `voice: ElevenLabs (voice ..., model ...)` (or `voice: browser speech
+   (ELEVENLABS_API_KEY ... missing)`), and `/health` shows `voice`, `voice_paused` and
+   `voice_chars_sent`.
+3. Prewarm: at startup the core makes audio for every menu label and leaf phrase in both languages,
+   plus the help lines, in the background (about 4,000 characters the first time; the free tier has
+   10,000 a month). It logs `voice prewarm: N new, M already cached, ...; X characters sent`. Anything
+   already cached is skipped, so later starts send nothing. `ELEVENLABS_PREWARM=false` turns it off.
+
+Audio is cached in `data/audio_cache/<sha256>.mp3` (git-ignored; delete the folder's mp3 files to
+start fresh) and served at `/audio/...`, which the web dev server proxies. A cached line plays at once
+and never touches the network. An uncached line waits at most 2.5 s (a picked word) or 4 s (a sentence
+or system line) for ElevenLabs; if it is slower or fails, the browser voice says it right away and a
+slow request is still cached for next time. After a bad key (401), no credit or quota (402), or 3
+errors in a row, the core logs one warning and uses the browser voice for 5 minutes.
+
+Speak picks: each picked tile's label is said as it is picked (70% volume). On by default
+(`speak_picks` in `data/profile.yaml`), switchable live from the dev panel. The confirmed sentence is
+still only said after the confirm clench.
+
 ### Real messages and calls
 
 By default `ACTIONS_DRY_RUN=true`: a confirmed message or call is only logged in the core terminal
@@ -139,7 +171,9 @@ The same action to the same contact with the same text is sent at most once per 
 | B | DOUBLE_BLINK: go back one level / cancel the confirm screen / cancel the help countdown |
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
-The expanded panel also has buttons for the same events, a scan speed slider and an EN/ES toggle.
+The expanded panel also has buttons for the same events, a scan speed slider, an EN/ES toggle, a
+Speak picks on/off toggle and a line showing where the last thing said came from ("ElevenLabs
+(cached)", "ElevenLabs" or "Browser").
 
 ### Milestone manual test (press Space, pick, confirm, hear it)
 
@@ -147,17 +181,21 @@ The expanded panel also has buttons for the same events, a scan speed slider and
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
    green, and the home board shows six Spanish tiles with the highlight moving about once a second.
 3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
-4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. The breadcrumb
-   reads Home › I need › Pain › Back, then the "Say this?" screen shows "My back hurts a lot. Can you
-   help me turn over?". Nothing has been spoken yet.
+4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. Each tile's
+   label is said softly as you pick it ("I need", "Pain", ...). The breadcrumb reads Home › I need ›
+   Pain › Back, then the "Say this?" screen shows "My back hurts a lot. Can you help me turn over?".
+   The sentence itself has not been spoken yet.
 5. Press B: you are back on the Back level, still silent. Pick A lot again and press Space on the
    confirm screen: the laptop speaks the sentence, then the board returns to Home.
 6. Pick People › Maria › Text and confirm with Space: the laptop says "Honey, I'm okay, call me at
    six." and a gray "(demo mode) would message Maria" toast shows for 4 s (green "Message sent to
    Maria" with real sends on). The core terminal logs `DRY RUN send_message to maria: ...`.
-7. Hold Space for 1.5 s: a red full-screen countdown 5, 4, 3... Press B: back where you were. Hold
-   Space again and let it reach 0: the laptop says "Calling Maria", toasts show the call and the
-   message ("Luis needs help now"), then the board returns to Home.
+7. Hold Space for 1.5 s: a red full-screen countdown 5, 4, 3... and the laptop says "Calling for
+   help. Double blink to cancel." Press B: back where you were. Hold Space again and let it reach 0:
+   the board returns to Home at once, the laptop says "Calling Maria", and toasts show the call and
+   the message ("Luis needs help now").
+8. Press backtick: the Voice line shows "Browser" with no ElevenLabs keys, "ElevenLabs" /
+   "ElevenLabs (cached)" with them. Click Speak picks to Off and pick a tile: nothing is said.
 
 ## CHUNK REPORT format
 
