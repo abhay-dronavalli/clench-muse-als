@@ -1,9 +1,10 @@
 """Send ONE real Telegram test message to a contact (default: maria), using .env.
 
-Ignores ACTIONS_DRY_RUN on purpose: this script exists to test the real thing.
+Does nothing real without --send: it only prints what it would send. With --send it ignores
+ACTIONS_DRY_RUN on purpose, since this script exists to test the real thing.
 
-    uv run python scripts/test_telegram.py            # to Maria
-    uv run python scripts/test_telegram.py carlos     # to another contact in data/contacts.yaml
+    uv run python scripts/test_telegram.py --send            # to Maria
+    uv run python scripts/test_telegram.py carlos --send     # to another contact in data/contacts.yaml
 
 Needs TELEGRAM_BOT_TOKEN and the contact's chat id (e.g. TELEGRAM_CHAT_ID_MARIA) in .env. The
 contact must have pressed Start in a chat with the bot first, or Telegram answers "chat not found".
@@ -11,6 +12,7 @@ contact must have pressed Start in a chat with the bot first, or Telegram answer
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -24,8 +26,12 @@ from core.menu import load_menu  # noqa: E402
 from core.profile import load_profile  # noqa: E402
 
 
-def main() -> int:
-    contact_id = sys.argv[1] if len(sys.argv) > 1 else "maria"
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Send one real Telegram test message.")
+    parser.add_argument("contact", nargs="?", default="maria", help="contact id (default: maria)")
+    parser.add_argument("--send", action="store_true", help="really send it (otherwise only print)")
+    args = parser.parse_args(argv)
+    contact_id = args.contact
     menu = load_menu()
     contact = menu.contacts.get(contact_id)
     if contact is None:
@@ -38,6 +44,11 @@ def main() -> int:
         contact=contact,
         patient_name=profile.name,
     )
+    if not args.send:
+        print(f"Would send a real Telegram message to {contact.label_es} ({contact.telegram_chat_env}):")
+        print(f"  {message_text(ctx)}")
+        print("Nothing sent. Add --send to really send it.")
+        return 0
     print(f"Sending a real Telegram message to {contact.label_es} ({contact.telegram_chat_env}):")
     print(f"  {message_text(ctx)}")
     result = asyncio.run(TelegramMessageAction(load_env(), dry_run=False).run(ctx))

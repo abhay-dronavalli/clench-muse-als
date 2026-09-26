@@ -1,9 +1,10 @@
 """Make ONE Spanish and ONE English line with the real ElevenLabs key from .env and save them to the
 audio cache (data/audio_cache/ plus the audio_cache table in data/clench.db).
 
-Always calls ElevenLabs, even when the lines are already cached: this script exists to test the key.
+Does nothing real without --send: it only prints what it would make. With --send it always calls
+ElevenLabs, even when the lines are already cached, since this script exists to test the key.
 
-    uv run python scripts/test_voice.py
+    uv run python scripts/test_voice.py --send
 
 Needs ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID in .env (ELEVENLABS_MODEL defaults to
 eleven_flash_v2_5). Prints each file path and the characters used, or FAILED: <exact error>
@@ -12,6 +13,7 @@ eleven_flash_v2_5). Prints each file path and the characters used, or FAILED: <e
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -48,7 +50,17 @@ async def run(tts: ElevenLabsTTS, cache: AudioCache) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Make one Spanish and one English line with ElevenLabs.")
+    parser.add_argument("--send", action="store_true", help="really call ElevenLabs (otherwise only print)")
+    args = parser.parse_args(argv)
+    if not args.send:
+        chars = sum(len(text) for text, _ in LINES)
+        print(f"Would ask ElevenLabs for {len(LINES)} lines ({chars} characters) and save them to the audio cache:")
+        for text, lang in LINES:
+            print(f"  ({lang}) {text}")
+        print("Nothing sent. Add --send to really call ElevenLabs.")
+        return 0
     tts = build_tts(load_env())
     if isinstance(tts, NullTTS):
         print(f"FAILED: ElevenLabs not configured: {tts.reason} (see .env.example)")

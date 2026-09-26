@@ -1,10 +1,11 @@
 """Place ONE real Twilio test call to a contact (default: maria), using .env.
 
-Ignores ACTIONS_DRY_RUN on purpose: this script exists to test the real thing.
+Does nothing real without --send: it only prints what it would do. With --send it ignores
+ACTIONS_DRY_RUN on purpose, since this script exists to test the real thing.
 
-    uv run python scripts/test_call.py            # call Maria
-    uv run python scripts/test_call.py carlos     # another contact in data/contacts.yaml
-    uv run python scripts/test_call.py maria en   # say it in English
+    uv run python scripts/test_call.py --send            # call Maria
+    uv run python scripts/test_call.py carlos --send     # another contact in data/contacts.yaml
+    uv run python scripts/test_call.py maria en --send   # say it in English
 
 Needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER and the contact's number (e.g.
 CONTACT_MARIA_PHONE) in .env, all E.164 like +13055550123. On a Twilio trial account the number
@@ -14,6 +15,7 @@ short trial message before yours.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -33,9 +35,14 @@ TEXT: dict[Lang, str] = {
 }
 
 
-def main() -> int:
-    contact_id = sys.argv[1] if len(sys.argv) > 1 else "maria"
-    lang: Lang = "en" if len(sys.argv) > 2 and sys.argv[2] == "en" else "es"
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Place one real Twilio test call.")
+    parser.add_argument("contact", nargs="?", default="maria", help="contact id (default: maria)")
+    parser.add_argument("lang", nargs="?", default="es", choices=["es", "en"], help="language (default: es)")
+    parser.add_argument("--send", action="store_true", help="really place the call (otherwise only print)")
+    args = parser.parse_args(argv)
+    contact_id = args.contact
+    lang: Lang = args.lang
     menu = load_menu()
     contact = menu.contacts.get(contact_id)
     if contact is None:
@@ -43,6 +50,11 @@ def main() -> int:
         return 1
     profile = load_profile(menu.contacts)
     ctx = ActionContext(text=TEXT[lang], lang=lang, contact=contact, patient_name=profile.name)
+    if not args.send:
+        print(f"Would place a real Twilio call to {contact.label_es} ({contact.phone_env}), said twice:")
+        print(f"  {call_message(ctx)}")
+        print("No call placed. Add --send to really call.")
+        return 0
     print(f"Placing a real Twilio call to {contact.label_es} ({contact.phone_env}), said twice:")
     print(f"  {call_message(ctx)}")
     result = asyncio.run(TwilioCallAction(load_env(), dry_run=False).run(ctx))
