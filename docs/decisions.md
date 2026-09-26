@@ -58,3 +58,14 @@ Status: **done** = built, **planned** = agreed, not built yet.
   live only in `.env`.
 - `events` has three columns more than PRD A7: `lang`, plus `text` and `contact` on confirmed sends,
   so the caregiver history and the learning chunk can read them without walking the menu.
+  `node_id` is the dotted menu path (`need.pain.back.a_lot`), because ids are only unique among
+  siblings; `path` is the breadcrumb labels as a JSON list. The help alert is `node_id = "help"`.
+- The contacts' "Call" phrases were rewritten for the person being called ("Mija, quiero verte. Por
+  favor ven cuando puedas.") since the call now reads them aloud to the contact.
+- ACTION_RESULT's `contact` is the display name in the current language ("María"), so the board can
+  show it without knowing the contacts.
+- The help alert message and the "Calling Maria" speech use the board's current language.
+- Dry run never fails on missing config: it logs what would be sent plus a warning about what a real
+  send would lack, and the board shows the gray demo toast. A fresh clone runs with no `.env`.
+- Dedupe counts every attempt, successful or not, and also applies in dry run, so demo mode behaves
+  like the real thing. A suppressed repeat returns `ok=false, "duplicate suppressed"`.

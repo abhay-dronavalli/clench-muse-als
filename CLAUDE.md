@@ -26,20 +26,27 @@ and texting services reach the internet.
 - `web/` (React + TypeScript + Vite + Tailwind): Patient Board (big tiles, highlight, webcam face
   tracking) and Caregiver Console (live signals, settings, calibration, history) as two pages of one
   app, plus the keyboard stand-in dev panel.
-- `data/`: menu tree (`menu.yaml`), simulated demo week (`seed_demo_week.json`), and Muse recordings
-  (`recordings/`, CSVs git-ignored).
-- `docs/`: the PRD and project docs, including `contracts.md`.
+- `data/`: menu tree (`menu.yaml`), contacts (`contacts.yaml`), patient profile (`profile.yaml`),
+  simulated demo week (`seed_demo_week.json`), Muse recordings (`recordings/`, CSVs git-ignored) and
+  the local SQLite database `clench.db` (git-ignored, created on first run).
+- `docs/`: the PRD and project docs: `contracts.md` (event formats) and `decisions.md` (running log
+  of every change from the PRD).
+- `scripts/`: one-off tools, e.g. real-send tests for Telegram and Twilio.
 - `tests/`: pytest tests for `core/` and `sensor/`.
 
 Key files so far: `core/main.py` (FastAPI app, WebSocket routes), `core/session.py` (state machine,
-owns the highlight), `core/pointer/` (Pointer interface, ScanPointer), `core/menu.py` (loads
-`data/menu.yaml` + `data/contacts.yaml`), `core/hub.py` (broadcast to boards/consoles),
-`core/clock.py` (injectable timers for tests), `web/src/board/` (patient board, browser speech),
-`web/src/dev/DevPanel.tsx` (keyboard stand-in), `web/src/lib/useSocket.ts` (auto-reconnect).
+owns the highlight, help countdown), `core/pointer/` (Pointer interface, ScanPointer), `core/menu.py`
+(loads `data/menu.yaml` + `data/contacts.yaml`), `core/profile.py` (`data/profile.yaml`),
+`core/actions/` (action registry: speak, send_message via Telegram, place_call via Twilio Voice,
+room_control mock), `core/db.py` (SQLite events and phrases), `core/config.py` (.env loading),
+`core/hub.py` (broadcast to boards/consoles), `core/clock.py` (injectable timers for tests),
+`web/src/board/` (patient board, browser speech, toasts, help countdown), `web/src/dev/DevPanel.tsx`
+(keyboard stand-in), `web/src/lib/useSocket.ts` (auto-reconnect).
 
-**Change from PRD A8:** the keyboard stand-in is not a Python `KeyboardSource` in `sensor/sources/`.
-It lives in the web app as a dev panel (`web/src/dev/`) that sends the same CLENCH / DOUBLE_BLINK /
-LONG_CLENCH events over the WebSocket. The Core cannot tell them apart from headband events.
+**Changes from the PRD** are logged in `docs/decisions.md`. The two that shape the code most: the
+keyboard stand-in is a web dev panel (`web/src/dev/`), not a Python `KeyboardSource`, and it sends
+the same events so the Core cannot tell them apart; and there is no SMS: messages go through a
+Telegram bot and calls through Twilio Programmable Voice (the action is `send_message`).
 
 ## Rules
 
@@ -72,8 +79,8 @@ All commands are PowerShell, from the repo root. Python uses [uv](https://docs.a
 
 ```powershell
 # One-time setup
-uv sync                              # creates .venv with Python deps (incl. dev: pytest, httpx)
-Copy-Item .env.example .env          # then fill in keys; .env is git-ignored
+uv sync                              # creates .venv with Python deps (incl. dev: pytest)
+Copy-Item .env.example .env          # then fill in keys; .env is git-ignored (runs fine left empty)
 npm --prefix web install
 
 # Tests and checks
@@ -94,33 +101,63 @@ npm --prefix web run dev
 
 Without uv: `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install fastapi "uvicorn[standard]" "pydantic>=2" pyyaml python-dotenv pytest httpx`, then `python -m pytest`.
 
-The core loads `data/menu.yaml` and `data/contacts.yaml` at startup and refuses to start on a bad
-tree. `--reload` only watches `.py` files; restart the core after editing the YAML.
+The core loads `data/menu.yaml`, `data/contacts.yaml` and `data/profile.yaml` at startup and refuses
+to start on a bad file. `--reload` only watches `.py` files; restart the core after editing the YAML.
+Every pick, confirmed send, cancelled confirm and help alert is written to `data/clench.db` (delete
+the file to start fresh). The board starts in the profile's language (Spanish for Luis).
+
+### Real messages and calls
+
+By default `ACTIONS_DRY_RUN=true`: a confirmed message or call is only logged in the core terminal
+(`DRY RUN send_message to maria: ...`) and the board shows a gray "(modo demo)" toast. To really send:
+
+1. Fill in `.env` (see `.env.example`): `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID_MARIA` for
+   messages; `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` and
+   `CONTACT_MARIA_PHONE` (E.164, `+13055550123`) for calls. Each contact in `data/contacts.yaml`
+   names its own `phone_env` / `telegram_chat_env` variables.
+2. Test each service on its own. These always send for real, whatever `ACTIONS_DRY_RUN` says:
+
+   ```powershell
+   uv run python scripts/test_telegram.py          # one Telegram message to Maria
+   uv run python scripts/test_call.py              # one Twilio call to Maria (add "carlos", "en", ...)
+   ```
+
+   Each prints `OK: ...` or `FAILED: <exact error>` (e.g. `Telegram error (HTTP 400): Bad Request:
+   chat not found` = Maria has not pressed Start in the bot's chat; `Twilio error 21219` = trial
+   account calling an unverified number).
+3. Set `ACTIONS_DRY_RUN=false` in `.env` and restart the core. The core logs
+   `ACTIONS_DRY_RUN is off` at startup, and `/health` shows `"dry_run": false`.
+
+The same action to the same contact with the same text is sent at most once per 30 s.
 
 ### Keyboard stand-in (dev panel on the board page)
 
 | Key | Event |
 |---|---|
 | Space (tap) | CLENCH: pick the highlighted tile / confirm |
-| Space (hold 1.5 s) | LONG_CLENCH (logged and ignored until the help alert chunk) |
-| B | DOUBLE_BLINK: go back one level / cancel the confirm screen |
-| `` ` `` (backtick) | show / hide the dev panel (visible by default in dev mode) |
+| Space (hold 1.5 s) | LONG_CLENCH: start the 5 s help countdown |
+| B | DOUBLE_BLINK: go back one level / cancel the confirm screen / cancel the help countdown |
+| `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
-The panel also has buttons for the same events, a scan speed slider and an EN/ES toggle.
+The expanded panel also has buttons for the same events, a scan speed slider and an EN/ES toggle.
 
 ### Milestone manual test (press Space, pick, confirm, hear it)
 
 1. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
-2. Click "Click to start". The status dot (top right) and the dev panel dot turn green, and the home
-   board shows six tiles with the highlight moving about once a second.
-3. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. The breadcrumb
+2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
+   green, and the home board shows six Spanish tiles with the highlight moving about once a second.
+3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
+4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. The breadcrumb
    reads Home › I need › Pain › Back, then the "Say this?" screen shows "My back hurts a lot. Can you
    help me turn over?". Nothing has been spoken yet.
-4. Press B: you are back on the Back level, still silent. Pick A lot again and press Space on the
+5. Press B: you are back on the Back level, still silent. Pick A lot again and press Space on the
    confirm screen: the laptop speaks the sentence, then the board returns to Home.
-5. Click EN/ES in the dev panel: the tiles switch to Spanish. Pick Personas › María › Mensaje, confirm
-   with Space, and hear "Mija, estoy bien, llámame a las seis." The core terminal logs
-   `would send_message to Maria (daughter)` (real texts come in chunk 4).
+6. Pick People › Maria › Text and confirm with Space: the laptop says "Honey, I'm okay, call me at
+   six." and a gray "(demo mode) would message Maria" toast shows for 4 s (green "Message sent to
+   Maria" with real sends on). The core terminal logs `DRY RUN send_message to maria: ...`.
+7. Hold Space for 1.5 s: a red full-screen countdown 5, 4, 3... Press B: back where you were. Hold
+   Space again and let it reach 0: the laptop says "Calling Maria", toasts show the call and the
+   message ("Luis needs help now"), then the board returns to Home.
 
 ## CHUNK REPORT format
 
