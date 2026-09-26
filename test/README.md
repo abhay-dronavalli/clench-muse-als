@@ -54,6 +54,7 @@ python live_bands.py           # 2. live delta/theta/alpha/beta/gamma + mindfuln
 python record.py --seconds 60  # 3. save a session to recordings/*.csv
 python live_plot.py            # 4. (optional) scope view of the 4 EEG channels
 python clench_detect.py        # 5. calibrate, then emit CLENCH / BLINK input events
+python clench_game.py          # 6. play the scan-and-clench game
 ```
 
 Add `--synthetic` to any of them for fake data with no hardware:
@@ -64,6 +65,7 @@ python live_bands.py --synthetic
 python record.py --synthetic --seconds 10 --label smoke
 python live_plot.py --synthetic
 python clench_detect.py --synthetic --no-clench-cal
+python clench_game.py --synthetic --no-clench-cal --rounds 3
 ```
 
 Or set it once for the whole shell:
@@ -112,6 +114,10 @@ with 50/60 Hz notch. `--save frame.png` grabs a single frame headlessly.
 **`clench_detect.py`** — the input layer. Calibrates to you, then prints `CLENCH`,
 `LONG_CLENCH`, `BLINK` and `DOUBLE_BLINK` as you make them, with a live meter so you
 can see how close to the threshold you are. See "Using it as input" below.
+
+**`clench_game.py`** — a cursor scans a row of cells, you clench on the target.
+Scores hits, misses and timeouts, and reports your reaction time so you can pick a
+scan speed. Same interaction a scanning communication board uses.
 
 **`test_gestures.py`** — feeds made-up envelope traces through the gesture logic and
 asserts the right events come out. Run it after changing any threshold or timing;
@@ -206,6 +212,37 @@ your measured peak with a **headroom** figure. Headroom is peak ÷ threshold:
 
 If you get false CLENCHes while sitting still, the cause is almost always a loose
 ear-tip rather than a bad threshold — check `live_plot.py` first.
+
+## The clench game
+
+Once calibration looks good, this is the fastest way to find out whether clench
+really works as a button for you:
+
+```powershell
+python clench_game.py --load
+```
+
+A cursor sweeps left to right; `[*]` means it is sitting on the target. Clench
+there. Ten rounds, then a scorecard.
+
+```
+   .  * [ ] .  .  .     [########-|----]   24.3 uV
+  round  3/10   HIT   reaction  420 ms
+```
+
+**Reading the scorecard**
+
+| Result | What it means | What to change |
+|---|---|---|
+| Timeouts | The threshold is too high — your clench never crossed it | Clench harder, or recalibrate without `--load` |
+| Misses | You clenched late, on the cell after the target | Slow the scan: `--scan-ms 1200` |
+| Hits, reaction near the dwell time | Working, but rushed | Slow the scan a little |
+| Hits, reaction well under the dwell | Comfortable | Speed up: `--scan-ms 700` |
+
+Reaction time includes the detector's own lag — about one 200 ms envelope window —
+so it is the honest end-to-end number, not just your reflexes.
+
+Options: `--rounds`, `--cells`, `--scan-ms`, `--max-sweeps`.
 
 ## Troubleshooting a real Muse
 
