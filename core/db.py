@@ -1,7 +1,8 @@
 """Local SQLite store (PRD A7, D14): everything the person says stays on this laptop.
 
-Only the tables needed so far: profile, contacts, events, phrases. The learning chunk reads `events`
-(what was picked, when, in which language) and `phrases` (what was said, how often, at what hour).
+Only the tables needed so far: profile, contacts, events, phrases, audio_cache. The learning chunk
+reads `events` (what was picked, when, in which language) and `phrases` (what was said, how often,
+at what hour). `audio_cache` records each cloud TTS file saved in data/audio_cache/.
 
 One profile per database for now (id 1). Timestamps are Unix seconds; hours are local time.
 """
@@ -79,6 +80,16 @@ CREATE TABLE IF NOT EXISTS phrases (
     last_used           REAL,
     hour_histogram_json TEXT NOT NULL,      -- JSON list of 24 counts, index = local hour 0-23
     UNIQUE (profile_id, text, lang)
+);
+
+-- One row per cached TTS file. hash = sha256(text|lang|voice|model), also the file name.
+CREATE TABLE IF NOT EXISTS audio_cache (
+    hash       TEXT PRIMARY KEY,
+    text       TEXT NOT NULL,
+    lang       TEXT NOT NULL,
+    voice      TEXT NOT NULL,              -- ElevenLabs voice id
+    file_path  TEXT NOT NULL,              -- data/audio_cache/<hash>.mp3
+    created_at REAL NOT NULL
 );
 """
 
@@ -179,6 +190,15 @@ class Db:
                     (now, json.dumps(hist), row["id"]),
                 )
 
+    def add_audio(self, hash: str, *, text: str, lang: Lang, voice: str, file_path: str) -> None:
+        """Record a cached TTS file (replaces the row if the file was made again)."""
+        with self._conn:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO audio_cache (hash, text, lang, voice, file_path, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (hash, text, lang, voice, file_path, self._clock()),
+            )
+
     # --- reading (tests, console history later) ------------------------------------
 
     def events(self) -> list[sqlite3.Row]:
@@ -186,3 +206,6 @@ class Db:
 
     def phrases(self) -> list[sqlite3.Row]:
         return self._conn.execute("SELECT * FROM phrases WHERE profile_id = ? ORDER BY id", (PROFILE_ID,)).fetchall()
+
+    def audio_cache(self) -> list[sqlite3.Row]:
+        return self._conn.execute("SELECT * FROM audio_cache ORDER BY created_at, hash").fetchall()

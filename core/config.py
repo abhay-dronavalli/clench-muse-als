@@ -20,6 +20,16 @@ def load_env(path: Path = ENV_PATH) -> dict[str, str]:
     return {**from_file, **os.environ}
 
 
+def flag(env: Mapping[str, str], key: str) -> bool:
+    """An on-by-default switch: on unless it is explicitly false / 0 / no / off."""
+    return env.get(key, "true").strip().lower() not in _FALSE
+
+
 def dry_run_enabled(env: Mapping[str, str]) -> bool:
-    """ACTIONS_DRY_RUN is on unless it is explicitly false / 0 / no / off. Safe by default."""
-    return env.get("ACTIONS_DRY_RUN", "true").strip().lower() not in _FALSE
+    """ACTIONS_DRY_RUN is on unless it is explicitly turned off. Safe by default."""
+    return flag(env, "ACTIONS_DRY_RUN")
+
+
+def prewarm_enabled(env: Mapping[str, str]) -> bool:
+    """ELEVENLABS_PREWARM (default on): make audio for the whole menu in the background at startup."""
+    return flag(env, "ELEVENLABS_PREWARM")

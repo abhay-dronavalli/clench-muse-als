@@ -57,6 +57,27 @@ HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {co
 
 Emit = Callable[[Message], None]
 Spawn = Callable[[Coroutine[Any, Any, None]], None]
+LANGS: tuple[Lang, ...] = ("en", "es")
+
+
+def voice_lines(menu: Menu, profile: Profile) -> list[tuple[str, Lang]]:
+    """Everything the session can say from the fixed menu, in both languages, for the voice prewarm:
+    tile labels first (echoes have the shortest wait), then system lines, then leaf phrases."""
+    labels: list[tuple[str, Lang]] = []
+    phrases: list[tuple[str, Lang]] = []
+
+    def walk(node: MenuNode) -> None:
+        for child in node.children or []:
+            labels.extend((child.label(lang), lang) for lang in LANGS)
+            if child.is_leaf:
+                phrases.extend((child.phrase(lang), lang) for lang in LANGS)
+            else:
+                walk(child)
+
+    walk(menu.root)
+    contact = menu.contacts[profile.help_contact]
+    system = [(HELP_SPEECH[lang].format(contact=contact.label(lang)), lang) for lang in LANGS]
+    return list(dict.fromkeys(labels + system + phrases))
 
 
 class SessionState(str, Enum):

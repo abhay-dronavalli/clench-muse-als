@@ -93,3 +93,21 @@ def test_console_mirrors_board_and_sends_settings():
         health = client.get("/health").json()
         assert health["lang"] == "es"
         assert health["state"] == "SCANNING"
+
+
+def test_serves_cached_audio_only(tmp_path):
+    name = "a" * 64 + ".mp3"
+    (tmp_path / name).write_bytes(b"ID3fake")
+    (tmp_path / "notes.txt").write_text("secret")
+    app = create_app(scheduler=AsyncioScheduler(), scan_ms=600_000, audio_dir=tmp_path)
+    with TestClient(app) as client:
+        resp = client.get(f"/audio/{name}")
+        assert resp.status_code == 200
+        assert resp.content == b"ID3fake"
+        assert resp.headers["content-type"] == "audio/mpeg"
+        assert client.get("/audio/" + "b" * 64 + ".mp3").status_code == 404  # not cached
+        assert client.get("/audio/notes.txt").status_code == 404  # only <sha256>.mp3 names
+        assert client.get("/audio/..%2F..%2Fpyproject.toml").status_code == 404
+        health = client.get("/health").json()
+        assert health["voice"] == "browser speech (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID missing)"
+        assert health["speak_picks"] is True

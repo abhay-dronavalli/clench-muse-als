@@ -3,10 +3,11 @@
 Run:  uv run uvicorn core.main:app --reload --port 8000
 
   /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SCREEN, CONFIRM, SPEAK,
-               ACTION_RESULT out
+               PLAY_AUDIO, ACTION_RESULT out
   /ws/console  caregiver console: SETTINGS in; mirror of what the board gets out
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
                POINT, SETTINGS in; nothing out
+  /audio/<sha256>.mp3  cached ElevenLabs audio named in PLAY_AUDIO
 
 Every incoming message is parsed with parse_message. Invalid ones are logged and ignored; a bad
 message never closes the connection.
@@ -21,20 +22,21 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
-from core.config import dry_run_enabled, load_env
+from core.config import dry_run_enabled, load_env, prewarm_enabled
 from core.contracts import Lang, Message, Ready, parse_message
 from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
-from core.session import Session
-from core.voice import Voice
+from core.session import Session, voice_lines
+from core.voice import AUDIO_DIR, AUDIO_NAME, TTS, AudioCache, Voice, build_tts
 
 logging.basicConfig(format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 logging.getLogger("clench").setLevel(logging.INFO)
@@ -79,9 +81,12 @@ def create_app(
     lang: Lang | None = None,
     db_path: str | Path = ":memory:",
     env: Mapping[str, str] | None = None,
+    audio_dir: Path = AUDIO_DIR,
+    tts: TTS | None = None,
 ) -> FastAPI:
     """Build the app. Defaults are safe for tests: an in-memory database and no keys, so actions
-    only dry-run. The real app (bottom of this file) passes the database file and .env."""
+    only dry-run and speech uses the browser voice. The real app (bottom of this file) passes the
+    database file and .env."""
     menu = menu or load_menu()  # fails loudly at startup on a bad tree
     profile = profile or load_profile(menu.contacts)
     env = env if env is not None else {}
@@ -92,7 +97,8 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = Db(db_path)
         db.sync_profile(profile.name, profile.lang, menu.contacts.values())
-        voice = Voice(hub.broadcast)
+        voice = Voice(hub.broadcast, tts=tts or build_tts(env), cache=AudioCache(audio_dir, db))
+        app.state.voice = voice
         session = Session(
             menu,
             hub.broadcast,
@@ -111,8 +117,16 @@ def create_app(
             log.warning("ACTIONS_DRY_RUN is on: messages and calls are only logged (set it to false in .env)")
         else:
             log.warning("ACTIONS_DRY_RUN is off: confirmed messages and calls are REALLY sent")
+        log.info("voice: %s", voice.describe())
+        prewarm: asyncio.Task[object] | None = None
+        if voice.tts.voice_id is not None and prewarm_enabled(env):
+            # Background only: the board works (browser speech for anything not cached) meanwhile.
+            prewarm = asyncio.create_task(voice.prewarm(voice_lines(menu, profile)))
         yield
+        if prewarm is not None:
+            prewarm.cancel()
         session.stop()
+        await voice.aclose()
         db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
@@ -163,14 +177,27 @@ def create_app(
     async def ws_input(ws: WebSocket) -> None:
         await serve(ws, "input")
 
+    @app.get("/audio/{name}")
+    async def audio(name: str) -> FileResponse:
+        path = audio_dir / name
+        if not AUDIO_NAME.match(name) or not path.is_file():
+            raise HTTPException(status_code=404)
+        # The name is a hash of the text and voice, so the file never changes.
+        return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
     @app.get("/health")
     async def health() -> dict[str, object]:
         session: Session = app.state.session
+        voice: Voice = app.state.voice
         return {
             "ok": True,
             "state": session.state.value,
             "lang": session.lang,
             "dry_run": dry_run,
+            "voice": voice.describe(),
+            "voice_paused": voice.breaker.is_open,
+            "voice_chars_sent": voice.chars_sent,
+            "speak_picks": session.speak_picks,
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),
