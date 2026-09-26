@@ -26,6 +26,13 @@ AI (PRD section 5 step 6, D6, decisions.md #5 and #7):
     Scanning never waits. If a pick needs a result that has not arrived, the session shows the
     loading state (LOADING, scanning paused) for at most 4 s, then falls back.
 
+Learning (PRD section 9, D7, decisions.md "Learning"): with `learning` on, every screen is ordered
+by the Ranker (core/rank). Menu levels keep the menu.yaml order unless an item clearly beats the one
+above it (stability rule); home Suggested stays first and "Other..." stays last. The suggestions
+screen and the Suggested list are fully reordered, and Suggested also offers the sentences the
+patient confirms most (each with the action and contact of the leaf it was said under). With
+learning off ("Day 1 mode") everything is in menu.yaml order and Suggested is its fixed list.
+
 Speak picks (decisions.md #4): with speak_picks on, every CLENCH pick while scanning says the picked
 tile's label (an "echo") before the next view shows; "Other..." is said as "Other" / "Otro". Full
 sentences (suggestion tiles) are never echoed: the confirm step speaks them.
@@ -44,7 +51,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Literal
 
@@ -53,6 +60,7 @@ from core.clock import Scheduler, TimerHandle
 from core.contracts import (
     ActionName,
     AudioDone,
+    BodyStateLevel,
     Clench,
     Confirm,
     DoubleBlink,
@@ -63,6 +71,7 @@ from core.contracts import (
     PointingMode,
     Screen,
     Settings,
+    State,
     Tile,
     TileKind,
 )
@@ -71,7 +80,9 @@ from core.db import Db
 from core.menu import MAX_ITEMS, Menu, MenuNode
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
 from core.profile import Profile
-from core.suggest.provider import MAX_SENTENCES, Option, drop_known
+from core.rank import Entry, Ranker
+from core.rank.history import Sentence, leaf_path
+from core.suggest.provider import MAX_SENTENCES, Option, drop_known, text_key
 from core.suggest.service import Pending, Suggester
 from core.voice import Voice
 
@@ -172,13 +183,36 @@ class Frame:
     kind: Literal["menu", "suggestions"]
     level: MenuNode  # the menu level this frame belongs to (inherited action / contact, `more`)
     prefix: str  # dotted id prefix for this frame's own tiles ("" at home)
-    items: list[Item]
+    items: list[Item]  # the tiles, in the order shown
     crumb: Item | None = None  # the pick that opened this frame; None at home and for "Other..."
     via_other: bool = False  # opened by "Other...": breadcrumb "Other", left out of the AI path
     others: int = 0  # "Other..." picks in a row that led here; SPELL_AFTER = "Spell it"
     shown: tuple[str, ...] = ()  # labels / sentences already on screen in this chain (never repeated)
     leaf: Item | None = None  # suggestions screen: the leaf the sentences are for
     ai: bool = False  # holds AI text (one language): dropped when the language changes
+    # Ranking: `pool` holds every candidate in its base order (menu.yaml, or AI / history / fixed);
+    # `items` is the ranked cut of it. "menu" = stability rule, "full" = by score, "none" = as given.
+    pool: list[Item] = field(default_factory=list)
+    rank: Literal["none", "menu", "full"] = "none"
+    pinned: int = 0  # leading pool items that never move (home Suggested)
+    priors: dict[str, float] = field(default_factory=dict)  # Jev probabilities by tile id
+
+
+def _unique(items: list[Item], lang: Lang) -> list[Item]:
+    """`items` without repeats: the first of each id and of each sentence is kept."""
+    ids: set[str] = set()
+    texts: set[str] = set()
+    out = []
+    for i in items:
+        has_text = i.kind == "suggestion" or (i.node is not None and i.node.is_leaf)
+        key = text_key(i.phrase(lang)) if has_text else None
+        if i.id in ids or (key is not None and key in texts):
+            continue
+        ids.add(i.id)
+        if key is not None:
+            texts.add(key)
+        out.append(i)
+    return out
 
 
 def _join(prefix: str, part: str) -> str:
@@ -207,6 +241,8 @@ class Session:
         scan_ms: int = DEFAULT_SCAN_MS,
         pointing_mode: PointingMode = "auto",
         speak_picks: bool | None = None,
+        learning: bool | None = None,
+        ranker: Ranker | None = None,
     ) -> None:
         self._menu = menu
         self._emit = emit
@@ -224,6 +260,10 @@ class Session:
         self.scan_ms = scan_ms
         self.pointing_mode: PointingMode = pointing_mode
         self.speak_picks = profile.speak_picks if speak_picks is None else speak_picks
+        self.learning = profile.learning if learning is None else learning
+        self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
+        self.state_level: BodyStateLevel | None = None  # from STATE; only reorders (PRD D10)
+        self.suggester.use_history = self.learning
         self.state = SessionState.SCANNING
         self._stack: list[Frame] = [self._home()]
         self._pending: Item | None = None  # item being confirmed or spoken
@@ -306,6 +346,8 @@ class Session:
             case Point():
                 if self.state is SessionState.SCANNING:
                     self.pointer.on_point(msg)
+            case State():
+                self.state_level = msg.level  # used from the next screen on; never takes action
             case _:
                 log.debug("ignored %s in %s", msg.type, self.state.value)
 
@@ -437,39 +479,74 @@ class Session:
 
     def _menu_frame(self, node: MenuNode, prefix: str, crumb: Item | None) -> Frame:
         items = [self._menu_item(c, prefix) for c in node.children or []]
-        return Frame(
-            kind="menu",
-            level=node,
-            prefix=prefix,
-            items=items,
-            crumb=crumb,
-            shown=tuple(i.label(self.lang) for i in items),
+        # The AI's "right now" branch (home Suggested) is always first.
+        first = [i for i in items if i.node is not None and i.node.ai_now]
+        pool = first + [i for i in items if i not in first]
+        frame = Frame(
+            kind="menu", level=node, prefix=prefix, items=pool, crumb=crumb, pool=pool, rank="menu", pinned=len(first)
         )
+        self._rank(frame)
+        return frame
 
-    def _open_suggested(self, item: Item, sentences: list[str] | None) -> None:
-        """Home "Suggested": the AI's sentences for right now, then the fixed phrases not already there."""
+    def _suggested_pool(self, item: Item, sentences: list[str] | None) -> list[Item]:
+        """Home "Suggested" candidates in their base order: the AI's sentences for right now, the
+        patient's most used sentences, then the fixed phrases; each sentence once. Day 1 mode: the
+        fixed phrases only."""
         node = item.node
         assert node is not None
+        fixed = [self._menu_item(c, item.id) for c in node.children or []]
+        if not self.learning:
+            return fixed
         ai = [self._sentence(s, i, f"ai:{item.id}", "speak", None) for i, s in enumerate((sentences or [])[:MAX_SENTENCES])]
-        said = [a.phrase(self.lang) for a in ai]
-        fixed = [
-            self._menu_item(c, item.id)
-            for c in node.children or []
-            if not c.is_leaf or drop_known([c.phrase(self.lang)], said)  # not already said by the AI
+        history = [
+            h
+            for n, s in enumerate(self.ranker.index().sentences(self.lang, self.ranker.now(), MAX_ITEMS))
+            if (h := self._history_item(s, n)) is not None
         ]
-        items = ai + fixed[: MAX_ITEMS - len(ai)]
+        return _unique(ai + history + fixed, self.lang)
+
+    def _open_suggested(self, item: Item, sentences: list[str] | None) -> None:
+        """Home "Suggested": the AI's sentences for right now and the patient's most used sentences,
+        then the fixed phrases, best first (learning on). Day 1 mode: the fixed list."""
+        node = item.node
+        assert node is not None
+        pool = self._suggested_pool(item, sentences)
         frame = Frame(
             kind="menu",
             level=node,
             prefix=item.id,
-            items=items,
+            items=pool,
             crumb=item,
-            shown=tuple(i.label(self.lang) for i in items),
-            ai=bool(ai),
+            pool=pool,
+            rank="full",
+            ai=any(i.text is not None for i in pool),  # AI or history text: in one language only
         )
+        self._rank(frame)
         self._push(frame)
-        if ai:
-            self._voice.warm(ai[0].phrase(self.lang), self.lang)
+        top = frame.items[0] if frame.items else None
+        if top is not None and top.kind == "suggestion":
+            self._voice.warm(top.phrase(self.lang), self.lang)
+
+    def _history_item(self, s: Sentence, n: int) -> Item | None:
+        """A sentence from the history as a Suggested tile. Its action and contact come from the menu
+        path it was confirmed under, never from the text: the leaf's, or for an AI option or AI
+        sentence below a level, what that level passes on. None when the path left the menu."""
+        path = leaf_path(s.node_id)
+        nodes = self._menu.chain(path)
+        if not nodes:
+            return None
+        node = nodes[-1]
+        if len(nodes) == len(path.split(".")) and node.is_leaf:
+            action, contact = node.action, node.contact
+            fixed = text_key(node.phrase(self.lang)) == text_key(s.text)
+        else:
+            action, contact = node.inherited()
+            fixed = False
+        if fixed:  # the leaf's own phrase keeps the leaf's id
+            return Item(kind="suggestion", id=path, event_id=path, text=s.text, action=action, contact=contact)
+        return Item(
+            kind="suggestion", id=f"ai:{path}.h{n + 1}", event_id=f"ai:{path}", text=s.text, action=action, contact=contact
+        )
 
     def _open_suggestions(self, leaf: Item, sentences: list[str] | None) -> None:
         """The suggestions screen for `leaf`: AI sentences, its fixed phrase, "Other...". No
@@ -477,7 +554,7 @@ class Session:
         if not sentences:
             self._confirm(leaf)
             return
-        base = leaf.id.removeprefix("ai:")
+        base = leaf_path(leaf.id)
         ai = [self._sentence(s, i, f"ai:{base}", leaf.action, leaf.contact) for i, s in enumerate(sentences[:MAX_SENTENCES])]
         fixed = Item(
             kind="suggestion",
@@ -488,20 +565,22 @@ class Session:
             action=leaf.action,
             contact=leaf.contact,
         )
-        items = ai + [fixed]
+        pool = ai + [fixed]
         frame = Frame(
             kind="suggestions",
             level=self.frame.level,
             prefix=leaf.id,
-            items=items,
+            items=pool,
             crumb=leaf,
-            shown=tuple(i.label(self.lang) for i in items),
+            pool=pool,
+            rank="full",
             leaf=leaf,
             ai=True,
         )
+        self._rank(frame)
         self._push(frame)
         # Only the top sentence is made in advance (ElevenLabs quota); others when confirmed.
-        self._voice.warm(ai[0].phrase(self.lang), self.lang)
+        self._voice.warm(frame.items[0].phrase(self.lang), self.lang)
 
     def _open_other(self, frame: Frame, result: list[Any] | None) -> None:
         """The next "Other..." batch for `frame`, or "Spell it" when there is nothing new."""
@@ -556,6 +635,39 @@ class Session:
     def _push(self, frame: Frame) -> None:
         self._stack.append(frame)
         self._enter_frame()
+
+    # --- ranking --------------------------------------------------------------
+
+    def _rank(self, frame: Frame) -> None:
+        """Set frame.items (and what is shown) from frame.pool: ranked with learning on, in the pool's
+        own order in Day 1 mode."""
+        pool = frame.pool
+        if self.learning and frame.rank != "none" and pool:
+            entries = [self._entry(i, by_text=frame.rank == "full") for i in pool]
+            scored = self.ranker.score(entries, self.lang, priors=frame.priors, state_level=self.state_level)
+            if frame.rank == "menu":
+                order = self.ranker.order_menu(entries, scored, pinned=frame.pinned)
+            else:
+                order = self.ranker.order_full(entries, scored)
+            by_id = {i.id: i for i in pool}
+            pool = [by_id[i] for i in order]
+        frame.items = pool[:MAX_ITEMS]
+        frame.shown = tuple(i.label(self.lang) for i in frame.items)
+
+    def _entry(self, item: Item, *, by_text: bool) -> Entry:
+        """How the Ranker looks `item` up: in a sentence list by its sentence, on a menu level by its
+        path (a branch collects everything below it)."""
+        path = leaf_path(item.event_id if item.kind == "suggestion" else item.id)
+        urgent = self._urgent(path)
+        sentence = item.kind == "suggestion" or (item.node is not None and item.node.is_leaf) or item.text is not None
+        if by_text and sentence:
+            return Entry(item.id, text=item.phrase(self.lang), urgent=urgent)
+        return Entry(item.id, path=path, urgent=urgent)
+
+    def _urgent(self, path: str) -> bool:
+        """Urgent (pain, bathroom, help): the item, a level above it, or something below it says so."""
+        nodes = self._menu.chain(path)
+        return any(n.urgent for n in nodes) or (bool(nodes) and nodes[-1].has_urgent)
 
     def _enter_frame(self) -> None:
         """Show the top frame from its first tile and prefetch what could be picked next."""

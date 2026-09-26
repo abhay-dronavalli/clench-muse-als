@@ -1,4 +1,5 @@
-"""The patient profile (PRD A7): name, starting language and who the help alert reaches.
+"""The patient profile (PRD A7): name, starting language, who the help alert reaches, and how the
+ranking learns (PRD section 9: weights, the stability margin, learning on or Day 1 mode).
 
 Loaded from data/profile.yaml at startup. Loading fails loudly (ProfileError) on a bad file.
 """
@@ -13,12 +14,23 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core.contracts import Lang
 from core.menu import DATA_DIR, Contact
+from core.rank.score import DEFAULT_HYSTERESIS, Weights
 
 PROFILE_PATH = DATA_DIR / "profile.yaml"
 
 
 class ProfileError(ValueError):
     """The profile file is invalid."""
+
+
+class Ranking(BaseModel):
+    """PRD section 9 score weights (normalized when used) and the menu stability margin."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    weights: Weights = Field(default_factory=Weights)
+    # A menu item moves above the one before it only when its score is this many times higher.
+    hysteresis: float = Field(default=DEFAULT_HYSTERESIS, ge=1.0)
 
 
 class Profile(BaseModel):
@@ -28,6 +40,8 @@ class Profile(BaseModel):
     lang: Lang = "en"
     help_contact: str  # contact id in data/contacts.yaml
     speak_picks: bool = True  # say each picked tile aloud as it is picked (switchable live)
+    learning: bool = True  # false = Day 1 mode: yaml order, fixed Suggested list (switchable live)
+    ranking: Ranking = Field(default_factory=Ranking)
 
 
 def load_profile(contacts: dict[str, Contact], path: Path = PROFILE_PATH) -> Profile:

@@ -195,7 +195,8 @@ def build_tts(env: Mapping[str, str], *, transport: httpx.AsyncBaseTransport | N
 
 
 class CircuitBreaker:
-    """Stops calling ElevenLabs for `cooldown_s` after a fatal error or `max_errors` errors in a row."""
+    """Stops calling a service (ElevenLabs by default; Jev uses one too) for `cooldown_s` after a
+    fatal error or `max_errors` errors in a row."""
 
     def __init__(
         self,
@@ -203,10 +204,16 @@ class CircuitBreaker:
         max_errors: int = BREAKER_ERRORS,
         cooldown_s: float = BREAKER_COOLDOWN_S,
         clock: Callable[[], float] = time.monotonic,
+        name: str = "voice: ElevenLabs",
+        fallback: str = "Using browser speech.",
+        logger: logging.Logger | None = None,
     ) -> None:
         self._max_errors = max_errors
         self._cooldown_s = cooldown_s
         self._clock = clock
+        self._name = name
+        self._fallback = fallback
+        self._log = logger or log
         self._errors = 0
         self._open_until: float | None = None
 
@@ -221,7 +228,7 @@ class CircuitBreaker:
             return False
         self._open_until = None
         self._errors = 0
-        log.info("voice: trying ElevenLabs again")
+        self._log.info("%s: trying again", self._name)
         return True
 
     def success(self) -> None:
@@ -234,13 +241,11 @@ class CircuitBreaker:
         if fatal or self._errors >= self._max_errors:
             self._open_until = self._clock() + self._cooldown_s
             why = reason if fatal else f"{self._errors} errors in a row (last: {reason})"
-            log.warning(
-                "voice: ElevenLabs switched off for %d min after %s. Using browser speech.",
-                self._cooldown_s // 60,
-                why,
+            self._log.warning(
+                "%s switched off for %d min after %s. %s", self._name, self._cooldown_s // 60, why, self._fallback
             )
         else:
-            log.warning("voice: ElevenLabs failed (%d in a row): %s", self._errors, reason)
+            self._log.warning("%s failed (%d in a row): %s", self._name, self._errors, reason)
 
 
 # --- disk cache --------------------------------------------------------------------

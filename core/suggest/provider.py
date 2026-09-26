@@ -49,7 +49,8 @@ class SuggestContext:
     shown: tuple[str, ...] = ()  # labels / sentences already on screen: never repeat these
 
 
-def _key(text: str) -> str:
+def text_key(text: str) -> str:
+    """Comparison key for a sentence or label: case, spaces and end punctuation ignored."""
     return " ".join(text.casefold().split()).rstrip(".!?¡¿")
 
 
@@ -70,9 +71,9 @@ def clean_sentences(value: Any) -> list[str]:
     seen: set[str] = set()
     for item in value:
         text = _clean_text(item, MAX_TEXT)
-        if text is None or _key(text) in seen:
+        if text is None or text_key(text) in seen:
             continue
-        seen.add(_key(text))
+        seen.add(text_key(text))
         out.append(text)
     return out[:MAX_SENTENCES]
 
@@ -113,10 +114,10 @@ def clean_options(value: Any) -> list[Option]:
             continue
         label = _clean_text(item.get("label"), MAX_LABEL)
         text = _clean_text(item.get("text"), MAX_TEXT)
-        if label is None or text is None or _key(label) in seen_labels or _key(text) in seen_texts:
+        if label is None or text is None or text_key(label) in seen_labels or text_key(text) in seen_texts:
             continue
-        seen_labels.add(_key(label))
-        seen_texts.add(_key(text))
+        seen_labels.add(text_key(label))
+        seen_texts.add(text_key(text))
         out.append(Option(label=label, text=text))
     return out[:MAX_OPTIONS]
 
@@ -213,8 +214,8 @@ class Bundle(BaseModel):
 
 def drop_known(items: list[str], known: tuple[str, ...] | list[str]) -> list[str]:
     """`items` without anything already in `known` (case, spaces and end punctuation ignored)."""
-    keys = {_key(k) for k in known}
-    return [i for i in items if _key(i) not in keys]
+    keys = {text_key(k) for k in known}
+    return [i for i in items if text_key(i) not in keys]
 
 
 # --- JSON schemas sent to the model --------------------------------------------------
