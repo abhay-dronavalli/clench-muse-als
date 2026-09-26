@@ -27,7 +27,7 @@ from brainflow.board_shim import BoardShim, BrainFlowPresets
 from clench_detect import (
     load_calibration,
     CR,
-    GestureRecognizer,
+    recognizer_from_calibration,
     WINDOW_SECONDS,
     calibrate,
     describe,
@@ -59,10 +59,7 @@ def play(board, rows, fs, window_samples, calibration, args):
     # emit_start=True: act on the RISING edge. Waiting for the release adds the
     # whole length of your clench to the lag, which reads as being exactly one
     # cell late on every round.
-    recognizer = GestureRecognizer(calibration["emg_threshold"],
-                                   calibration["blink_threshold"],
-                                   args.long_ms, args.double_ms,
-                                   emit_start=True)
+    recognizer = recognizer_from_calibration(calibration, args, emit_start=True)
     threshold = calibration["emg_threshold"]
     results = []
 
@@ -205,6 +202,8 @@ def main():
             if args.load:
                 print("No usable saved calibration -- calibrating now.")
             calibration = calibrate(board, rows, fs, window_samples, args)
+        if calibration is None:
+            return 1
         describe(calibration)
 
         results = play(board, rows, fs, window_samples, calibration, args)

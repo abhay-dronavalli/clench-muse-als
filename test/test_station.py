@@ -366,6 +366,7 @@ def add_hold_threshold(station):
     path = cd.calibration_file(station.link.board, PROFILE)
     data = json.loads(path.read_text())
     data.update({"hold_rest": 1.0, "hold_sigma": 0.5, "hold_floor": 3.5,
+                 "hold_method": "raw_deflection_v2",
                  "hold_peak": 80.0, "hold_threshold": 41.0,
                  "hold_trials": [80.0, 85.0, 82.0],
                  "hold_durations_ms": [900.0, 950.0, 880.0],

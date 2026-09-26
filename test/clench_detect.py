@@ -90,6 +90,10 @@ def load_calibration(board, profile="default", ui=None):
         ui.log(f"  ignoring {path.name}: recorded on {data.get('board')}, "
                f"this is {board_label(board)}")
         return None
+    if data.get("hold_threshold") and data.get("hold_method") != "raw_deflection_v2":
+        ui.log("  Old eye-hold calibration used a different filter path. "
+               "LONG_BLINK disabled; recalibrate this profile.")
+        data["hold_threshold"] = None
     return data
 
 
@@ -204,7 +208,9 @@ def _filtered(window, fs, band, notch):
     leaves the hum sitting in the number we measure. A venue has far more
     electrical hum than a bedroom, so this is not a theoretical concern.
     """
-    signal = np.ascontiguousarray(window, dtype=np.float64)
+    # BrainFlow filters in place. ascontiguousarray can alias a float64 row,
+    # causing the hold feature to read the already blink-filtered samples.
+    signal = np.array(window, dtype=np.float64, order="C", copy=True)
     if notch:
         DataFilter.remove_environmental_noise(signal, fs, NoiseTypes.FIFTY_AND_SIXTY)
     DataFilter.perform_bandpass(signal, fs, band[0], band[1], 4,
@@ -569,6 +575,7 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         "board": board_label(board),
         "fs": fs,
         "blink_method": "p2p_coincidence",   # guards against loading old profiles
+        "hold_method": "raw_deflection_v2",
         "emg_rest": emg_rest, "emg_sigma": emg_sigma,
         "emg_peak": emg_peak, "emg_threshold": emg_threshold,
         "emg_trials": emg_trials,
@@ -636,9 +643,9 @@ class EdgeDetector:
     one clench from being read as the start of the next.
     """
 
-    def __init__(self, threshold, min_ms, refractory_ms):
+    def __init__(self, threshold, min_ms, refractory_ms, baseline=0.0):
         self.threshold = threshold
-        self.release = threshold * RELEASE_FRACTION
+        self.release = baseline + (threshold - baseline) * RELEASE_FRACTION
         self.min_ms = min_ms
         self.refractory_ms = refractory_ms
         self.active = False
@@ -685,10 +692,10 @@ class BlinkDetector:
     """
 
     def __init__(self, threshold, coincidence_ms=BLINK_COINCIDENCE_MS,
-                 refractory_ms=BLINK_REFRACTORY_MS):
+                 refractory_ms=BLINK_REFRACTORY_MS, baseline=0.0):
         self.threshold = threshold
-        self.left = EdgeDetector(threshold, 0, refractory_ms)
-        self.right = EdgeDetector(threshold, 0, refractory_ms)
+        self.left = EdgeDetector(threshold, 0, refractory_ms, baseline)
+        self.right = EdgeDetector(threshold, 0, refractory_ms, baseline)
         self.coincidence_ms = coincidence_ms
         self.refractory_ms = refractory_ms
         self.rose_left = None
@@ -732,14 +739,16 @@ class GestureRecognizer:
     """
 
     def __init__(self, emg_threshold, blink_threshold, long_ms=1500, double_ms=700,
-                 emit_start=False, hold_threshold=None, long_blink_ms=LONG_BLINK_MS):
-        self.clench = EdgeDetector(emg_threshold, MIN_EVENT_MS, REFRACTORY_MS)
-        self.blink = BlinkDetector(blink_threshold)
+                 emit_start=False, hold_threshold=None, long_blink_ms=LONG_BLINK_MS,
+                 emg_rest=0.0, blink_rest=0.0, hold_rest=0.0):
+        self.clench = EdgeDetector(emg_threshold, MIN_EVENT_MS, REFRACTORY_MS, emg_rest)
+        self.blink = BlinkDetector(blink_threshold, baseline=blink_rest)
         # The eyelid hold reuses EdgeDetector unchanged: "level stays up for N ms"
         # is exactly what it already does for the held clench. hold_threshold is
         # optional so a profile calibrated before this gesture existed still
         # loads -- it just cannot fire LONG_BLINK.
-        self.long_blink = (EdgeDetector(hold_threshold, 0, LONG_BLINK_REFRACTORY_MS)
+        self.long_blink = (EdgeDetector(hold_threshold, 0, LONG_BLINK_REFRACTORY_MS,
+                                        hold_rest)
                            if hold_threshold else None)
         self.long_ms = long_ms
         self.long_blink_ms = long_blink_ms
@@ -802,7 +811,8 @@ class GestureRecognizer:
         # how far apart they were, which is worth showing while tuning.
         coincidence = self.blink.update(levels, now)
         if coincidence is not None:
-            gap_ms = (now - self.pending_blink) * 1000 if self.pending_blink else None
+            gap_ms = ((now - self.pending_blink) * 1000
+                      if self.pending_blink is not None else None)
             if gap_ms is not None and gap_ms <= self.double_ms:
                 if not self.swallow_blinks:
                     events.append(("DOUBLE_BLINK", f"gap {gap_ms:4.0f} ms  -- BACK"))
@@ -826,6 +836,19 @@ class GestureRecognizer:
         return events
 
 
+def recognizer_from_calibration(calibration, args, emit_start=False):
+    """One profile-to-detector path shared by station, games, and offline replay."""
+    return GestureRecognizer(
+        calibration["emg_threshold"], calibration["blink_threshold"],
+        args.long_ms, args.double_ms, emit_start=emit_start,
+        hold_threshold=calibration.get("hold_threshold"),
+        long_blink_ms=getattr(args, "long_blink_ms",
+                              calibration.get("long_blink_ms", LONG_BLINK_MS)),
+        emg_rest=calibration.get("emg_rest", 0.0),
+        blink_rest=calibration.get("blink_rest", 0.0),
+        hold_rest=calibration.get("hold_rest", 0.0))
+
+
 def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None,
                 emit_start=False):
     """The input loop: read envelopes, recognise gestures, report them.
@@ -836,13 +859,7 @@ def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None,
     """
     ui = ui or ConsoleUI()
     hold_threshold = calibration.get("hold_threshold")
-    recognizer = GestureRecognizer(calibration["emg_threshold"],
-                                   calibration["blink_threshold"],
-                                   args.long_ms, args.double_ms,
-                                   emit_start=emit_start,
-                                   hold_threshold=hold_threshold,
-                                   long_blink_ms=getattr(args, "long_blink_ms",
-                                                         LONG_BLINK_MS))
+    recognizer = recognizer_from_calibration(calibration, args, emit_start)
     recent = deque(maxlen=6)
 
     ui.log("")

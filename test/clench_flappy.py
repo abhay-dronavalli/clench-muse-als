@@ -32,7 +32,7 @@ import matplotlib
 
 from clench_detect import (
     load_calibration,
-    GestureRecognizer,
+    recognizer_from_calibration,
     WINDOW_SECONDS,
     calibrate,
     describe,
@@ -345,13 +345,12 @@ def main():
             if args.load:
                 print("No usable saved calibration -- calibrating now.")
             calibration = calibrate(board, rows, fs, window_samples, args)
+        if calibration is None:
+            return 1
         describe(calibration)
 
         # emit_start=True is the whole point: flap on the rising edge.
-        recognizer = GestureRecognizer(calibration["emg_threshold"],
-                                       calibration["blink_threshold"],
-                                       args.long_ms, args.double_ms,
-                                       emit_start=True)
+        recognizer = recognizer_from_calibration(calibration, args, emit_start=True)
 
         def read_flap():
             levels = read_levels(board, rows, fs, window_samples)
