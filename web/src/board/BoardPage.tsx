@@ -3,7 +3,7 @@ import type { Confirm, Lang, Message, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket, type Send } from '../lib/useSocket'
-import { playAudio, speak, unlockSpeech } from './speech'
+import { say, unlockSpeech, type Utterance, type VoiceSource } from './speech'
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { ToastStack } from './ToastStack'
@@ -19,11 +19,16 @@ type View =
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
  * READY and AUDIO_DONE. All decisions, including the highlight, stay in the Core.
+ *
+ * Speech: only a phrase (the confirmed sentence) shows the speaking screen. Echoes (picked tiles)
+ * and system lines play over whatever is on screen. AUDIO_DONE goes back for phrases and system
+ * lines, never for echoes.
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
   const [view, setView] = useState<View>({ kind: 'waiting' })
   const [lang, setLang] = useState<Lang>('en')
+  const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const { toasts, push } = useToasts()
 
   const onMessage = (msg: Message, send: Send) => {
@@ -37,13 +42,24 @@ export default function BoardPage() {
         setView({ kind: 'confirm', confirm: msg })
         break
       case 'SPEAK':
-        setLang(msg.lang)
-        setView({ kind: 'speaking', text: msg.text })
-        speak(msg.text, msg.lang, () => send({ type: 'AUDIO_DONE', id: msg.id }))
+      case 'PLAY_AUDIO': {
+        const u: Utterance = {
+          id: msg.id,
+          kind: msg.kind,
+          text: msg.text,
+          lang: msg.lang,
+          audio: msg.type === 'PLAY_AUDIO' ? { url: msg.url, cached: msg.cached } : undefined,
+        }
+        if (msg.kind === 'phrase') {
+          setLang(msg.lang)
+          setView({ kind: 'speaking', text: msg.text })
+        }
+        const onEnd = (ended: Utterance) => {
+          if (ended.kind !== 'echo') send({ type: 'AUDIO_DONE', id: ended.id })
+        }
+        say(u, onEnd, setVoiceSource)
         break
-      case 'PLAY_AUDIO':
-        playAudio(msg.url, () => send({ type: 'AUDIO_DONE', id: msg.id }))
-        break
+      }
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
@@ -88,7 +104,7 @@ export default function BoardPage() {
       {status === 'open' && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       <ToastStack toasts={toasts} />
 
-      <DevPanel lang={lang} />
+      <DevPanel lang={lang} voiceSource={voiceSource} />
     </div>
   )
 }

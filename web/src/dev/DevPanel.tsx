@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { Lang, Message } from '../contracts'
+import type { VoiceSource } from '../board/speech'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket } from '../lib/useSocket'
 
@@ -32,16 +33,26 @@ function describe(msg: Message): string {
   switch (msg.type) {
     case 'LONG_CLENCH':
       return `LONG_CLENCH ${msg.duration.toFixed(1)} s`
-    case 'SETTINGS':
-      return `SETTINGS ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}`
+    case 'SETTINGS': {
+      const picks = msg.speak_picks === undefined ? '' : ` speak picks ${msg.speak_picks ? 'on' : 'off'}`
+      return `SETTINGS ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}${picks}`
+    }
     default:
       return msg.type
   }
 }
 
-export default function DevPanel({ lang }: { lang: Lang }) {
+interface Props {
+  lang: Lang
+  /** where the last thing the board said came from; null = nothing said yet */
+  voiceSource: VoiceSource | null
+}
+
+export default function DevPanel({ lang, voiceSource }: Props) {
   const [open, setOpen] = useState(false)
   const [scanMs, setScanMs] = useState(1000)
+  // data/profile.yaml turns it on by default; the Core does not report it back, so this assumes on.
+  const [speakPicks, setSpeakPicks] = useState(true)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
   const scanTimer = useRef<number | undefined>(undefined)
@@ -124,6 +135,12 @@ export default function DevPanel({ lang }: { lang: Lang }) {
   const toggleLang = () =>
     emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: scanMs, lang: lang === 'en' ? 'es' : 'en' })
 
+  const toggleSpeakPicks = () => {
+    const next = !speakPicks
+    setSpeakPicks(next)
+    emit({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: scanMs, speak_picks: next })
+  }
+
   // Buttons never take focus, so Space always means "clench", never "press the focused button".
   const noFocus = (e: MouseEvent) => e.preventDefault()
   const btn = 'rounded-md bg-zinc-700 px-2 py-1.5 font-semibold hover:bg-zinc-600 active:bg-zinc-500'
@@ -199,6 +216,19 @@ export default function DevPanel({ lang }: { lang: Lang }) {
           <span className={lang === 'es' ? 'text-yellow-300' : 'text-zinc-400'}>ES</span>
         </button>
       </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs text-zinc-400">Speak picks</span>
+        <button type="button" className={btn} onMouseDown={noFocus} onClick={toggleSpeakPicks}>
+          <span className={speakPicks ? 'text-yellow-300' : 'text-zinc-400'}>On</span>
+          {' / '}
+          <span className={speakPicks ? 'text-zinc-400' : 'text-yellow-300'}>Off</span>
+        </button>
+      </div>
+
+      <p className="mb-3 text-xs text-zinc-400">
+        Voice: <span className="text-zinc-200">{voiceSource ?? 'nothing said yet'}</span>
+      </p>
 
       <ol className="space-y-0.5 font-mono text-xs">
         {log.length === 0 && <li className="text-zinc-500">No events sent yet</li>}

@@ -14,6 +14,8 @@ export default defineConfig({
         target: 'ws://127.0.0.1:8000',
         ws: true,
       },
+      // Cached ElevenLabs audio named in PLAY_AUDIO
+      '/audio': 'http://127.0.0.1:8000',
     },
   },
 })
