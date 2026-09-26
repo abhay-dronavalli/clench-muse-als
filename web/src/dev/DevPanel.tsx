@@ -10,6 +10,7 @@ import {
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
 import { showCursor } from '../facetrack/stores'
+import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
 import { tracker } from '../facetrack/tracker'
 import { useTrackerStatus } from '../facetrack/useTrackerStatus'
 import { StatusDot } from '../lib/StatusDot'
@@ -110,12 +111,15 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [learning, setLearning] = useState<boolean | null>(null)
   const [longClenchMs, setLongClenchMs] = useState(DEFAULT_LONG_CLENCH_MS)
+  const [margin, setMargin] = useState<number | null>(null) // tile_switch_margin, 0..0.2
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [shortcut, setShortcut] = useState<ShortcutDebug | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
   const scanTimer = useRef<number | undefined>(undefined)
   const sliding = useRef(false)
+  const marginTimer = useRef<number | undefined>(undefined)
+  const marginSliding = useRef(false)
   const { status, send } = useSocket('/ws/input', {
     onMessage: (msg) => {
       if (msg.type === 'METRICS') {
@@ -133,6 +137,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
       if (msg.learning !== undefined) setLearning(msg.learning)
       if (msg.long_clench_ms !== undefined) setLongClenchMs(msg.long_clench_ms)
+      if (msg.tile_switch_margin !== undefined && !marginSliding.current) setMargin(msg.tile_switch_margin)
     },
   })
   const known = pointingMode !== null && scanMs !== null
@@ -215,6 +220,19 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
     scanTimer.current = window.setTimeout(() => {
       sliding.current = false
       emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: ms })
+    }, 250)
+  }
+
+  // Webcam / gaze sticky edges, live: the board takes the value from the Core's SETTINGS.
+  const onMarginChange = (percent: number) => {
+    if (!known) return
+    const value = percent / 100
+    setMargin(value)
+    marginSliding.current = true
+    window.clearTimeout(marginTimer.current)
+    marginTimer.current = window.setTimeout(() => {
+      marginSliding.current = false
+      emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, tile_switch_margin: value })
     }, 250)
   }
 
@@ -346,6 +364,24 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         </button>
         <span className="text-xs text-zinc-400">{headRange ? 'calibrated' : 'defaults'}</span>
       </div>
+
+      <label className="mb-3 block" title="How far the head's point must be inside a new tile before the highlight moves">
+        <span className="flex justify-between text-xs text-zinc-400">
+          <span>Tile switch margin</span>
+          <span>{margin === null ? 'waiting for Core' : `${Math.round(margin * 100)}%`}</span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={MAX_STICKY_MARGIN * 100}
+          step={1}
+          disabled={!known || margin === null}
+          value={Math.round((margin ?? 0.05) * 100)}
+          onChange={(e) => onMarginChange(Number(e.target.value))}
+          onPointerUp={(e) => e.currentTarget.blur()}
+          className="w-full accent-yellow-300"
+        />
+      </label>
 
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs text-zinc-400">Cursor dot</span>

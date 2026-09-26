@@ -218,7 +218,7 @@ matching AUDIO_DONE wins and later ones are ignored.
 
 ### SETTINGS
 
-Caregiver changes pointing mode, scan speed, language, speak picks, learning or the long-clench time. Applies at once, no
+Caregiver changes pointing mode, scan speed, language, speak picks, learning, the long-clench time or the tile switch margin. Applies at once, no
 restart (PRD P1). The web dev panel also sends it (scan speed slider, EN/ES toggle, Speak picks and
 Day 1 mode toggles) on `/ws/input`.
 
@@ -233,10 +233,11 @@ included). Screens show these values instead of assuming defaults.
 | `lang` | `"en"` \| `"es"` (optional) | omit to keep the current language; default `"en"` |
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
 | `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
+| `tile_switch_margin` | float (optional) | webcam / gaze pointing: how far the point must be inside a new tile before the highlight moves there, as a share of that tile's width / height, 0 to 0.2; omit to keep the current value; default from `data/profile.yaml` (0.05). The board applies it; the dev panel has a slider |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05}
 ```
 
 ## Core -> Board

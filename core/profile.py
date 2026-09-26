@@ -47,6 +47,10 @@ class Profile(BaseModel):
     # How long a clench must be held to count as a LONG_CLENCH (help alert). The Sensor Service and
     # the dev panel's hold-Space both use it (announced in SETTINGS). The 5 s countdown follows.
     long_clench_ms: int = Field(default=2500, ge=1000, le=5000)
+    # Webcam / gaze pointing: how far (share of a tile's own size) the point must be inside a new
+    # tile before the highlight moves there, so a border does not flicker. The board uses it
+    # (announced in SETTINGS; the dev panel's slider changes it live).
+    tile_switch_margin: float = Field(default=0.05, ge=0.0, le=0.2)
     ranking: Ranking = Field(default_factory=Ranking)
 
 

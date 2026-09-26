@@ -4,7 +4,7 @@ import type { Send } from '../lib/useSocket'
 import { FaceDebouncer } from './face'
 import { poseToPoint } from './pose'
 import { cursor } from './stores'
-import { chooseTile, type Rect } from './tiles'
+import { chooseTile, STICKY_MARGIN, type Rect } from './tiles'
 import { tracker, type HeadSample } from './tracker'
 
 interface Options {
@@ -18,6 +18,8 @@ interface Options {
   range: HeadRange
   /** No POINTs (the calibration overlay is up); FACE_OK still goes out. */
   paused: boolean
+  /** Sticky edges: share of a tile's size the point must be inside it (SETTINGS tile_switch_margin). */
+  margin?: number
 }
 
 /** FACE_OK debounce for the page's one tracker (like the tracker, one per page). */
@@ -46,10 +48,10 @@ function measureTiles(): Rect[] {
  *
  * Video never leaves the browser: only these two messages are sent (PRD section 11).
  */
-export function useHeadPointing({ camera, connected, screen, send, range, paused }: Options) {
-  const latest = useRef({ screen, send, range, paused })
+export function useHeadPointing({ camera, connected, screen, send, range, paused, margin = STICKY_MARGIN }: Options) {
+  const latest = useRef({ screen, send, range, paused, margin })
   useEffect(() => {
-    latest.current = { screen, send, range, paused }
+    latest.current = { screen, send, range, paused, margin }
   })
   const tile = useRef<number | null>(null) // the tile the head is on (sticky), for this seq
   const sent = useRef<{ seq: number; tile: number } | null>(null)
@@ -98,7 +100,7 @@ export function useHeadPointing({ camera, connected, screen, send, range, paused
   useEffect(
     () =>
       tracker.subscribeSample((s: HeadSample) => {
-        const { screen, send, range, paused } = latest.current
+        const { screen, send, range, paused, margin } = latest.current
         const change = face.update(s.face, s.t)
         if (change !== null) {
           send({ type: 'FACE_OK', ok: change })
@@ -113,7 +115,7 @@ export function useHeadPointing({ camera, connected, screen, send, range, paused
         if (paused || face.reported !== true || !screen || screen.tiles.length === 0) return
         const rects = measureTiles()
         if (rects.length !== screen.tiles.length) return // the new tiles are not drawn yet
-        const next = chooseTile(p, rects, tile.current)
+        const next = chooseTile(p, rects, tile.current, margin)
         tile.current = next
         if (next === null) return
         if (sent.current?.seq === screen.seq && sent.current.tile === next) return

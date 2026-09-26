@@ -138,6 +138,9 @@ class Settings(_Msg):
     learning: bool | None = None
     # How long a clench must be held to count as a LONG_CLENCH (help), in ms. Omit to keep it.
     long_clench_ms: int | None = Field(default=None, ge=1000, le=5000)
+    # Webcam / gaze pointing: how far (share of a tile's size) the point must be inside a new tile
+    # before the highlight moves there, 0 to 0.2. Omit to keep it.
+    tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
 
 
 # --- Core -> Board ------------------------------------------------------------

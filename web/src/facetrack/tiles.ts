@@ -12,8 +12,13 @@ export interface Rect {
   bottom: number
 }
 
-/** About 15% of a tile's size: how far the point must be inside a new tile before it moves there. */
-export const STICKY_MARGIN = 0.15
+/**
+ * How far the point must be inside a new tile before it moves there, as a share of that tile's size:
+ * 5% by default. The Core announces the profile's `tile_switch_margin` in SETTINGS (0 to 0.2), and the
+ * dev panel's slider changes it live.
+ */
+export const STICKY_MARGIN = 0.05
+export const MAX_STICKY_MARGIN = 0.2
 
 export function contains(r: Rect, p: ScreenPoint): boolean {
   return p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom

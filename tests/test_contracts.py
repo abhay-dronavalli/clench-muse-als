@@ -46,7 +46,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.Settings,
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
-            "learning": True, "long_clench_ms": 2500,
+            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05,
         },
     ),
     "SCREEN": (
@@ -164,6 +164,7 @@ def test_round_trip(name):
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "lang": "de"},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "learning": "day1"},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "long_clench_ms": 500},
+        {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "tile_switch_margin": 0.5},
         {"type": "METRICS", "text": "x", "selections": 0, "scan_steps": 0, "day1_selections": 1, "day1_scan_steps": 0},
         {"type": "METRICS", "text": "x", "selections": 2, "scan_steps": 0, "day1_selections": 5},
         {

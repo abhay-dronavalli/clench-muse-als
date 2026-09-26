@@ -5,6 +5,7 @@ import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
 import { CameraLight, CameraNotice, CursorDot, PointerBadge } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
+import { STICKY_MARGIN } from '../facetrack/tiles'
 import { useHeadPointing } from '../facetrack/useHeadPointing'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket, type Send } from '../lib/useSocket'
@@ -39,6 +40,7 @@ export default function BoardPage() {
   const [view, setView] = useState<View>({ kind: 'waiting' })
   const [lang, setLang] = useState<Lang>('en')
   const [mode, setMode] = useState<PointingMode | null>(null)
+  const [margin, setMargin] = useState(STICKY_MARGIN) // SETTINGS tile_switch_margin
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
@@ -85,6 +87,7 @@ export default function BoardPage() {
         // The language and the pointing mode (camera on or off); the dev panel shows the rest.
         if (msg.lang) setLang(msg.lang)
         setMode(msg.pointing_mode)
+        if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         break
       default:
         console.warn('board ignored', msg.type)
@@ -117,7 +120,7 @@ export default function BoardPage() {
 
   const camera = started && (mode === 'webcam' || mode === 'auto')
   const screen = connected && view.kind === 'menu' ? view.screen : null
-  useHeadPointing({ camera, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating })
+  useHeadPointing({ camera, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
 
   const start = () => {
     unlockSpeech()

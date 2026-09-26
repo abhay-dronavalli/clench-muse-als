@@ -135,6 +135,11 @@ export interface Settings {
   learning?: boolean
   /** integer ms a clench must be held to count as a LONG_CLENCH (help), 1000 to 5000; omit to keep it */
   long_clench_ms?: number
+  /**
+   * webcam / gaze pointing: how far (share of a tile's size) the point must be inside a new tile
+   * before the highlight moves there, 0 to 0.2; omit to keep it
+   */
+  tile_switch_margin?: number
 }
 
 // --- Core -> Board ---
