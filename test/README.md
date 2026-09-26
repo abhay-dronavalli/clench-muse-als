@@ -14,6 +14,8 @@ clench trials. Use a comfortable repeatable clench. A failed required calibratio
 leaves the saved profile intact and asks you to retry. Unusable blink/hold trials
 leave those eye inputs explicitly disabled while retaining a valid clench input.
 Hold samples must actually pass the final detector threshold and selected duration.
+The same hold settings must also reject the recorded ordinary blinks and clenches;
+otherwise LONG_BLINK stays off with a retry message.
 Rest contact messages identify the channel to adjust; these are heuristics, not HSI.
 The raw-amplitude contact gate only runs at rest, not during intentional gestures.
 

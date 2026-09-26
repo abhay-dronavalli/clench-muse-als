@@ -480,6 +480,16 @@ def retry_calibration(ui, reason):
     return None
 
 
+def detects_hold(samples, threshold, baseline, duration_ms):
+    """Replay a calibration phase through the same hold state machine as live use."""
+    detector = EdgeDetector(threshold, 0, LONG_BLINK_REFRACTORY_MS, baseline)
+    for t, lv in samples:
+        detector.update(lv.hold, t)
+        if detector.active and detector.held_ms(t) >= duration_ms:
+            return True
+    return False
+
+
 def calibrate(board, rows, fs, window_samples, args, ui=None):
     """Measure rest, then real clenches, then real blinks.
 
@@ -535,6 +545,7 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     separation = None
     blink_enabled = bool(args.no_clench_cal)  # explicit rest-only fallback
     hold_samples = []
+    normal_blink_samples = []
     clench_samples = []
     requested_hold_ms = getattr(args, "long_blink_ms", LONG_BLINK_MS)
 
@@ -605,6 +616,7 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
         ui.log("   Separate, distinct blinks -- not fluttering.")
         ui.wait("   Press Enter when ready...")
         samples = collect(board, rows, fs, window_samples, 6.0, "blinking", ui)
+        normal_blink_samples = samples
         blink_trials = blink_sizes(samples, blink_floor) if valid_collection(samples, 6.0) else []
 
         if len(blink_trials) >= 3:
@@ -676,16 +688,17 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
             # measured at the lower provisional floor cannot validate detection.
             valid_holds = 0
             for trial in hold_samples:
-                detector = EdgeDetector(hold_threshold, 0, LONG_BLINK_REFRACTORY_MS, hold_rest)
-                detected = False
-                for t, lv in trial:
-                    detector.update(lv.hold, t)
-                    detected |= detector.active and detector.held_ms(t) >= requested_hold_ms
-                valid_holds += bool(detected)
+                valid_holds += detects_hold(trial, hold_threshold, hold_rest, requested_hold_ms)
             if valid_holds != 3 or hold_peak < hold_floor + 2*hold_sigma:
                 hold_threshold = None
                 ui.log(f"   !! Only {valid_holds}/3 holds passed at the final threshold. "
                        "LONG_BLINK stays OFF; retry eye calibration.")
+            elif len(blink_trials) < 3 or any(
+                    detects_hold(trial, hold_threshold, hold_rest, requested_hold_ms)
+                    for trial in [normal_blink_samples] + clench_samples):
+                hold_threshold = None
+                ui.log("   !! Cannot distinguish eye holds from ordinary blinks/clenches. "
+                       "LONG_BLINK stays OFF; retry with distinct ordinary blinks and held closures.")
 
     calibration = {
         "board": board_label(board),

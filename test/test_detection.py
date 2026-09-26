@@ -193,10 +193,29 @@ def test_good_eye_holds_are_enabled(monkeypatch, tmp_path):
     hold = samples(5, hold=1)
     for i in range(8, 30):
         hold[i] = (i*.05, cd.Levels(5, 10, 10, 30, 30))
+    blinks = ordinary_blinks()
     result, _, _ = calibration_run(monkeypatch, tmp_path,
-        [samples(5, duration=10)] + [samples(30)]*3 + [samples(5, duration=6)] + [hold]*3)
+        [samples(5, duration=10)] + [samples(30)]*3 + [blinks] + [hold]*3)
     assert result["hold_threshold"] is not None
     assert result["hold_method"] == "raw_deflection_v2"
+
+
+def ordinary_blinks(hold_level=1):
+    blinks = samples(5, duration=6)
+    for start in (10, 40, 70):
+        for i in range(start, start+14):
+            blinks[i] = (i*.05, cd.Levels(5, 100, 100, hold_level, hold_level))
+    return blinks
+
+
+def test_eye_hold_calibration_rejects_ordinary_blink_confusion(monkeypatch, tmp_path):
+    hold = samples(5, hold=1)
+    for i in range(8, 30):
+        hold[i] = (i*.05, cd.Levels(5, 10, 10, 30, 30))
+    result, _, ui = calibration_run(monkeypatch, tmp_path,
+        [samples(5, duration=10)] + [samples(30)]*3 + [ordinary_blinks(30)] + [hold]*3)
+    assert result["hold_threshold"] is None
+    assert any("ordinary blink" in line.lower() for line in ui.logs)
 
 
 @pytest.mark.parametrize("fault", ["flat", "noise", "nan", "clip"])

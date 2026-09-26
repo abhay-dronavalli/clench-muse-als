@@ -234,3 +234,14 @@ was within the original response window; an actually late gesture cannot.
 This closes a reproducible Drill timing/rearm gap. It does not establish that the
 same gap caused the user's particular run; the saved timeline will distinguish
 that from weak signal, wrong-input termination or actual response timeout.
+
+## Additional raw-signal finding
+
+A synthetic ordinary double-blink waveform through the real filters can produce
+LONG_BLINK at an arbitrarily low hold threshold, despite the original hand-written
+envelope tests passing. Therefore successful held-eye trials alone are insufficient.
+Hold calibration now also requires at least three recorded ordinary blink samples
+and rejects a candidate if those samples or the clench trials trigger its hold
+state machine. This is a calibration veto, not a claim that band separation alone
+prevents confusion. Blinking or clenching in ways absent from calibration can
+still behave differently; the friend protocol remains necessary.
