@@ -56,9 +56,13 @@ def render(cells, cursor, target, emg_level, threshold):
 
 def play(board, rows, fs, window_samples, calibration, args):
     """Run the rounds. Returns a list of (outcome, reaction_ms) per round."""
+    # emit_start=True: act on the RISING edge. Waiting for the release adds the
+    # whole length of your clench to the lag, which reads as being exactly one
+    # cell late on every round.
     recognizer = GestureRecognizer(calibration["emg_threshold"],
                                    calibration["blink_threshold"],
-                                   args.long_ms, args.double_ms)
+                                   args.long_ms, args.double_ms,
+                                   emit_start=True)
     threshold = calibration["emg_threshold"]
     results = []
 
@@ -100,8 +104,8 @@ def play(board, rows, fs, window_samples, calibration, args):
             emg_level, blink_level = levels
 
             for name, _detail in recognizer.update(emg_level, blink_level, now):
-                if name not in ("CLENCH", "LONG_CLENCH"):
-                    continue  # blinks are ignored in this game
+                if name != "CLENCH_START":
+                    continue  # blinks, and the later release-edge CLENCH, are ignored
                 if cursor == target:
                     outcome = "HIT"
                     if entered_target_at is not None:
