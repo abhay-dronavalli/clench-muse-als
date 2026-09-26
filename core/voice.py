@@ -354,6 +354,21 @@ class Voice:
         self._emit(Speak(id=uid, kind=kind, text=text, lang=lang))
         return uid
 
+    def warm(self, text: str, lang: Lang) -> None:
+        """Start making audio for `text` in the background, without saying it, so it plays from the
+        cache later (the top AI sentence, a sentence on the confirm screen). Never blocks."""
+        key = self._key(text, lang)
+        if key is None:
+            return
+        assert self._cache is not None
+        if self._cache.lookup(key) is not None or not self.breaker.allow():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:  # no event loop (some tests)
+            return
+        self._fetch(key, text, lang)
+
     async def prewarm(self, lines: Iterable[tuple[str, Lang]]) -> PrewarmReport:
         """Make audio for every line that is not cached yet, one request at a time."""
         report = PrewarmReport()

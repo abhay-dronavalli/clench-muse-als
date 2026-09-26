@@ -38,6 +38,9 @@ from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
 from core.session import Session, voice_lines
+from core.suggest import build_provider
+from core.suggest.provider import LLMProvider
+from core.suggest.service import Suggester
 from core.voice import AUDIO_DIR, AUDIO_NAME, TTS, AudioCache, Voice, build_tts
 
 logging.basicConfig(format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
@@ -85,10 +88,11 @@ def create_app(
     env: Mapping[str, str] | None = None,
     audio_dir: Path = AUDIO_DIR,
     tts: TTS | None = None,
+    provider: LLMProvider | None = None,
 ) -> FastAPI:
     """Build the app. Defaults are safe for tests: an in-memory database and no keys, so actions
-    only dry-run and speech uses the browser voice. The real app (bottom of this file) passes the
-    database file and .env."""
+    only dry-run, speech uses the browser voice and there is no AI (fixed phrases). The real app
+    (bottom of this file) passes the database file and .env. Tests pass `provider` (FakeProvider)."""
     menu = menu or load_menu()  # fails loudly at startup on a bad tree
     profile = profile or load_profile(menu.contacts)
     env = env if env is not None else {}
@@ -101,6 +105,15 @@ def create_app(
         db.sync_profile(profile.name, profile.lang, menu.contacts.values())
         voice = Voice(hub.broadcast, tts=tts or build_tts(env), cache=AudioCache(audio_dir, db))
         app.state.voice = voice
+        llm, off_reason = (provider, "") if provider is not None else build_provider(env)
+        suggester = Suggester(
+            llm,
+            patient_name=profile.name,
+            contacts=contact_names(menu),
+            history=db,
+            off_reason=off_reason,
+        )
+        app.state.suggester = suggester
         session = Session(
             menu,
             hub.broadcast,
@@ -108,6 +121,7 @@ def create_app(
             profile=profile,
             actions=build_registry(voice, env, dry_run=dry_run),
             voice=voice,
+            suggester=suggester,
             db=db,
             scan_ms=scan_ms,
             lang=lang,
@@ -120,6 +134,7 @@ def create_app(
         else:
             log.warning("ACTIONS_DRY_RUN is off: confirmed messages and calls are REALLY sent")
         log.info("voice: %s", voice.describe())
+        log.info("AI: %s", suggester.describe())
         prewarm: asyncio.Task[object] | None = None
         if voice.tts.voice_id is not None and prewarm_enabled(env):
             # Background only: the board works (browser speech for anything not cached) meanwhile.
@@ -128,6 +143,7 @@ def create_app(
         if prewarm is not None:
             prewarm.cancel()
         session.stop()
+        await suggester.aclose()
         await voice.aclose()
         db.close()
 
@@ -192,6 +208,7 @@ def create_app(
     async def health() -> dict[str, object]:
         session: Session = app.state.session
         voice: Voice = app.state.voice
+        suggester: Suggester = app.state.suggester
         return {
             "ok": True,
             "state": session.state.value,
@@ -201,12 +218,22 @@ def create_app(
             "voice_paused": voice.breaker.is_open,
             "voice_chars_sent": voice.chars_sent,
             "speak_picks": session.speak_picks,
+            "ai": suggester.describe(),
+            "ai_calls": suggester.calls,
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),
         }
 
     return app
+
+
+def contact_names(menu: Menu) -> dict[Lang, tuple[str, ...]]:
+    """The contacts' first names in each language, for the AI (PRD D14: names only)."""
+    return {
+        lang: tuple(c.label(lang).split()[0] for c in menu.contacts.values())
+        for lang in ("en", "es")
+    }
 
 
 app = create_app(db_path=DB_PATH, env=load_env())

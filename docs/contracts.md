@@ -149,8 +149,8 @@ to Scan when the face has been lost for about 3 s, and switches back when it ret
 ### READY
 
 Sent by the board right after it connects (after the "Click to start" overlay has unlocked speech).
-The Core replies to that board only with the current view: SCREEN while scanning, CONFIRM while
-confirming, nothing while speaking (the next SCREEN follows when speech ends).
+The Core replies to that board only with the current view: SCREEN while scanning or loading, CONFIRM
+while confirming, nothing while speaking (the next SCREEN follows when speech ends).
 
 No fields besides `type`.
 
@@ -204,20 +204,43 @@ included). Screens show these values instead of assuming defaults.
 ### SCREEN
 
 What the board should draw. The board is "dumb": the Core owns the highlight position. Sent after
-every change while scanning (level change, highlight move, language change), and once a second
-during the help countdown.
+every change while scanning (level change, highlight move, language change, loading starts), and
+once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | |
-| `tiles` | `{"id": string, "label": string}[]` | at most 6 (PRD D8); `id` is the dotted menu path, e.g. `need.pain.back` |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | `suggestions` = the sentences for a picked leaf |
+| `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
-| `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home |
+| `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
 | `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
+| `loading` | bool | optional, default false. True while the Core waits for AI options after a pick (at most 4 s); scanning is paused and the board shows "Finding options..." / "Buscando opciones..." |
+
+Tiles:
+
+| `kind` | What | Picking it |
+|---|---|---|
+| `branch` | a menu category | opens the next level (the home "Suggested" opens the AI's sentences for right now, then its fixed phrases) |
+| `leaf` | an option that leads to a sentence, from `data/menu.yaml` or made by the AI | opens the suggestions screen, or the CONFIRM screen with the fixed phrase when there is no AI |
+| `suggestion` | a full sentence; `label` is the exact text | opens the CONFIRM screen with exactly that sentence |
+| `other` | always the last tile: "Other..." / "Otro...", or "Spell it" / "Deletrear" after two "Other..." picks in a row | "Other...": new options for the same path (AI, else the level's fixed `more` list); "Spell it": says "Spelling is coming soon." for now |
+
+`id` is the dotted menu path (`need.pain.back`). The Core's own tiles end in `.other` / `.spell`
+(`other` / `spell` at home). Anything written by the AI starts with `ai:`: an AI option
+`ai:need.pain.brazos`, an AI sentence `ai:need.pain.back.a_lot.s1`. The fixed phrase on a
+suggestions screen keeps its leaf's id. The AI never chooses the action or the contact: an AI option
+takes them from its level, an AI sentence from its leaf.
 
 ```json
-{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco"}, {"id": "need.pain.back.a_lot", "label": "Mucho"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null}
+{"type": "SCREEN", "screen": "menu", "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false}
+```
+
+**Suggestions screen** (PRD section 5 step 6). Up to 3 AI sentences, then the leaf's fixed phrase
+(when the AI did not already write it), then "Other..." (more sentences):
+
+```json
+{"type": "SCREEN", "screen": "suggestions", "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false}
 ```
 
 **Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
@@ -230,7 +253,7 @@ Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Pa
 para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
-{"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5}
+{"type": "SCREEN", "screen": "help_countdown", "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false}
 ```
 
 ### CONFIRM
@@ -254,8 +277,8 @@ Everything the board says is one utterance with an `id` and a `kind`:
 | `kind` | What | When | Volume | AUDIO_DONE |
 |---|---|---|---|---|
 | `phrase` | the confirmed sentence | only after a confirming CLENCH on a CONFIRM screen (PRD D5); the Core is SPEAKING until its AUDIO_DONE | 100% | yes |
-| `echo` | the label of the tile just picked | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK or the confirm clench | 70% | no |
-| `system` | a fixed line from the Core | help countdown start, help alert fired | 100% | yes (ignored by the Core) |
+| `echo` | the label of the tile just picked ("Other" / "Otro" for "Other...") | on every CLENCH pick while scanning, when speak picks is on; never on DOUBLE_BLINK, the confirm clench or a `suggestion` tile (the confirm step says the sentence) | 70% | no |
+| `system` | a fixed line from the Core | help countdown start, help alert fired, "Spell it" picked | 100% | yes (ignored by the Core) |
 
 The Core sends PLAY_AUDIO when it has (or can make in time) ElevenLabs audio for the text, and
 SPEAK when it cannot (no key, no internet, too slow, service errors): the board then uses browser

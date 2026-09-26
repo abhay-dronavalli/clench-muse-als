@@ -20,6 +20,9 @@ ActionName = Literal["speak", "send_message", "place_call", "room_control", "hel
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
+# branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
+# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." / "Spell it".
+TileKind = Literal["branch", "leaf", "suggestion", "other"]
 
 
 class _Msg(BaseModel):
@@ -125,8 +128,9 @@ class Settings(_Msg):
 
 
 class Tile(_Msg):
-    id: str
+    id: str  # dotted menu path; "ai:..." for AI-made options and sentences
     label: str
+    kind: TileKind
 
 
 class Screen(_Msg):
@@ -140,6 +144,8 @@ class Screen(_Msg):
     path: list[str]  # breadcrumb labels from home down to this level; [] at home
     # Seconds left before the help alert fires; set only when screen="help_countdown" (tiles=[]).
     countdown: int | None = Field(default=None, ge=0)
+    # True while the Core waits (at most 4 s) for AI options after a pick; scanning is paused.
+    loading: bool = False
 
 
 class Confirm(_Msg):

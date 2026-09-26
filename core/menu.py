@@ -2,6 +2,11 @@
 
 The tree is hand-written in data/menu.yaml; the "People" branch is built from data/contacts.yaml.
 Loading fails loudly (MenuError) on a bad tree so a broken menu never reaches the patient.
+
+Each level holds at most 5 items; the session adds "Other..." as a sixth tile on every level
+(decisions.md #5). A branch may list `more`: fixed extra options that "Other..." shows when the AI
+has nothing (no key, offline, slow). The home "Suggested" branch has `ai_now: true`: the AI's
+guesses for right now go first, its fixed children are the fallback.
 """
 
 from __future__ import annotations
@@ -18,9 +23,12 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 MENU_PATH = DATA_DIR / "menu.yaml"
 CONTACTS_PATH = DATA_DIR / "contacts.yaml"
 
-MAX_TILES = 6  # PRD D8
+MAX_TILES = 6  # PRD D8: tiles on one screen
+MAX_ITEMS = 5  # items per menu level; the session adds "Other..." as the sixth tile
+RESERVED_IDS = frozenset({"other", "spell"})  # tile ids the session uses for its own tiles
 MenuAction = Literal["speak", "send_message", "place_call", "room_control"]
 NodeId = Annotated[str, Field(pattern=r"^[a-z0-9_]+$")]
+ActionContact = tuple[MenuAction, str | None]
 Text = Annotated[str, Field(min_length=1)]
 EnvName = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$")]
 
@@ -36,7 +44,10 @@ class MenuNode(BaseModel):
     label_en: Text
     label_es: Text
     children: list[MenuNode] | None = None
+    # Fixed extra options that "Other..." shows when the AI has nothing (same shape as children).
+    more: list[MenuNode] | None = None
     from_contacts: bool = False
+    ai_now: bool = False  # the AI's guesses for right now go first (home "Suggested")
     phrase_en: Text | None = None
     phrase_es: Text | None = None
     action: MenuAction | None = None
@@ -44,20 +55,27 @@ class MenuNode(BaseModel):
 
     @model_validator(mode="after")
     def _branch_or_leaf(self) -> MenuNode:
+        if self.id in RESERVED_IDS:
+            raise ValueError(f"node id '{self.id}' is reserved for the session's own tiles")
         leaf_fields = (self.phrase_en, self.phrase_es, self.action)
         if self.children is not None or self.from_contacts:
             if any(f is not None for f in leaf_fields):
                 raise ValueError(f"node '{self.id}' has children, so it cannot have a phrase or action")
             if self.children is not None:
-                if not 1 <= len(self.children) <= MAX_TILES:
-                    raise ValueError(
-                        f"node '{self.id}' has {len(self.children)} children; allowed 1 to {MAX_TILES}"
-                    )
-                ids = [c.id for c in self.children]
+                if not 1 <= len(self.children) <= MAX_ITEMS:
+                    raise ValueError(f"node '{self.id}' has {len(self.children)} children; allowed 1 to {MAX_ITEMS}")
+                if self.more is not None and not 1 <= len(self.more) <= MAX_ITEMS:
+                    raise ValueError(f"node '{self.id}' has {len(self.more)} `more` items; allowed 1 to {MAX_ITEMS}")
+                ids = [c.id for c in self.children + (self.more or [])]
                 if len(ids) != len(set(ids)):
                     raise ValueError(f"node '{self.id}' has duplicate child ids: {ids}")
-        elif any(f is None for f in leaf_fields):
-            raise ValueError(f"leaf '{self.id}' needs phrase_en, phrase_es and action")
+            elif self.more is not None:
+                raise ValueError(f"node '{self.id}' is built from contacts, so it cannot have `more`")
+        else:
+            if any(f is None for f in leaf_fields):
+                raise ValueError(f"leaf '{self.id}' needs phrase_en, phrase_es and action")
+            if self.more is not None or self.ai_now:
+                raise ValueError(f"leaf '{self.id}' cannot have `more` or `ai_now`")
         return self
 
     @property
@@ -70,6 +88,24 @@ class MenuNode(BaseModel):
     def phrase(self, lang: Lang) -> str:
         assert self.phrase_en is not None and self.phrase_es is not None
         return self.phrase_es if lang == "es" else self.phrase_en
+
+    def leaves(self) -> list[MenuNode]:
+        """Every leaf under this node (children and `more`), or itself for a leaf."""
+        if self.is_leaf:
+            return [self]
+        return [leaf for c in (self.children or []) + (self.more or []) for leaf in c.leaves()]
+
+    def inherited(self) -> ActionContact:
+        """Action and contact for an option the AI adds to this level. They always come from the
+        path, never from the AI: the action every leaf below shares (else speak), and the contact
+        every leaf below shares (else none). People > Maria gives (speak, maria); Room gives
+        room_control; People gives (speak, None)."""
+        leaves = self.leaves()
+        actions = {leaf.action for leaf in leaves}
+        contacts = {leaf.contact for leaf in leaves}
+        action = actions.pop() if len(actions) == 1 else "speak"
+        assert action is not None
+        return action, contacts.pop() if len(contacts) == 1 else None
 
 
 class Phrase(BaseModel):
@@ -104,12 +140,13 @@ class Contact(BaseModel):
 
 class _MenuFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    home: list[MenuNode] = Field(min_length=1, max_length=MAX_TILES)
+    home: list[MenuNode] = Field(min_length=1, max_length=MAX_ITEMS)
+    more: list[MenuNode] | None = None  # fixed extra options for the home "Other..."
 
 
 class _ContactsFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    contacts: list[Contact] = Field(min_length=1, max_length=MAX_TILES)
+    contacts: list[Contact] = Field(min_length=1, max_length=MAX_ITEMS)
 
 
 class Menu(BaseModel):
@@ -153,7 +190,8 @@ def _expand_contacts(node: MenuNode, contacts: list[Contact]) -> MenuNode:
         )
     if node.children is None:
         return node
-    return node.model_copy(update={"children": [_expand_contacts(c, contacts) for c in node.children]})
+    more = [_expand_contacts(c, contacts) for c in node.more] if node.more else node.more
+    return node.model_copy(update={"children": [_expand_contacts(c, contacts) for c in node.children], "more": more})
 
 
 def _read_yaml(path: Path) -> object:
@@ -167,8 +205,8 @@ def load_menu(menu_path: Path = MENU_PATH, contacts_path: Path = CONTACTS_PATH) 
     """Load and validate the menu tree and contacts. Raises MenuError on any problem."""
     try:
         contacts = _ContactsFile.model_validate(_read_yaml(contacts_path)).contacts
-        home = _MenuFile.model_validate(_read_yaml(menu_path)).home
-        root = MenuNode(id="home", label_en="Home", label_es="Inicio", children=home)
+        menu_file = _MenuFile.model_validate(_read_yaml(menu_path))
+        root = MenuNode(id="home", label_en="Home", label_es="Inicio", children=menu_file.home, more=menu_file.more)
         root = _expand_contacts(root, contacts)
         # Re-validate the expanded tree so generated nodes get the same checks.
         root = MenuNode.model_validate(root.model_dump())

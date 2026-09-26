@@ -51,14 +51,17 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "type": "SCREEN",
             "screen": "menu",
             "tiles": [
-                {"id": "suggested", "label": "Tengo hambre"},
-                {"id": "need", "label": "Necesito"},
-                {"id": "people", "label": "Personas"},
+                {"id": "suggested", "label": "Sugerencias", "kind": "branch"},
+                {"id": "need", "label": "Necesito", "kind": "branch"},
+                {"id": "ai:need.pain.brazos", "label": "Brazos", "kind": "leaf"},
+                {"id": "ai:suggested.s1", "label": "Tengo hambre. ¿Qué hay de almuerzo?", "kind": "suggestion"},
+                {"id": "other", "label": "Otro...", "kind": "other"},
             ],
             "highlight": 2,
             "lang": "es",
             "path": [],
             "countdown": None,
+            "loading": False,
         },
     ),
     "CONFIRM": (
@@ -134,16 +137,31 @@ def test_round_trip(name):
         {
             "type": "SCREEN",
             "screen": "menu",
-            "tiles": [{"id": str(i), "label": str(i)} for i in range(7)],
+            "tiles": [{"id": str(i), "label": str(i), "kind": "leaf"} for i in range(7)],
             "highlight": 0,
             "lang": "en",
             "path": [],
         },
+        {"type": "SCREEN", "screen": "menu", "tiles": [{"id": "a", "label": "A"}], "highlight": 0, "lang": "en", "path": []},
+        {
+            "type": "SCREEN",
+            "screen": "menu",
+            "tiles": [{"id": "a", "label": "A", "kind": "folder"}],
+            "highlight": 0,
+            "lang": "en",
+            "path": [],
+        },
+        {"type": "SCREEN", "screen": "menu", "tiles": [], "highlight": None, "lang": "en", "path": [], "loading": "maybe"},
     ],
 )
 def test_rejects_invalid(bad):
     with pytest.raises(ValidationError):
         parse_message(bad)
+
+
+def test_screen_loading_is_optional():
+    msg = parse_message({"type": "SCREEN", "screen": "menu", "tiles": [], "highlight": None, "lang": "en", "path": []})
+    assert msg.loading is False
 
 
 def test_settings_lang_and_speak_picks_are_optional():

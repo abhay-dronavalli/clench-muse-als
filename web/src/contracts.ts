@@ -18,6 +18,11 @@ export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
  */
 export type UtteranceKind = 'phrase' | 'echo' | 'system'
+/**
+ * branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
+ * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." / "Spell it".
+ */
+export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 
@@ -113,8 +118,10 @@ export interface Settings {
 // --- Core -> Board ---
 
 export interface Tile {
+  /** dotted menu path; "ai:..." for AI-made options and sentences */
   id: string
   label: string
+  kind: TileKind
 }
 
 /** What the board should draw. The Core owns the highlight; the board only draws it. */
@@ -130,6 +137,8 @@ export interface Screen {
   path: string[]
   /** seconds left before the help alert fires; set only when screen is 'help_countdown' (tiles = []) */
   countdown?: number | null
+  /** true while the Core waits (at most 4 s) for AI options after a pick; scanning is paused */
+  loading?: boolean
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */

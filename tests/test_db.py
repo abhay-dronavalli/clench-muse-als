@@ -60,7 +60,7 @@ def session(menu, profile, sched, db):
 def walk(session: Session, sched: ManualScheduler, *tiles: str) -> None:
     """Pick each tile in turn: wait for the scan to reach it, then clench."""
     for tile in tiles:
-        ids = [c.id for c in session.level.children]
+        ids = [t.id.split(".")[-1] for t in session.tiles()]
         sched.advance(CLENCH_DEBOUNCE_S + 0.05 + ids.index(tile) * 1.0)
         session.handle(Clench(t=0.0, strength=1.0))
 

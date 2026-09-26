@@ -370,3 +370,31 @@ def test_prewarm_stops_when_switched_off(cache):
 def test_prewarm_does_nothing_without_elevenlabs(cache):
     report = asyncio.run(Voice(lambda m: None, tts=NullTTS(), cache=cache).prewarm([("a", "en")]))
     assert (report.made, report.cached, report.failed) == (0, 0, 0)
+
+
+# --- warm: make audio in advance without saying it -------------------------------------
+
+
+def test_warm_caches_without_saying_anything(cache):
+    service = ElevenLabs()
+    sent: list[Message] = []
+
+    async def run() -> None:
+        voice = make_voice(service, cache, sent)
+        voice.warm("Mija, estoy bien.", "es")
+        voice.warm("Mija, estoy bien.", "es")  # same text: one request
+        await settle()
+        voice.warm("Mija, estoy bien.", "es")  # cached now: no request
+        voice.speak("Mija, estoy bien.", "es", "phrase")
+        await voice.aclose()
+
+    asyncio.run(run())
+    assert len(service.requests) == 1
+    (msg,) = sent  # only the later speak() said anything
+    assert isinstance(msg, PlayAudio) and msg.cached is True
+
+
+def test_warm_does_nothing_without_a_key(tmp_path):
+    sent: list[Message] = []
+    Voice(sent.append, tts=NullTTS(), cache=AudioCache(tmp_path)).warm("Hola.", "es")
+    assert sent == []

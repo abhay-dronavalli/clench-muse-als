@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from core.clock import AsyncioScheduler
 from core.main import create_app
+from core.suggest.fake import FakeProvider
 
 
 class FakeClock:
@@ -119,6 +120,41 @@ def test_settings_are_announced_on_connect_and_after_every_change():
             changed = {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "lang": "en", "speak_picks": False}
             for ws in (board, console, inp):  # the sender too, so every dev panel shows the truth
                 assert ws.receive_json() == changed
+
+
+def test_no_key_runs_with_fixed_phrases():
+    clock = FakeClock()
+    with make_client(clock) as client:
+        health = client.get("/health").json()
+        assert health["ai"] == "off (GEMINI_API_KEY missing): fixed phrases only"
+        assert health["ai_calls"] == 0
+        with client.websocket_connect("/ws/board") as board:
+            board.receive_json()  # SETTINGS
+            board.send_json({"type": "READY"})
+            home = board.receive_json()
+            assert [t["kind"] for t in home["tiles"]] == ["branch"] * 5 + ["other"]
+            assert home["loading"] is False
+
+
+def test_fake_provider_suggests_in_the_app():
+    clock = FakeClock()
+    app = create_app(scheduler=AsyncioScheduler(clock=clock), scan_ms=600_000, lang="en", provider=FakeProvider())
+    with TestClient(app) as client:
+        assert client.get("/health").json()["ai"] == "fake (fake)"
+        with client.websocket_connect("/ws/board") as board, client.websocket_connect("/ws/input") as inp:
+            board.receive_json()  # SETTINGS
+            board.send_json({"type": "READY"})
+            board.receive_json()  # home
+            clock.t += 1.0
+            inp.send_json({"type": "CLENCH", "t": clock.t, "strength": 1.0})  # Suggested
+            assert board.receive_json()["kind"] == "echo"
+            screen = board.receive_json()
+            while screen.get("loading"):  # the prefetch may still be on its way
+                screen = board.receive_json()
+            assert screen["path"] == ["Suggested"]
+            assert [t["kind"] for t in screen["tiles"]][:3] == ["suggestion"] * 3
+            assert screen["tiles"][-1] == {"id": "suggested.other", "label": "Other...", "kind": "other"}
+        assert client.get("/health").json()["ai_calls"] > 0
 
 
 def test_serves_cached_audio_only(tmp_path):

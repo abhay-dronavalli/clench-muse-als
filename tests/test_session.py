@@ -108,7 +108,7 @@ def pick(session: Session, sched: ManualScheduler, sent, tile: str) -> None:
 def test_starts_scanning_home(session, sent):
     screen = last_screen(sent)
     assert session.state is SessionState.SCANNING
-    assert [t.id for t in screen.tiles] == ["suggested", "need", "people", "feel", "say", "room"]
+    assert [t.id for t in screen.tiles] == ["suggested", "need", "people", "feel", "room", "other"]
     assert screen.highlight == 0
     assert screen.path == []
 
@@ -125,7 +125,8 @@ def test_walk_pain_back_a_lot_then_speak(session, sched, sent):
         pick(session, sched, sent, tile)
     screen = last_screen(sent)
     assert screen.path == ["I need", "Pain", "Back"]
-    assert [t.id for t in screen.tiles] == ["need.pain.back.a_little", "need.pain.back.a_lot"]
+    assert [t.id for t in screen.tiles] == ["need.pain.back.a_little", "need.pain.back.a_lot", "need.pain.back.other"]
+    assert [t.kind for t in screen.tiles] == ["leaf", "leaf", "other"]
     assert screen.highlight == 0
 
     pick(session, sched, sent, "a_lot")
