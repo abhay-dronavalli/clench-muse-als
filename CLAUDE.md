@@ -31,6 +31,12 @@ and texting services reach the internet.
 - `docs/`: the PRD and project docs, including `contracts.md`.
 - `tests/`: pytest tests for `core/` and `sensor/`.
 
+Key files so far: `core/main.py` (FastAPI app, WebSocket routes), `core/session.py` (state machine,
+owns the highlight), `core/pointer/` (Pointer interface, ScanPointer), `core/menu.py` (loads
+`data/menu.yaml` + `data/contacts.yaml`), `core/hub.py` (broadcast to boards/consoles),
+`core/clock.py` (injectable timers for tests), `web/src/board/` (patient board, browser speech),
+`web/src/dev/DevPanel.tsx` (keyboard stand-in), `web/src/lib/useSocket.ts` (auto-reconnect).
+
 **Change from PRD A8:** the keyboard stand-in is not a Python `KeyboardSource` in `sensor/sources/`.
 It lives in the web app as a dev panel (`web/src/dev/`) that sends the same CLENCH / DOUBLE_BLINK /
 LONG_CLENCH events over the WebSocket. The Core cannot tell them apart from headband events.
@@ -75,14 +81,45 @@ uv run python -c "import core.contracts"
 npm --prefix web run build           # type-check + production build of the web app
 npm --prefix web run lint
 
-# Web app (board + console), http://localhost:5173 ; /ws is proxied to the core on 127.0.0.1:8000
+# Terminal 1: core server on http://127.0.0.1:8000 (health check: http://127.0.0.1:8000/health)
+uv run uvicorn core.main:app --reload --port 8000
+
+# Terminal 2: web app, board at http://localhost:5173/ and console at http://localhost:5173/console
+# (/ws/* is proxied to the core on 127.0.0.1:8000)
 npm --prefix web run dev
 
-# Core server: not built yet (planned: uv run uvicorn core.main:app --reload --port 8000)
 # Sensor service: not built yet (planned: uv run python -m sensor.main)
 ```
 
 Without uv: `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install fastapi "uvicorn[standard]" "pydantic>=2" pyyaml python-dotenv pytest httpx`, then `python -m pytest`.
+
+The core loads `data/menu.yaml` and `data/contacts.yaml` at startup and refuses to start on a bad
+tree. `--reload` only watches `.py` files; restart the core after editing the YAML.
+
+### Keyboard stand-in (dev panel on the board page)
+
+| Key | Event |
+|---|---|
+| Space (tap) | CLENCH: pick the highlighted tile / confirm |
+| Space (hold 1.5 s) | LONG_CLENCH (logged and ignored until the help alert chunk) |
+| B | DOUBLE_BLINK: go back one level / cancel the confirm screen |
+| `` ` `` (backtick) | show / hide the dev panel (visible by default in dev mode) |
+
+The panel also has buttons for the same events, a scan speed slider and an EN/ES toggle.
+
+### Milestone manual test (press Space, pick, confirm, hear it)
+
+1. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
+2. Click "Click to start". The status dot (top right) and the dev panel dot turn green, and the home
+   board shows six tiles with the highlight moving about once a second.
+3. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. The breadcrumb
+   reads Home › I need › Pain › Back, then the "Say this?" screen shows "My back hurts a lot. Can you
+   help me turn over?". Nothing has been spoken yet.
+4. Press B: you are back on the Back level, still silent. Pick A lot again and press Space on the
+   confirm screen: the laptop speaks the sentence, then the board returns to Home.
+5. Click EN/ES in the dev panel: the tiles switch to Spanish. Pick Personas › María › Mensaje, confirm
+   with Space, and hear "Mija, estoy bien, llámame a las seis." The core terminal logs
+   `would send_text to Maria (daughter)` (real texts come in chunk 4).
 
 ## CHUNK REPORT format
 
