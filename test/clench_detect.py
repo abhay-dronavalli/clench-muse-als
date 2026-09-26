@@ -99,6 +99,8 @@ MIN_EVENT_MS = 80           # shorter than this is a twitch, not a deliberate cl
 REFRACTORY_MS = 250         # ignore re-triggers this soon after an event
 
 CR = "\r"                   # keeps the live meter redrawing on one line
+LINE_WIDTH = 120            # event lines pad to this so they fully erase the
+                            # meter line underneath; a fixed 20 left fragments.
 
 
 # ============================================================ signal processing
