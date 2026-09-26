@@ -1,0 +1,27 @@
+[project]
+name = "clench"
+version = "0.1.0"
+description = "Clench: talk, message family and control the room using only jaw clenches and blinks."
+readme = "CLAUDE.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pyyaml",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[tool.uv]
+# core/ and sensor/ are run from the repo root; nothing is built or installed as a wheel.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
