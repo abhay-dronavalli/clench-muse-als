@@ -148,7 +148,12 @@ export default function BoardPage() {
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />
       )}
-      <DevPanel voiceSource={voiceSource} />
+      <DevPanel
+        voiceSource={voiceSource}
+        headRange={range}
+        cameraWanted={camera}
+        onCalibrate={() => setCalibrating(true)}
+      />
     </div>
   )
 }
