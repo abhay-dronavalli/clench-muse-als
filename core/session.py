@@ -592,17 +592,22 @@ class Session:
         return self.suggester.more_options(self._ai_path(), self.lang, shown=frame.shown)
 
     def _prefetch(self) -> None:
-        """Ask in the background for everything the person could pick next. Never waits."""
+        """Ask in the background for everything the person could pick next, in one request for the
+        whole level (level_bundle; nothing when it is all cached). Never waits."""
         if not self.suggester.available:
             return
         frame = self.frame
-        for item in frame.items:
-            if item.kind == "leaf":
-                self._leaf_request(item)
-            elif item.kind == "branch" and item.node is not None and item.node.ai_now:
-                self._now_request()
-        if frame.others < SPELL_AFTER:
-            self._other_request(frame)
+        if frame.kind == "suggestions":
+            if frame.others < SPELL_AFTER:
+                self._other_request(frame)  # more sentences: one request
+            return
+        self.suggester.level_bundle(
+            self._ai_path(),
+            self.lang,
+            leaves=tuple((i.label(self.lang), i.phrase(self.lang)) for i in frame.items if i.kind == "leaf"),
+            now=any(i.kind == "branch" and i.node is not None and i.node.ai_now for i in frame.items),
+            other_shown=frame.shown if frame.others < SPELL_AFTER else None,
+        )
 
     def _wait(self, pending: Pending[Any], then: Callable[[Any], None]) -> None:
         """Run `then(result)` now if the result is here; otherwise show the loading state (scanning

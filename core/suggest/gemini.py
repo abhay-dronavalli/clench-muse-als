@@ -19,13 +19,23 @@ from pydantic import BaseModel, ValidationError
 
 from core.suggest import prompts
 from core.suggest.errors import ProviderError
-from core.suggest.provider import Options, OptionsSchema, Sentences, SentencesSchema, SuggestContext
+from core.suggest.provider import (
+    Bundle,
+    BundleSchema,
+    LevelContext,
+    Options,
+    OptionsSchema,
+    Sentences,
+    SentencesSchema,
+    SuggestContext,
+)
 
 log = logging.getLogger("clench.suggest")
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 TEMPERATURE = 0.2
 MAX_OUTPUT_TOKENS = 512
+MAX_BUNDLE_TOKENS = 2048  # a whole level: up to 5 leaves x 3 sentences, 5 options, 3 for right now
 HTTP_TIMEOUT_MS = 10_000  # hard limit per request; the Suggester gives up after 4 s anyway
 
 # Pause the AI (fixed phrases only) after these errors instead of failing every request.
@@ -50,11 +60,13 @@ class GeminiProvider:
         # Tests pass a stand-in with the same aio.models.generate_content method.
         self._client = client or genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS))
 
-    def config(self, system: str, schema: type[BaseModel]) -> types.GenerateContentConfig:
+    def config(
+        self, system: str, schema: type[BaseModel], max_tokens: int = MAX_OUTPUT_TOKENS
+    ) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
             system_instruction=system,
             temperature=TEMPERATURE,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
+            max_output_tokens=max_tokens,
             response_mime_type="application/json",
             response_schema=schema,
             thinking_config=thinking_config(self.model),
@@ -67,10 +79,15 @@ class GeminiProvider:
     async def more_options(self, ctx: SuggestContext) -> Options:
         return await self._generate(prompts.more_options(ctx), OptionsSchema, Options)
 
-    async def _generate(self, prompt: prompts.Prompt, schema: type[BaseModel], result: type[M]) -> M:
+    async def level_bundle(self, ctx: LevelContext) -> Bundle:
+        return await self._generate(prompts.level_bundle(ctx), BundleSchema, Bundle, MAX_BUNDLE_TOKENS)
+
+    async def _generate(
+        self, prompt: prompts.Prompt, schema: type[BaseModel], result: type[M], max_tokens: int = MAX_OUTPUT_TOKENS
+    ) -> M:
         try:
             resp = await self._client.aio.models.generate_content(
-                model=self.model, contents=prompt.user, config=self.config(prompt.system, schema)
+                model=self.model, contents=prompt.user, config=self.config(prompt.system, schema, max_tokens)
             )
         except errors.APIError as e:
             code = e.code if isinstance(e.code, int) else None

@@ -16,7 +16,7 @@ from core.menu import load_menu
 from core.profile import load_profile
 from core.session import CLENCH_DEBOUNCE_S, LOADING_MAX_S, Session, SessionState
 from core.suggest.fake import FakeProvider
-from core.suggest.provider import Options, Sentences
+from core.suggest.provider import Bundle, Options, Sentences
 from core.suggest.service import Suggester
 from core.voice import Voice
 
@@ -265,10 +265,12 @@ def test_prefetch_does_not_block_scanning(session, sched, sent, loop, fake):
     methods = sorted({m for m, _ in fake.calls})
     assert methods == []
     loop.run()
-    asked = sorted((m, c.path) for m, c in fake.calls)
-    assert ("compose", ()) in asked  # Suggested, right now
-    assert ("compose", ("I need", "Water")) in asked  # each leaf of the open level
-    assert ("more_options", ("I need",)) in asked  # this level's "Other..."
+    # One request per level: home asked for Suggested (right now) and its "Other...", I need for
+    # each of its leaves and its "Other...".
+    home, need = fake.calls
+    assert home[0] == "level_bundle" and home[1].path == () and home[1].now and home[1].options
+    assert need[0] == "level_bundle" and need[1].path == ("I need",) and need[1].options and not need[1].now
+    assert [leaf.label for leaf in need[1].leaves] == ["Water", "Food", "Bathroom"]
 
 
 def test_pick_before_results_shows_loading_then_suggestions(session, sched, sent, loop):
@@ -330,6 +332,10 @@ class SlowFake(FakeProvider):
     async def compose(self, ctx):
         await asyncio.sleep(0.5)
         return await super().compose(ctx)
+
+    async def level_bundle(self, ctx):
+        await asyncio.sleep(0.5)
+        return await super().level_bundle(ctx)
 
 
 def test_ai_timeout_falls_back_to_the_fixed_phrase(menu, profile, sched, sent, loop):
@@ -444,6 +450,20 @@ class Hijacker(FakeProvider):
     async def compose(self, ctx):
         self.calls.append(("compose", ctx))
         return Sentences.model_validate({"sentences": ["Carlos, call me."], "action": "place_call", "contact": "carlos"})
+
+    async def level_bundle(self, ctx):
+        self.calls.append(("level_bundle", ctx))
+        options = (await self.more_options(ctx)).options if ctx.options else []
+        return Bundle.model_validate(
+            {
+                "leaves": [
+                    {"id": leaf.id, "sentences": ["Carlos, call me."], "action": "place_call", "contact": "carlos"}
+                    for leaf in ctx.leaves
+                ],
+                "options": [o.model_dump() for o in options],
+                "action": "place_call",
+            }
+        )
 
 
 def test_the_ai_cannot_change_action_or_contact(menu, profile, sched, sent, loop):
