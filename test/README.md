@@ -1,5 +1,40 @@
 # Muse 2 + BrainFlow test bench
 
+## Reliability update (2026-09-26)
+
+See [INVESTIGATION.md](INVESTIGATION.md) for the original-code audit, measured
+profile comparison, remaining limits and the exact friend-recording protocol.
+After updating, **recalibrate eye holds**: older profiles used a filter bug that
+changed the hold feature. Loading one now disables LONG_BLINK with an explanation;
+it does not modify the stored file.
+
+Calibration now checks signal quality during rest, keeps the noise floor under
+clench thresholds, measures sustained clench strength, and requires three usable
+clench trials. Use a comfortable repeatable clench. A failed required calibration
+leaves the saved profile intact and asks you to retry. Unusable blink/hold trials
+leave those eye inputs explicitly disabled while retaining a valid clench input.
+Hold samples must actually pass the final detector threshold and selected duration.
+Rest contact messages identify the channel to adjust; these are heuristics, not HSI.
+The raw-amplitude contact gate only runs at rest, not during intentional gestures.
+
+Run the headband-free regressions explicitly (`test/` is not in root pytest discovery):
+
+```powershell
+# From the repository root; uses the test-bench virtualenv.
+.\test\.venv\Scripts\python.exe -m pip install -r test/requirements.txt
+.\test\.venv\Scripts\python.exe -m pytest test/test_detection.py -q
+.\test\.venv\Scripts\python.exe test/test_station.py
+.\test\.venv\Scripts\python.exe test/evaluate_detection.py --profiles
+```
+
+After calibration, run **Drill** as the "test it" step. It measures prompted hits,
+misses, wrong inputs and unprompted triggers. A passing calibration is not an
+accuracy guarantee. Live sensitivity controls, individual ear fallback and drift
+adaptation remain future work pending labeled recordings.
+
+The historical descriptions below describe the original bench; the update above
+and investigation take precedence where calibration behavior differs.
+
 Five small scripts to prove a Muse 2 headband is working before you build anything
 on top of it. Everything runs in **synthetic mode** too, so teammates without a
 headset can develop against the exact same code.

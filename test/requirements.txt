@@ -2,3 +2,4 @@ brainflow
 numpy
 scipy
 matplotlib
+pytest

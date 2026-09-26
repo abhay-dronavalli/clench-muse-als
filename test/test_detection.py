@@ -119,3 +119,130 @@ def test_legacy_hold_profile_requires_recalibration(tmp_path, monkeypatch):
     assert loaded["hold_threshold"] is None
     assert loaded["emg_threshold"] == 30
     assert json.loads(cd.calibration_file(board, "a").read_text()) == c
+
+
+def samples(emg, blink=10, hold=1, duration=2):
+    return [(i*.05, cd.Levels(emg, blink, blink, hold, hold))
+            for i in range(round(duration/.05))]
+
+
+def calibration_run(monkeypatch, tmp_path, phases, **options):
+    from brainflow.board_shim import BoardIds
+    monkeypatch.setattr(cd, "HERE", tmp_path)
+    phases = iter(phases)
+    monkeypatch.setattr(cd, "collect", lambda *a, **k: next(phases))
+    board = SimpleNamespace(board_id=BoardIds.MUSE_2_BOARD)
+    path = cd.calibration_file(board, "regression")
+    path.write_text('{"previous": "keep me"}')
+    ui = QuietUI()
+    result = cd.calibrate(board, {}, 256, 256, args(**options), ui)
+    return result, path, ui
+
+
+def test_empty_rest_cannot_replace_saved_calibration(monkeypatch, tmp_path):
+    result, path, ui = calibration_run(monkeypatch, tmp_path, [[]])
+    assert result is None
+    assert path.read_text() == '{"previous": "keep me"}'
+    assert any("retry" in s.lower() for s in ui.logs)
+
+
+def test_noise_dominated_clenches_cannot_replace_profile(monkeypatch, tmp_path):
+    rest = [(i*.05, cd.Levels(100 + (i % 5)*25, 10, 10, 1, 1)) for i in range(200)]
+    weak = samples(210)
+    phases = [rest, weak, weak, weak]
+    result, path, ui = calibration_run(monkeypatch, tmp_path, phases)
+    assert result is None
+    assert path.read_text() == '{"previous": "keep me"}'
+
+
+@pytest.mark.parametrize("scale", [.25, 1, 10])
+def test_calibration_uses_sustained_clenches_and_disables_bad_eyes(monkeypatch, tmp_path, scale):
+    rest = [(i*.05, cd.Levels((5 + (i % 5)*.1)*scale, 10, 10, 1, 1))
+            for i in range(200)]
+    clench = samples(25*scale)
+    clench[10] = (.5, cd.Levels(1000*scale, 10, 10, 1, 1))
+    phases = [rest, clench, clench, clench, samples(5, duration=6),
+              samples(5), samples(5), samples(5)]
+    result, path, ui = calibration_run(monkeypatch, tmp_path, phases)
+    assert result["emg_threshold"] < 15*scale  # a spike cannot set the threshold
+    assert result["emg_threshold"] >= result["emg_rest"] + 6*result["emg_sigma"]
+    assert result["blink_enabled"] is False
+    assert result["hold_threshold"] is None
+    rec = cd.recognizer_from_calibration(result, args())
+    events = []
+    for i in range(100):
+        lv = cd.Levels(5*scale, 100 if i == 5 else 10, 100 if i == 5 else 10)
+        events.extend(rec.update(lv, i*.05))
+    assert events == []
+
+
+def test_hold_calibration_replays_final_threshold_and_requested_duration(monkeypatch, tmp_path):
+    # Broad 300 ms low plateau with a brief peak: peak-based threshold must
+    # not enable a 600 ms hold that none of the samples can produce.
+    hold = samples(5, hold=1)
+    for i in range(8, 14):
+        hold[i] = (i*.05, cd.Levels(5, 10, 10, 20, 20))
+    result, _, _ = calibration_run(monkeypatch, tmp_path,
+        [samples(5, duration=10)] + [samples(30)]*3 + [samples(5, duration=6)] + [hold]*3,
+        long_blink_ms=600)
+    assert result["long_blink_ms"] == 600
+    assert result["hold_threshold"] is None
+
+
+def test_good_eye_holds_are_enabled(monkeypatch, tmp_path):
+    hold = samples(5, hold=1)
+    for i in range(8, 30):
+        hold[i] = (i*.05, cd.Levels(5, 10, 10, 30, 30))
+    result, _, _ = calibration_run(monkeypatch, tmp_path,
+        [samples(5, duration=10)] + [samples(30)]*3 + [samples(5, duration=6)] + [hold]*3)
+    assert result["hold_threshold"] is not None
+    assert result["hold_method"] == "raw_deflection_v2"
+
+
+@pytest.mark.parametrize("fault", ["flat", "noise", "nan", "clip"])
+def test_rest_contact_gate_names_bad_channel(fault):
+    raw = np.random.default_rng(4).normal(0, 10, (4, 256))
+    if fault == "flat":
+        raw[3] = 0
+    elif fault == "noise":
+        raw[3] *= 50
+    elif fault == "nan":
+        raw[3, 50] = np.nan
+    else:
+        raw[3, :100] = 1000
+    issues = cd.contact_issues(raw, {"emg": [0, 3], "blink": [1, 2]})
+    assert len(issues) == 1
+    assert "TP10" in issues[0]
+
+
+def test_clean_rest_and_sampling_coverage():
+    raw = np.random.default_rng(4).normal(0, 10, (4, 256))
+    assert cd.contact_issues(raw, {"emg": [0, 3], "blink": [1, 2]}) == []
+    assert cd.valid_collection(samples(5, duration=10), 10)
+    assert not cd.valid_collection(samples(5, duration=1), 10)
+    assert not cd.valid_collection([(0, cd.Levels(5, 5, 5))]*200, 10)
+
+
+def test_profile_selection_isolated_from_other_users_and_synthetic(tmp_path, monkeypatch):
+    import json
+    from brainflow.board_shim import BoardIds
+    monkeypatch.setattr(cd, "HERE", tmp_path)
+    board = SimpleNamespace(board_id=BoardIds.MUSE_2_BOARD)
+    synthetic = SimpleNamespace(board_id=BoardIds.SYNTHETIC_BOARD)
+    for name, threshold in [("a", 20), ("b", 30)]:
+        cd.calibration_file(board, name).write_text(json.dumps(dict(
+            board="MUSE_2_BOARD", fs=256, blink_method="p2p_coincidence",
+            emg_threshold=threshold, emg_rest=5, blink_threshold=40, blink_rest=5)))
+    assert cd.load_calibration(board, "a", QuietUI())["emg_threshold"] == 20
+    assert cd.load_calibration(board, "b", QuietUI())["emg_threshold"] == 30
+    assert cd.load_calibration(synthetic, "a", QuietUI()) is None
+    with pytest.raises(ValueError):
+        cd.calibration_file(board, "../a")
+
+
+def test_malformed_profile_is_rejected(tmp_path, monkeypatch):
+    from brainflow.board_shim import BoardIds
+    monkeypatch.setattr(cd, "HERE", tmp_path)
+    board = SimpleNamespace(board_id=BoardIds.MUSE_2_BOARD)
+    cd.calibration_file(board, "bad").write_text('{"emg_threshold": NaN}')
+    assert cd.load_calibration(board, "bad", QuietUI()) is None

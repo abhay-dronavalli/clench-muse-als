@@ -52,16 +52,25 @@ def profile_summary(path):
 
 def evaluate(entry, root):
     c = json.loads((root / entry["profile"]).read_text())
+    if c.get("hold_threshold") and c.get("hold_method") != "raw_deflection_v2":
+        raise ValueError("Old hold profile used the buggy filter; recalibrate before replay")
     board_id = entry["board_id"]
     fs = BoardShim.get_sampling_rate(board_id)
     if c["fs"] != fs:
         raise ValueError("Recording and calibration sampling rates differ")
+    duration = None
     data = DataFilter.read_file(str(root / entry["recording"]))
     channels, names = eeg_channels_and_names(board_id)
     rows = {"emg": [channels[0], channels[3]], "blink": [channels[1], channels[2]]}
     window = int(fs * cd.WINDOW_SECONDS)
     if data.shape[1] < window:
         raise ValueError("Recording is shorter than the filter window")
+    duration = data.shape[1]/fs
+    previous_end = cd.WINDOW_SECONDS
+    for action in sorted(entry["actions"], key=lambda a: a["start"]):
+        if not (previous_end <= action["start"] < action["end"] <= duration):
+            raise ValueError("Truth windows must not overlap or extend outside the usable recording")
+        previous_end = action["end"]
     timings = SimpleNamespace(long_ms=entry.get("long_ms", 1500),
         double_ms=entry.get("double_ms", 700),
         long_blink_ms=entry.get("long_blink_ms", c.get("long_blink_ms", 400)))

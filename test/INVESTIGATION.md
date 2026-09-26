@@ -192,3 +192,29 @@ accuracy estimates. Baseline/peak feature intervals include filter lag.
 Keep this report's pre-fix summaries for comparison. Recalibrate eye holds after
 the filter fix; old and new hold thresholds are not interchangeable. Accuracy on
 real people remains unverified until these recordings and a fresh Drill exist.
+
+## Implemented calibration changes
+
+- Filter functions own their buffers; all live consumers share a recognizer
+  factory using baseline-relative release levels. Old hold feature versions are
+  disabled when loading (the file itself is preserved).
+- Rest checks flat, nonfinite, high-noise and repeated-extrema/clipping patterns
+  per channel, with a named adjustment message. At least 80% sampling coverage,
+  increasing timestamps, finite features and no >250 ms gap are required. These
+  are conservative heuristics, not measured electrode impedance. Stream timestamp
+  deduplication and a live contact/drift gate are still not implemented.
+- Three clench trials must clear the noise floor by two additional robust sigma.
+  Use their weakest 75th-percentile sustained level, retain rest+6σ / rest p99
+  as a minimum, and require a 300 ms continuous crossing per trial. Failed clench
+  calibration returns without replacing the previous profile.
+- Blink requires at least three extracted samples and two-sigma separation above
+  its floor, otherwise it is explicitly off. A hold must pass replay at the
+  **final** threshold/duration in all three trials, otherwise it is off. A valid
+  clench can be saved with eye inputs off; the UI says to retry the eyes.
+- Saves use an atomic replacement; profile names, sampling rate and loaded
+  thresholds receive validation. The explicit rest-only quick mode remains for
+  synthetic/headband-free smoke checks, without claiming active-gesture accuracy.
+
+These rules are deterministic engineering checks, not thresholds validated on a
+human population. The measurements needed for individual channel normalization,
+fatigue tolerance and drift behavior are still missing.
