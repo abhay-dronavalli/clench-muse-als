@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
-import type { Lang, Message, PointingMode } from '../contracts'
+import type { Lang, Message, Metrics, PointingMode } from '../contracts'
 import type { VoiceSource } from '../board/speech'
 import { StatusDot } from '../lib/StatusDot'
 import { useSocket } from '../lib/useSocket'
@@ -18,6 +18,10 @@ import { useSocket } from '../lib/useSocket'
  *
  * The controls show what the Core says (SETTINGS arrives on connect and after every change), so a
  * change from the console or another tab shows up here too.
+ *
+ * After every confirmed message the Core sends METRICS: the panel shows what it took against Day 1
+ * mode ("Took 2 clenches, 0 s waiting (Day 1: 5 clenches, 6 s)"), and the collapsed pill keeps a
+ * short "2 vs 5 clenches" so the demo can show it without opening the panel.
  */
 
 const LONG_CLENCH_S = 1.5
@@ -38,11 +42,22 @@ function describe(msg: Message): string {
       return `LONG_CLENCH ${msg.duration.toFixed(1)} s`
     case 'SETTINGS': {
       const picks = msg.speak_picks === undefined ? '' : ` speak picks ${msg.speak_picks ? 'on' : 'off'}`
-      return `SETTINGS ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}${picks}`
+      const learning = msg.learning === undefined ? '' : msg.learning ? ' learning' : ' day 1'
+      return `SETTINGS ${msg.scan_ms} ms${msg.lang ? ` ${msg.lang}` : ''}${picks}${learning}`
     }
     default:
       return msg.type
   }
+}
+
+/** Scan steps as waiting time: "0 s", "4 s", "2.5 s". */
+function seconds(steps: number, scanMs: number): string {
+  const s = (steps * scanMs) / 1000
+  return `${Number.isInteger(s) ? s : s.toFixed(1)} s`
+}
+
+function clenches(n: number): string {
+  return `${n} clench${n === 1 ? '' : 'es'}`
 }
 
 interface Props {
@@ -57,17 +72,24 @@ export default function DevPanel({ voiceSource }: Props) {
   const [scanMs, setScanMs] = useState<number | null>(null)
   const [lang, setLang] = useState<Lang | null>(null)
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
+  const [learning, setLearning] = useState<boolean | null>(null)
+  const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const nextId = useRef(0)
   const scanTimer = useRef<number | undefined>(undefined)
   const sliding = useRef(false)
   const { status, send } = useSocket('/ws/input', {
     onMessage: (msg) => {
+      if (msg.type === 'METRICS') {
+        setMetrics(msg)
+        return
+      }
       if (msg.type !== 'SETTINGS') return
       setPointingMode(msg.pointing_mode)
       if (!sliding.current) setScanMs(msg.scan_ms)
       if (msg.lang) setLang(msg.lang)
       if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
+      if (msg.learning !== undefined) setLearning(msg.learning)
     },
   })
   const known = pointingMode !== null && scanMs !== null
@@ -160,6 +182,17 @@ export default function DevPanel({ voiceSource }: Props) {
     emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, speak_picks: !speakPicks })
   }
 
+  // Day 1 mode = learning off: menu.yaml order, the fixed Suggested list, no shortcut.
+  const toggleDay1 = () => {
+    if (!known || learning === null) return
+    emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, learning: !learning })
+  }
+
+  const took =
+    metrics &&
+    `Took ${clenches(metrics.selections)}, ${seconds(metrics.scan_steps, scanMs ?? 1000)} waiting ` +
+      `(Day 1: ${clenches(metrics.day1_selections)}, ${seconds(metrics.day1_scan_steps, scanMs ?? 1000)})`
+
   // Buttons never take focus, so Space always means "clench", never "press the focused button".
   const noFocus = (e: MouseEvent) => e.preventDefault()
   const btn = 'rounded-md bg-zinc-700 px-2 py-1.5 font-semibold hover:bg-zinc-600 active:bg-zinc-500'
@@ -173,7 +206,14 @@ export default function DevPanel({ voiceSource }: Props) {
         title="Dev input: click or press ` to expand"
         className="fixed bottom-1.5 left-2 z-50 flex items-center gap-1.5 rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-xs text-zinc-300 ring-1 ring-zinc-600 hover:bg-zinc-700"
       >
-        <StatusDot status={status} label="Input" /> Dev <span className="text-zinc-500">`</span>
+        <StatusDot status={status} label="Input" /> Dev
+        {learning === false && <span className="font-semibold text-amber-300">Day 1</span>}
+        {metrics && (
+          <span className="text-zinc-400" title={took ?? undefined}>
+            · {metrics.selections} vs {metrics.day1_selections} clenches
+          </span>
+        )}
+        <span className="text-zinc-500">`</span>
       </button>
     )
   }
@@ -246,8 +286,24 @@ export default function DevPanel({ voiceSource }: Props) {
         </button>
       </div>
 
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs text-zinc-400" title="Learning off: menu.yaml order, fixed Suggested list, no shortcut">
+          Day 1 mode
+        </span>
+        <button type="button" className={btn} onMouseDown={noFocus} onClick={toggleDay1}>
+          <span className={learning === false ? 'text-amber-300' : 'text-zinc-400'}>On</span>
+          {' / '}
+          <span className={learning ? 'text-yellow-300' : 'text-zinc-400'}>Off</span>
+        </button>
+      </div>
+
       <p className="mb-3 text-xs text-zinc-400">
         Voice: <span className="text-zinc-200">{voiceSource ?? 'nothing said yet'}</span>
+      </p>
+
+      <p className="mb-3 text-xs text-zinc-400">
+        Last message:{' '}
+        <span className="text-zinc-200">{took ?? 'nothing sent yet'}</span>
       </p>
 
       <ol className="space-y-0.5 font-mono text-xs">
