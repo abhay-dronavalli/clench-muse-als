@@ -69,6 +69,26 @@ def test_board_gets_confirm_then_speak():
             assert back_home["path"] == []
 
 
+def test_reset_is_accepted_from_the_board_and_the_dev_panel():
+    clock = FakeClock()
+    with make_client(clock) as client:
+        with client.websocket_connect("/ws/board") as board, client.websocket_connect("/ws/input") as inp:
+            assert board.receive_json()["type"] == "SETTINGS"
+            clock.t += 1.0
+            inp.send_json({"type": "CLENCH", "t": clock.t, "strength": 1.0})  # Suggested
+            assert board.receive_json()["kind"] == "echo"
+            assert board.receive_json()["path"] == ["Suggested"]
+            board.send_json({"type": "RESET"})  # "Click to start"
+            home = board.receive_json()
+            assert (home["type"], home["path"], home["highlight"]) == ("SCREEN", [], 0)
+            clock.t += 1.0
+            inp.send_json({"type": "CLENCH", "t": clock.t, "strength": 1.0})
+            assert board.receive_json()["kind"] == "echo"
+            assert board.receive_json()["path"] == ["Suggested"]
+            inp.send_json({"type": "RESET"})  # the dev panel's "Reset to Home"
+            assert board.receive_json()["path"] == []
+
+
 def test_invalid_messages_do_not_close_the_connection():
     clock = FakeClock()
     with make_client(clock) as client:

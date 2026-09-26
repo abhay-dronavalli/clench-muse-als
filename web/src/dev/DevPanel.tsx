@@ -121,6 +121,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
 
   const clench = useCallback(() => emit({ type: 'CLENCH', t: now(), strength: 1.0 }), [emit])
   const doubleBlink = useCallback(() => emit({ type: 'DOUBLE_BLINK', t: now() }), [emit])
+  const reset = () => emit({ type: 'RESET' })
   const longClench = useCallback(
     () => emit({ type: 'LONG_CLENCH', t: now(), duration: LONG_CLENCH_S }),
     [emit],
@@ -270,6 +271,16 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
           Long
         </button>
       </div>
+
+      <button
+        type="button"
+        className={`${btn} mb-3 w-full text-xs`}
+        onMouseDown={noFocus}
+        onClick={reset}
+        title="RESET: back to Home with the highlight on the first tile"
+      >
+        Reset to Home
+      </button>
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs text-zinc-400">Pointing</span>

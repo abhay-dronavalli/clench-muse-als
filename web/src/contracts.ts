@@ -101,6 +101,14 @@ export interface Ready {
   type: 'READY'
 }
 
+/**
+ * Back to Home: clears the screen stack and puts the highlight on the first tile (Suggested). Sent by
+ * the board when "Click to start" is clicked and by the dev panel's "Reset to Home".
+ */
+export interface Reset {
+  type: 'RESET'
+}
+
 /** Speech (SPEAK) or audio (PLAY_AUDIO) `id` finished, failed or was interrupted on the board. */
 export interface AudioDone {
   type: 'AUDIO_DONE'
@@ -257,6 +265,7 @@ export type Message =
   | Point
   | FaceOk
   | Ready
+  | Reset
   | AudioDone
   | Settings
   | Screen

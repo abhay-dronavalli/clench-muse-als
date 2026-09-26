@@ -108,6 +108,13 @@ class Ready(_Msg):
     type: Literal["READY"] = "READY"
 
 
+class Reset(_Msg):
+    """Back to Home: clears the screen stack and puts the highlight on the first tile (Suggested).
+    Sent by the board when "Click to start" is clicked and by the dev panel's "Reset to Home"."""
+
+    type: Literal["RESET"] = "RESET"
+
+
 class AudioDone(_Msg):
     """Speech (SPEAK) or audio (PLAY_AUDIO) `id` finished, failed or was interrupted on the board."""
 
@@ -266,6 +273,7 @@ Message = Annotated[
         Point,
         FaceOk,
         Ready,
+        Reset,
         AudioDone,
         Settings,
         Screen,

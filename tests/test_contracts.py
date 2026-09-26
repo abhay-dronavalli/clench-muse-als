@@ -40,6 +40,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     ),
     "FACE_OK": (contracts.FaceOk, {"type": "FACE_OK", "ok": False}),
     "READY": (contracts.Ready, {"type": "READY"}),
+    "RESET": (contracts.Reset, {"type": "RESET"}),
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
     "SETTINGS": (
         contracts.Settings,

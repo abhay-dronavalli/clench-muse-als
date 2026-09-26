@@ -2,11 +2,11 @@
 
 Run:  uv run uvicorn core.main:app --reload --port 8000
 
-  /ws/board    patient board: READY, AUDIO_DONE, POINT, FACE_OK in; SETTINGS, SCREEN, CONFIRM, SPEAK,
+  /ws/board    patient board: READY, RESET, AUDIO_DONE, POINT, FACE_OK in; SETTINGS, SCREEN, CONFIRM, SPEAK,
                PLAY_AUDIO, ACTION_RESULT out
   /ws/console  caregiver console: SETTINGS in; SETTINGS plus a mirror of what the board gets out
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
-               POINT, SETTINGS in; SETTINGS out
+               POINT, SETTINGS, RESET in; SETTINGS out
 
 Every client gets the current SETTINGS as soon as it connects, and again after every change.
 When the last board disconnects the session hears FACE_OK false (Auto falls back to scan in 3 s).
@@ -53,9 +53,9 @@ log = logging.getLogger("clench.core")
 
 # Which message types each route accepts. Anything else is logged and ignored.
 ACCEPTS: dict[Role, frozenset[str]] = {
-    "board": frozenset({"READY", "AUDIO_DONE", "POINT", "FACE_OK"}),
+    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK"}),
     "console": frozenset({"SETTINGS"}),
-    "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS"}),
+    "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
 }
 
 

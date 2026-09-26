@@ -22,9 +22,9 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS and the same Core -> Board messages (mirror) |
-| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS (dev panel) | SETTINGS, METRICS |
+| `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
 
@@ -46,6 +46,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | POINT | Board (Webcam), Sensor Service (Head tilt) | Core | Person is facing a tile |
 | FACE_OK | Board | Core | Webcam can or cannot see a face |
 | READY | Board | Core | Board connected; Core replies with the current view |
+| RESET | Board ("Click to start"), web dev panel ("Reset to Home") | Core | Back to Home, highlight on the first tile |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
 | SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks, learning; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
@@ -175,6 +176,21 @@ No fields besides `type`.
 
 ```json
 {"type": "READY"}
+```
+
+### RESET
+
+Back to Home: the Core clears the screen stack, leaves the loading, confirm or speaking state, and
+shows Home with the highlight on tile 0 (Suggested); in Scan the scan timer restarts from 0. Nothing
+is spoken or sent. The board sends it once when "Click to start" is clicked (before READY; not on a
+reconnect, so a network blip never moves the person), and the web dev panel's "Reset to Home" button
+sends it on `/ws/input`. Ignored during the help countdown: a reloaded board must never cancel a call
+for help (a DOUBLE_BLINK does).
+
+No fields besides `type`.
+
+```json
+{"type": "RESET"}
 ```
 
 ### AUDIO_DONE

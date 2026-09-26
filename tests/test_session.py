@@ -15,6 +15,8 @@ from core.contracts import (
     DoubleBlink,
     LongClench,
     PlayAudio,
+    Point,
+    Reset,
     Screen,
     Settings,
     Speak,
@@ -556,3 +558,91 @@ def test_voice_lines_cover_labels_system_lines_and_phrases(menu, profile):
     ]:
         assert line in lines
     assert lines.index(("A lot", "en")) < lines.index(("Calling Maria", "en"))  # labels first
+
+
+# --- start state and RESET ---------------------------------------------------------------------
+
+
+def test_every_new_screen_starts_on_tile_0_with_a_full_scan_step(session, sched, sent):
+    sched.advance(2 * SCAN_S + 0.4)  # mid-way through the third tile's step
+    assert session.highlight == 2
+    session.handle(clench())  # People
+    assert last_screen(sent).path == ["People"]
+    assert session.highlight == 0
+    sched.advance(SCAN_S - 0.01)
+    assert session.highlight == 0  # the timer restarted from 0 at the new screen
+    sched.advance(0.02)
+    assert session.highlight == 1
+    session.handle(blink())  # back up: a new screen again
+    assert session.highlight == 0
+    sched.advance(SCAN_S - 0.01)
+    assert session.highlight == 0
+
+
+def test_reset_goes_home_on_the_first_tile(session, sched, sent):
+    pick(session, sched, sent, "need")
+    pick(session, sched, sent, "pain")
+    sched.advance(2 * SCAN_S + 0.3)
+    assert session.highlight == 2
+    seq = session.seq
+    session.handle(Reset())
+    screen = last_screen(sent)
+    assert screen.path == [] and screen.highlight == 0
+    assert screen.tiles[0].id == "suggested"
+    assert screen.seq > seq
+    assert len(session._stack) == 1
+    sched.advance(SCAN_S - 0.01)
+    assert session.highlight == 0  # scan timer restarted from 0
+    sched.advance(0.02)
+    assert session.highlight == 1
+
+
+def test_reset_at_home_mid_scan_starts_over(session, sched, sent):
+    sched.advance(3 * SCAN_S + 0.5)
+    assert session.highlight == 3
+    seq = session.seq
+    session.handle(Reset())
+    assert last_screen(sent).highlight == 0
+    assert last_screen(sent).seq == seq + 1  # same tiles, a new seq: an old POINT cannot land on it
+
+
+def test_reset_leaves_the_confirm_screen_without_saying_anything(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    assert session.state is SessionState.CONFIRMING
+    session.handle(Reset())
+    assert session.state is SessionState.SCANNING
+    assert last_screen(sent).path == []
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())  # picks Suggested, confirms nothing
+    assert spoken(sent) == []
+
+
+def test_reset_while_speaking_goes_home(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    assert session.state is SessionState.SPEAKING
+    session.handle(Reset())
+    assert session.state is SessionState.SCANNING
+    assert session.speaking_id is None
+    sched.advance(SPEAK_TIMEOUT_S + 1)  # the speaking timeout was cancelled: no second trip home
+    assert session.state is SessionState.SCANNING
+
+
+def test_reset_never_cancels_a_help_countdown(session, sched, sent):
+    session.handle(LongClench(t=0.0, duration=2.5))
+    session.handle(Reset())
+    assert session.state is SessionState.HELP_COUNTDOWN
+    sched.advance(HELP_COUNTDOWN_S)
+    assert [r.action for r in results(sent)] == ["place_call", "send_message"]
+
+
+def test_reset_puts_the_head_on_tile_0_too(menu, profile, sched, sent):
+    s = Session(menu, sent.append, sched, profile=profile, spawn=run_now, lang="en", pointing_mode="webcam")
+    s.start()
+    s.handle(Point(source="webcam", tile=4, seq=s.seq, t=0.0))
+    assert s.highlight == 4
+    s.handle(Reset())
+    assert last_screen(sent).highlight == 0

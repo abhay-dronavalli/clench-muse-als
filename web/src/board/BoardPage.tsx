@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
@@ -23,7 +23,8 @@ type View =
 
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
- * READY, AUDIO_DONE and, in Webcam or Auto mode, POINT and FACE_OK. All decisions, including the
+ * READY, AUDIO_DONE, RESET (once, when "Click to start" is clicked: Home, first tile) and, in
+ * Webcam or Auto mode, POINT and FACE_OK. All decisions, including the
  * highlight, stay in the Core.
  *
  * Speech: only a phrase (the confirmed sentence) shows the speaking screen. Echoes (picked tiles),
@@ -42,6 +43,8 @@ export default function BoardPage() {
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
   const { toasts, push } = useToasts()
+  // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
+  const resetPending = useRef(false)
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
@@ -91,7 +94,10 @@ export default function BoardPage() {
   // The board goes live only after the click that unlocks speech, so no SPEAK can arrive muted.
   const { status, send } = useSocket('/ws/board', {
     enabled: started,
-    onOpen: (send) => send({ type: 'READY' }),
+    onOpen: (send) => {
+      if (resetPending.current && send({ type: 'RESET' })) resetPending.current = false
+      send({ type: 'READY' })
+    },
     onMessage,
   })
   const connected = status === 'open'
@@ -115,6 +121,7 @@ export default function BoardPage() {
 
   const start = () => {
     unlockSpeech()
+    resetPending.current = true
     setStarted(true)
   }
 

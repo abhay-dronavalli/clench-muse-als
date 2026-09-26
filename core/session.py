@@ -82,6 +82,7 @@ from core.contracts import (
     Metrics,
     Point,
     PointingMode,
+    Reset,
     Screen,
     Settings,
     State,
@@ -382,6 +383,8 @@ class Session:
                     log.debug("AUDIO_DONE %s ignored (waiting for %s)", msg.id, self._speaking_id)
             case Settings():
                 self._apply_settings(msg)
+            case Reset():
+                self._reset()
             case Point():
                 if msg.seq != self._seq:
                     log.debug("POINT for screen %d ignored: the board shows screen %d now", msg.seq, self._seq)
@@ -561,13 +564,28 @@ class Session:
 
     # --- frames ---------------------------------------------------------------
 
+    def _reset(self) -> None:
+        """RESET ("Click to start", the dev panel): Home from its first tile, whatever was going on,
+        except a help countdown (a reloaded board must never cancel a call for help)."""
+        if self.state is SessionState.HELP_COUNTDOWN:
+            log.warning("RESET ignored: a help countdown is running (a double blink cancels it)")
+            return
+        log.info("RESET: back to home (was %s)", self.state.value)
+        self._cancel_wait()
+        self._cancel_speak_timer()
+        self._speaking_id = None
+        self._pending = None
+        self._shortcut_from = None
+        self._tiles_key = None  # a new seq even if home is already showing: old POINTs are void
+        self._go_home(first_tile=True)
+
     def _home(self) -> Frame:
         return self._menu_frame(self._menu.root, "", None)
 
-    def _go_home(self) -> None:
+    def _go_home(self, *, first_tile: bool = False) -> None:
         self._stack = [self._home()]
         self._effort.reset()  # metrics count from home
-        self._enter_frame()
+        self._enter_frame(first_tile=first_tile)
 
     def _menu_item(self, node: MenuNode, prefix: str) -> Item:
         tile_id = _join(prefix, node.id)
@@ -893,14 +911,19 @@ class Session:
         nodes = self._menu.chain(path)
         return any(n.urgent for n in nodes) or (bool(nodes) and nodes[-1].has_urgent)
 
-    def _enter_frame(self) -> None:
-        """Show the top frame from its first tile and prefetch what could be picked next."""
+    def _enter_frame(self, *, first_tile: bool = False) -> None:
+        """Show the top frame and prefetch what could be picked next. Scanning starts on the first
+        tile with a full scan step; the head keeps its tile until its next POINT, unless `first_tile`
+        (RESET) puts every pointer on tile 0."""
         self.state = SessionState.SCANNING
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
         if len(self._stack) == 1:
             self._prefetch_shortcut()
-        self.pointer.on_tiles_changed(len(self.frame.items) + 1)
-        self.pointer.start()
+        count = len(self.frame.items) + 1
+        self.pointer.on_tiles_changed(count)
+        if first_tile:
+            self.pointer.place(count, 0)
+        self.pointer.start()  # the scan timer restarts from 0
         self._emit(self._screen())
         self._prefetch()
 
