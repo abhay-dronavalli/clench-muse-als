@@ -448,3 +448,32 @@ Status: **done** = built, **planned** = agreed, not built yet.
 - `test_a_recent_cancel_turns_the_shortcut_off` only passed before 18:30 on 2026-09-26 (the cancel is
   logged at the wall clock, the ranker's clock was fixed at 18:30 that day); it now moves the cancel
   next to the ranker's clock.
+
+## 16. Muse input in the main app: connect button, double blink, input log
+
+- **The console starts the Sensor Service.** `core/sensor_service.py` supervises one
+  `python -m sensor.main` subprocess behind `GET /api/sensor`, `POST /api/sensor/start` and
+  `POST /api/sensor/stop`. The Muse panel (board bottom bar and `/console`) has a profile picker
+  (the `test/calibration.*.json` files), Connect / Disconnect, a demo-source button and the
+  service's last output lines. Starting replaces a running service (BrainFlow allows one BLE client
+  per headband). Stopping pauses Muse input. The Core kills the subprocess on shutdown.
+- **A brief headband dropout no longer pauses Muse.** Before, every `SIGNAL` with
+  `connected: false` set `muse_enabled` to false. The sensor sends one before every reconnect try,
+  so the switch flapped Paused / Ready every ~12 s and the caregiver had to press Enable again. The
+  command gate already refuses gestures while the signal is disconnected, blocked or stale, so the
+  pause now happens only after 10 s without the headband (`MUSE_LOSS_GRACE_S`). A service
+  disconnect or the last board closing still pauses at once.
+- **Reconnect backs off.** 5, 10, 20, 40 s, then 40 s, instead of a try every 5 s. Resets on success.
+- **DOUBLE_BLINK from the headband.** The bench's two-channel coincidence detector (AF7 and AF8
+  must both spike within 60 ms, peak-to-peak in 1-10 Hz) moved into `sensor/detect/clench.py`; two
+  blinks within 700 ms send DOUBLE_BLINK. `/ws/sensor` now accepts it. It follows the profile's own
+  eye calibration: `blink_enabled: false` (the bench could not separate a blink from rest) or no
+  `blink_threshold` means no blinks. The panel's "Double blink" selector can force it on or off for
+  testing (`--blink auto|on|off`). Poor forehead contact turns blinks off for that tick but never
+  blocks the jaw, and a clench wins a tick that also completes a double blink.
+- **INPUT_EVENT and the input log.** The Core sends one INPUT_EVENT per gesture (headband or
+  keyboard stand-in) to consoles and input clients, with `accepted` and the reason when it refused
+  one (paused, no board, headband not connected, blocked, stale, clock skew). Pressing `/` on the
+  board or console opens a short full-width strip at the top listing them with per-kind counts; Esc
+  or `/` closes it. Refused gestures are shown (amber) because "the detector never fired" and "the
+  Core ignored it" look the same otherwise.

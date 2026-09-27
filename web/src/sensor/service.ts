@@ -5,6 +5,7 @@ export type SensorStatus = {
   pid: number | null
   profile: string | null
   source: string | null
+  blink: string
   exit_code: number | null
   profiles: string[]
   log: string[]
@@ -26,11 +27,13 @@ async function call(path: string, init?: RequestInit): Promise<SensorStatus> {
 
 export const getSensor = () => call('/api/sensor')
 
-export const startSensor = (profile: string, source: 'muse' | 'demo') =>
+export type BlinkMode = 'auto' | 'on' | 'off'
+
+export const startSensor = (profile: string, source: 'muse' | 'demo', blink: BlinkMode = 'auto') =>
   call('/api/sensor/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ profile, source }),
+    body: JSON.stringify({ profile, source, blink }),
   })
 
 export const stopSensor = () => call('/api/sensor/stop', { method: 'POST' })

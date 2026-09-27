@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
+import { InputLog } from '../sensor/InputLog'
+import { MuseInput } from '../sensor/MuseInput'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
 import { CameraLight, CameraNotice, CursorDot, GazeNotice, PointerBadge } from '../facetrack/indicators'
@@ -81,6 +83,8 @@ export default function BoardPage() {
       case 'CLICK':
         click() // a picked "Other...": no word, a soft click in the sound queue
         break
+      case 'SIGNAL':
+        break // MuseInput displays sensor telemetry through its console socket.
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
@@ -160,6 +164,8 @@ export default function BoardPage() {
       {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       <ToastStack toasts={toasts} />
+      {started && <div className="shrink-0 px-4 pb-14"><MuseInput compact /></div>}
+      {started && <InputLog />}
 
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />

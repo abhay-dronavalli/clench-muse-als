@@ -100,7 +100,17 @@ uv run uvicorn core.main:app --reload --port 8000
 # (/ws/* is proxied to the core on 127.0.0.1:8000)
 npm --prefix web run dev
 
-# Sensor service: not built yet (planned: uv run python -m sensor.main)
+# Sensor service
+
+Start Core on port 8001, then run the headless Muse bridge from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m sensor.main --profile taher --url ws://127.0.0.1:8001/ws/sensor
+```
+
+For a no-headband smoke test, use `--source demo`. In the web console, enable
+Muse clenches; short clenches select or confirm and a 2.5 second clench opens help.
+Blink navigation is disabled in the main app for now; use `B` for back/cancel.
 ```
 
 Without uv: `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install fastapi "uvicorn[standard]" "pydantic>=2" pyyaml python-dotenv pytest httpx`, then `python -m pytest`.

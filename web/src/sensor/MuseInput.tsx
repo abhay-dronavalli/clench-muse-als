@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Settings, Signal } from '../contracts'
 import { useSocket } from '../lib/useSocket'
-import { getSensor, startSensor, stopSensor, type SensorStatus } from './service'
+import { getSensor, startSensor, stopSensor, type BlinkMode, type SensorStatus } from './service'
 import { museFresh, museState } from './status'
 
 /** The main application's headband controls. Acquisition runs in sensor.main, not Tkinter. */
@@ -14,6 +14,7 @@ export function MuseInput({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showLog, setShowLog] = useState(false)
+  const [blink, setBlink] = useState<BlinkMode>('auto')
   const chosen = useRef(false)
   const { status, send } = useSocket('/ws/console', {
     onMessage: (msg) => {
@@ -89,13 +90,24 @@ export function MuseInput({ compact = false }: { compact?: boolean }) {
             : <option value="">no calibration profiles</option>}
         </select>
         <button type="button" disabled={busy || (!running && !profile)}
-          onClick={() => act(running ? stopSensor : () => startSensor(profile, 'muse'))}
+          onClick={() => act(running ? stopSensor : () => startSensor(profile, 'muse', blink))}
           className="rounded-lg bg-zinc-100 px-3 py-2 font-semibold text-zinc-950 disabled:opacity-40">
           {busy ? '...' : running ? 'Disconnect' : 'Connect headband'}
         </button>
       </div>
       {!running && (
-        <button type="button" disabled={busy} onClick={() => act(() => startSensor('demo', 'demo'))}
+        <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+          <span className="flex-1">Double blink (back)</span>
+          <select value={blink} onChange={(e) => setBlink(e.target.value as BlinkMode)} disabled={busy}
+            className="rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5">
+            <option value="auto">from calibration</option>
+            <option value="on">force on</option>
+            <option value="off">off</option>
+          </select>
+        </label>
+      )}
+      {!running && (
+        <button type="button" disabled={busy} onClick={() => act(() => startSensor('demo', 'demo', 'auto'))}
           className="mt-2 w-full rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 disabled:opacity-40">
           Run the simulated demo source instead (no headband)
         </button>
@@ -117,7 +129,7 @@ export function MuseInput({ compact = false }: { compact?: boolean }) {
         {enabled ? 'Pause Muse clenches' : 'Enable Muse clenches'}
       </button>
       <p className="mt-2 text-xs text-zinc-400">Short clench: select / confirm · Hold {(settings?.long_clench_ms ?? 2500) / 1000}s: help</p>
-      <p className="text-xs text-zinc-400">Blink navigation is off. Press B to go back or cancel.</p>
+      <p className="text-xs text-zinc-400">Double blink: go back{service?.blink === 'off' ? ' (off)' : ''} · B also goes back · press / for the input log</p>
 
       {!!service?.log.length && (
         <div className="mt-2">

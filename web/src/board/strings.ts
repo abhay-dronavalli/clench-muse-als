@@ -10,7 +10,7 @@ export const STRINGS = {
     connecting: 'Connecting to Clench…',
     speaking: 'Speaking…',
     finding: 'Finding options…',
-    hint: 'Clench = send  |  Double blink = cancel',
+    hint: 'Clench = send  |  B = cancel',
     pointing: {
       scanning: 'Scanning',
       headtilt: 'Head tilt is not ready yet: scanning',
@@ -48,7 +48,7 @@ export const STRINGS = {
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Calling for help',
-      cancel: 'Double blink to cancel',
+      cancel: 'Press B to cancel',
     },
     toast: {
       ok: {
@@ -73,7 +73,7 @@ export const STRINGS = {
     connecting: 'Conectando con Clench…',
     speaking: 'Hablando…',
     finding: 'Buscando opciones…',
-    hint: 'Apretar = enviar  |  Doble parpadeo = cancelar',
+    hint: 'Apretar = enviar  |  B = cancelar',
     pointing: {
       scanning: 'Escaneando',
       headtilt: 'Inclinar la cabeza aún no está listo: escaneando',
@@ -111,7 +111,7 @@ export const STRINGS = {
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Pidiendo ayuda',
-      cancel: 'Doble parpadeo para cancelar',
+      cancel: 'Pulsa B para cancelar',
     },
     toast: {
       ok: {
