@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Signal } from '../contracts'
-import { canEnableMuse, effectiveTripLayout, LAUNCH_MS, nextSetupStep, SetupBlinks, SetupCountdown } from './onboardingFlow'
+import { canEnableMuse, effectiveTripLayout, LAUNCH_MS, NEXT_STEP, nextSetupStep, SetupBlinks, SetupCountdown, STEP_MS } from './onboardingFlow'
 
 const signal: Signal = { type: 'SIGNAL', t: 100, ch: [10, 20, 30, 40], connected: true }
 
@@ -15,6 +15,12 @@ describe('setup timers and permissions', () => {
   })
   it('starts setup within a few seconds', () => {
     expect(LAUNCH_MS).toBeLessThanOrEqual(5000)
+  })
+  it('shows what to do for 10 s, then the dots, then the headband', () => {
+    expect(STEP_MS.welcome).toBe(10000)
+    expect(nextSetupStep('welcome', false, false, 0, false)).toBeNull() // the preview is not cut short
+    expect(NEXT_STEP.welcome).toBe('eyes')
+    expect(NEXT_STEP.eyes).toBe('band')
   })
   it('skips failed hardware on expiry, never inventing a successful clench', () => {
     expect(nextSetupStep('welcome', true, false, 0, false)).toBe('eyes')

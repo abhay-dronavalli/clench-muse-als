@@ -31,7 +31,8 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
   const done = useRef(false)
   const goodSince = useRef<number | null>(null)
   const hasEyes = typeof native?.calibrate === 'function' && typeof native?.cancelCalibration === 'function'
-  const preview = step === 'eyes' && typeof native?.carPreview === 'function' && !paused
+  // The parked car behind every setup step (the tablet app; a browser shows the plain backdrop).
+  const preview = typeof native?.carPreview === 'function' && !paused
 
   useSocket('/ws/console', {
     onMessage: (msg) => {
@@ -160,6 +161,12 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
         <p className="mt-3 text-xl text-zinc-600 sm:text-2xl">{text}</p>
       </header>
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 py-4 text-center">
+        {step === 'welcome' && <ul className="grid w-full max-w-5xl grid-cols-2 gap-4 lg:grid-cols-4">{s.howTo.map((h, i) => (
+          <li key={h.title} className="rounded-3xl bg-white/90 px-6 py-6 text-left shadow-sm">
+            <p className="text-lg font-bold text-[#007a72]">{i + 1}</p>
+            <p className="text-3xl font-bold">{h.title}</p>
+            <p className="mt-1 text-xl text-zinc-600">{h.text}</p>
+          </li>))}</ul>}
         {step === 'eyes' && !preview && <div className="rounded-3xl bg-white/95 px-8 py-6 text-2xl text-[#007a72]">{s.previewUnavailable}</div>}
         {step === 'band' && <div className="rounded-3xl bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-wrap justify-center gap-3">{['TP9', 'AF7', 'AF8', 'TP10'].map((name, i) => {
