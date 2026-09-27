@@ -509,3 +509,10 @@ Status: **done** = built, **planned** = agreed, not built yet.
   (3 x 2 grid, 2 x 3 in portrait). Fewer than 10 tracked samples counts as a miss.
 - The activity's orientation is fixed (landscape by default, `BOARD_ORIENTATION=portrait` for the
   fallback) instead of following the sensor, so a rotation never changes the gaze coordinates mid-use.
+- Review follow-up: the shell's tracker now runs only when the page's pointing mode needs the camera
+  (`ClenchNative.setPointingMode`, reported from SETTINGS before the board renders), is off before
+  "Click to start" and after every page load, and releases the camera in Scan and Head tilt. The
+  "Camera on" light covers the shell's tracker. `/gaze-test` picks each target when its prompt starts
+  (never the highlighted tile) and locks its settings during a run. Dwell is unchanged: the dwell and
+  clench race is left to the Core confirm-window fix on the safety work, and dwell stays off whenever
+  the headband is in use.

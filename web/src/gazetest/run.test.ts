@@ -1,43 +1,63 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_GAZE_TUNING } from '../facetrack/gazeTuning'
 import { byPerson, makeRecord, toCsv } from './log'
-import { GAP_MS, makeTargets, summarize, TestRun, TIMEOUT_MS, type Trial } from './run'
+import { GAP_MS, pickTarget, summarize, TestRun, TIMEOUT_MS, type Trial } from './run'
 
-describe('makeTargets', () => {
-  it('never repeats a tile back to back and never starts on the avoided one', () => {
-    for (let seed = 0; seed < 20; seed++) {
+describe('pickTarget', () => {
+  it('never picks an avoided tile', () => {
+    for (let seed = 0; seed < 50; seed++) {
       let x = seed + 1
       const rnd = () => ((x = (x * 16807) % 2147483647) / 2147483647)
-      const t = makeTargets(10, 6, 3, rnd)
-      expect(t).toHaveLength(10)
-      expect(t[0]).not.toBe(3)
-      t.forEach((v, i) => {
-        expect(v).toBeGreaterThanOrEqual(0)
-        expect(v).toBeLessThan(6)
-        if (i) expect(v).not.toBe(t[i - 1])
-      })
+      const t = pickTarget(6, [3, 5], rnd)
+      expect([0, 1, 2, 4]).toContain(t)
     }
+    expect(pickTarget(6, [null, 2], () => 0)).toBe(0)
   })
 })
 
 describe('TestRun', () => {
   it('a hit when the highlight lands on the target, timed from the prompt', () => {
-    const r = new TestRun([2, 4], 0)
+    const r = new TestRun(2, 6, 0, () => 0.4) // choices [1..5] minus avoided: index 2
     r.update(GAP_MS - 1, 0)
     expect(r.target).toBeNull()
-    r.update(GAP_MS, 0) // prompt for 2
-    expect(r.target).toBe(2)
+    r.update(GAP_MS, 0) // prompt: not tile 0 (highlighted) -> [1,2,3,4,5][2] = 3
+    expect(r.target).toBe(3)
     r.update(GAP_MS + 100, 1) // wrong tile on the way
-    r.update(GAP_MS + 450, 2)
-    expect(r.trials[0]).toEqual({ target: 2, hit: true, ms: 450, wrong: 1 })
+    r.update(GAP_MS + 450, 3)
+    expect(r.trials[0]).toEqual({ target: 3, hit: true, ms: 450, wrong: 1 })
   })
 
   it('a miss after the timeout, also without samples; done after the last target', () => {
-    const r = new TestRun([2], 0)
-    r.update(GAP_MS, 0)
+    const r = new TestRun(1, 6, 0, () => 0)
+    r.update(GAP_MS, 0) // target: first tile that is not 0 -> 1
     r.update(GAP_MS + TIMEOUT_MS, null)
-    expect(r.trials[0]).toEqual({ target: 2, hit: false, ms: null, wrong: 0 })
+    expect(r.trials[0]).toEqual({ target: 1, hit: false, ms: null, wrong: 0 })
     expect(r.done).toBe(true)
+  })
+
+  it('after a miss, the next target is never the tile the highlight rests on', () => {
+    const r = new TestRun(2, 6, 0, () => 0.7)
+    r.update(GAP_MS, 0) // [1,2,3,4,5][3] = 4
+    expect(r.target).toBe(4)
+    r.update(GAP_MS + 500, 3) // the eyes went to 3 instead, and stay there
+    r.update(GAP_MS + TIMEOUT_MS, 3) // miss
+    expect(r.trials[0]).toMatchObject({ target: 4, hit: false })
+    const next = GAP_MS + TIMEOUT_MS + GAP_MS
+    r.update(next, 3) // new prompt while tile 3 is highlighted
+    // Avoiding only the previous target would pick [0,1,2,3,5][3] = 3 here: a free hit.
+    expect(r.target).not.toBe(3)
+    expect(r.target).not.toBe(4)
+    expect(r.target).toBe(2) // [0,1,2,5][2]
+    r.update(next + 100, 3)
+    expect(r.trials).toHaveLength(1) // still on 3: no free hit
+  })
+
+  it('never starts a run on the tile already highlighted', () => {
+    for (let i = 0; i < 6; i++) {
+      const r = new TestRun(1, 6, 0, () => 0.99)
+      r.update(GAP_MS, i)
+      expect(r.target).not.toBe(i)
+    }
   })
 
   it('summarizes: hit rate, mean time over hits, pass at 90%', () => {

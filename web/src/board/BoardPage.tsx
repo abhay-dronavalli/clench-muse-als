@@ -13,7 +13,7 @@ import {
   PointerBadge,
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
-import { nativeGazeActive, subscribeNativeGaze } from '../facetrack/native'
+import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
 import { gazeTuning } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
@@ -104,6 +104,9 @@ export default function BoardPage() {
       case 'SETTINGS':
         // The language and the pointing mode (camera on or off); the dev panel shows the rest.
         if (msg.lang) setLang(msg.lang)
+        // The tablet shell first: in a camera mode it claims the camera before this render decides
+        // whether the page opens it (native.ts). SETTINGS only arrive after "Click to start".
+        reportPointingMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         break

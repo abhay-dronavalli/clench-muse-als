@@ -11,6 +11,11 @@
 export interface ClenchNativeBridge {
   /** the shell's eye tracker is running (or starting) and owns the front camera */
   gazeActive(): boolean
+  /**
+   * The page's pointing mode, or "off" (not started, or a page that does not point). The shell runs
+   * its tracker only in camera modes (auto, webcam, gaze) and claims the camera before returning.
+   */
+  setPointingMode(mode: string): void
   /** open the shell's calibration screen for this person; it saves the result under that name */
   calibrate(person: string): void
   /** whose calibration is loaded ("" = none) */
@@ -39,6 +44,19 @@ declare global {
 /** The bridge, or null in a normal browser. */
 export function nativeBridge(): ClenchNativeBridge | null {
   return typeof window !== 'undefined' && window.ClenchNative ? window.ClenchNative : null
+}
+
+/**
+ * Tell the shell which pointing mode is on ("off" = none). Call it BEFORE rendering with the new
+ * mode: in a camera mode the shell claims the camera synchronously, so the render that follows sees
+ * nativeGazeActive() true and does not open the camera for the head. No-op in a normal browser.
+ */
+export function reportPointingMode(mode: string): void {
+  try {
+    nativeBridge()?.setPointingMode(mode)
+  } catch (e) {
+    console.warn('tablet shell: setPointingMode failed', e)
+  }
 }
 
 /** The shell's eye tracker owns the camera: the page must not open it. */

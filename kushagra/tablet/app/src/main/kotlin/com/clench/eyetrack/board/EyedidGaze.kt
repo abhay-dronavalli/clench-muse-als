@@ -54,6 +54,9 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
     /** STARTING or ON: the page must not open the camera. */
     val active: Boolean get() = state == State.STARTING || state == State.ON
 
+    /** A start was asked for and not released since (main thread). */
+    val running: Boolean get() = wantTracking
+
     @Volatile var gazeFilter: Boolean = true
         private set
 
@@ -67,10 +70,19 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
     private var blinking = false
     private val throttle = GazeMath.Throttle(FEED_INTERVAL_MS)
 
-    /** Start (or restart with new options). Needs the CAMERA permission. */
+    /**
+     * The page is about to need the camera (any thread): report STARTING at once, so that from this
+     * call on ClenchNative.gazeActive() is true and the page does not open the camera itself. The
+     * actual start follows on the main thread.
+     */
+    fun claim() {
+        if (state == State.OFF || state == State.ERROR) setState(State.STARTING, "requested")
+    }
+
+    /** Start (or restart with new options). Needs the CAMERA permission. Main thread. */
     fun start(useGazeFilter: Boolean) {
         gazeFilter = useGazeFilter
-        release()
+        releaseTracker()
         wantTracking = true
         if (BuildConfig.EYEDID_LICENSE_KEY.isBlank()) {
             fail("no license key: set EYEDID_LICENSE_KEY in kushagra/tablet/local.properties")
@@ -144,7 +156,14 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
         if (!t.isTracking) t.startTracking()
     }
 
+    /** Stop tracking and give the camera back. Main thread. */
     fun release() {
+        releaseTracker()
+        retries = 0 // not in releaseTracker: a retry restarts through start()
+        setState(State.OFF)
+    }
+
+    private fun releaseTracker() {
         wantTracking = false
         generation++
         main.removeCallbacksAndMessages(retryToken) // only the retry: state posts must still reach the page
@@ -153,7 +172,6 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
             GazeTracker.releaseGazeTracker(it)
         }
         tracker = null
-        if (state != State.ERROR) setState(State.OFF)
     }
 
     fun setCalibrationData(data: DoubleArray) {
@@ -176,7 +194,8 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
 
     val calibrating: Boolean get() = tracker?.isCalibrating == true
 
-    private fun fail(detail: String) {
+    /** The tracker cannot run (also used by the activity, e.g. camera permission denied). */
+    fun fail(detail: String) {
         Log.w(TAG, "gaze tracker not available: $detail")
         state = State.ERROR
         main.post { listener.onTrackerState("error", detail) }

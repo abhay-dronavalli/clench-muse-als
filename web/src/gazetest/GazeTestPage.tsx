@@ -3,7 +3,14 @@ import type { HeadRange } from '../contracts'
 import { gaze } from '../facetrack/gaze'
 import { DEFAULT_GAZE_TUNING, gazePointerTuning, LIMITS, type GazeTuning } from '../facetrack/gazeTuning'
 import { loadHeadRange } from '../facetrack/headRange'
-import { nativeBridge, nativeEvents, nativeGazeActive, type NativeEvent } from '../facetrack/native'
+import {
+  nativeBridge,
+  nativeEvents,
+  nativeGazeActive,
+  reportPointingMode,
+  subscribeNativeGaze,
+  type NativeEvent,
+} from '../facetrack/native'
 import { DEFAULT_RANGE, type ScreenPoint } from '../facetrack/pose'
 import { fromHead, type PointSample } from '../facetrack/source'
 import { gazeTuning } from '../facetrack/stores'
@@ -13,7 +20,7 @@ import { tracker } from '../facetrack/tracker'
 import { measureTiles } from '../facetrack/usePointing'
 import { useTrackerStatus } from '../facetrack/useTrackerStatus'
 import { byPerson, load, makeRecord, save, toCsv, type RunRecord, type TestSource } from './log'
-import { makeTargets, summarize, TARGETS, TestRun, TIMEOUT_MS } from './run'
+import { summarize, TARGETS, TestRun, TIMEOUT_MS } from './run'
 
 const TILE_ATTR = 'data-test-tile'
 const PERSON_KEY = 'clench.gazeTest.person'
@@ -72,7 +79,7 @@ export default function GazeTestPage() {
   const portrait = usePortrait()
   const tuning = useSyncExternalStore(gazeTuning.subscribe, gazeTuning.get)
   const [person, setPerson] = useState(readPerson)
-  const [source, setSource] = useState<TestSource>(nativeGazeActive() ? 'gaze' : 'mouse')
+  const [source, setSource] = useState<TestSource>(nativeBridge() ? 'gaze' : 'mouse')
   const [margin, setMargin] = useState(STICKY_MARGIN)
   const [sdkFilter, setSdkFilter] = useState<boolean | null>(() => bridge?.gazeFilter() ?? null)
   const [live, setLive] = useState<Live>({ raw: null, point: null, tile: null, candidate: null, found: false, hz: 0 })
@@ -109,12 +116,19 @@ export default function GazeTestPage() {
     loadHeadRange().then((r) => r && setRange(r), () => {}) // no Core: the defaults
   }, [])
 
-  // The head needs this page's camera; never while the tablet shell owns it.
+  // The tablet shell runs its eye tracker only for the gaze source, and stops it when this page goes.
+  const nativeOn = useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
   useEffect(() => {
-    if (source !== 'head' || nativeGazeActive()) return
+    reportPointingMode(source === 'gaze' ? 'gaze' : 'off')
+  }, [source])
+  useEffect(() => () => reportPointingMode('off'), [])
+
+  // The head needs this page's camera: only once the shell has let go of it.
+  useEffect(() => {
+    if (source !== 'head' || nativeOn) return
     void tracker.start()
     return () => tracker.stop()
-  }, [source])
+  }, [source, nativeOn])
 
   // A new source starts the highlight over.
   useEffect(() => {
@@ -235,7 +249,7 @@ export default function GazeTestPage() {
   }, [run, person, portrait])
 
   const start = () => {
-    const r = new TestRun(makeTargets(TARGETS, 6, pointer.current.tile), performance.now())
+    const r = new TestRun(TARGETS, 6, performance.now())
     blinks.current = 0
     runRef.current = r
     setRun(r)
@@ -276,8 +290,8 @@ export default function GazeTestPage() {
           disabled={run !== null}
           className="rounded-lg bg-zinc-800 px-2 py-1 ring-1 ring-zinc-600"
         >
-          <option value="gaze">Gaze slot{nativeGazeActive() ? ' (tablet)' : ''}</option>
-          <option value="head" disabled={nativeGazeActive()}>Head (webcam)</option>
+          <option value="gaze">Gaze slot{bridge ? ' (tablet eye tracker)' : ''}</option>
+          <option value="head">Head (webcam)</option>
           <option value="mouse">Mouse (check the page)</option>
         </select>
         {run ? (
@@ -305,7 +319,13 @@ export default function GazeTestPage() {
             Calibrate {person.trim() || '...'}
           </button>
         )}
-        <button type="button" onClick={() => setPanel(panel === 'settings' ? null : 'settings')} className="rounded-lg bg-zinc-800 px-3 py-1">
+        <button
+          type="button"
+          onClick={() => setPanel(panel === 'settings' ? null : 'settings')}
+          disabled={run !== null}
+          title={run ? 'Settings are locked during a run, so every run has one set of settings' : ''}
+          className="rounded-lg bg-zinc-800 px-3 py-1 disabled:opacity-40"
+        >
           Settings
         </button>
         <button type="button" onClick={() => setPanel(panel === 'results' ? null : 'results')} className="rounded-lg bg-zinc-800 px-3 py-1">
@@ -374,7 +394,7 @@ export default function GazeTestPage() {
         />
       )}
 
-      {panel === 'settings' && (
+      {panel === 'settings' && run === null && (
         <div className="fixed right-4 top-16 z-40 w-80 space-y-3 rounded-2xl bg-zinc-900/95 p-4 text-sm ring-1 ring-zinc-600">
           <p className="text-xs text-zinc-400">Saved in this browser; the board uses the same gaze settings.</p>
           <Toggle label="One Euro filter" on={tuning.oneEuro} set={(v) => setTuning({ oneEuro: v })} />

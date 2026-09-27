@@ -36,6 +36,9 @@ import com.clench.eyetrack.board.GazeMath.Frac
  * `adb reverse tcp:5173 tcp:5173`), with the Eyedid gaze tracker feeding the page's gaze slot.
  * docs/eye-tracking.md, "Native shell".
  *
+ *   - The tracker runs only while the page's pointing mode needs the camera (Auto, Webcam, Gaze;
+ *     the page reports it with ClenchNative.setPointingMode). It is off before "Click to start",
+ *     after every page load, and in Scan and Head tilt.
  *   - The tracker owns the front camera. While it runs (or starts) the page is told so
  *     (ClenchNative.gazeActive()) and any camera request from the page is denied. If the tracker
  *     cannot start (no key, no network, auth error), the page may use the camera for head pointing.
@@ -56,6 +59,8 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     private var calibratingFor: String? = null
     private var calSession = 0 // bumps per calibration, so a delayed step from an old one does nothing
     private var destroyed = false
+    /** The page's pointing mode needs the camera (set from the page's thread, acted on in reconcile). */
+    @Volatile private var cameraWanted = false
     private var calPoint: Pair<Float, Float>? = null
     private var startupChecked = false
     private var validation: Validation? = null
@@ -66,7 +71,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     }
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startTracker() else onTrackerState("error", "camera permission denied")
+        if (!granted) gaze.fail("camera permission denied") else reconcile()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -94,6 +99,12 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             settings.mediaPlaybackRequiresUserGesture = false
             addJavascriptInterface(Bridge(), "ClenchNative")
             webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    // A new page has not chosen a pointing mode yet: the tracker is off until it does.
+                    cameraWanted = false
+                    reconcile()
+                }
+
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                     if (!request.isForMainFrame) return
                     gazeOverlay.prompt(
@@ -128,13 +139,25 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         })
 
         web.loadUrl(BuildConfig.BOARD_URL)
-        if (hasCamera()) startTracker() else cameraPermission.launch(Manifest.permission.CAMERA)
+        // Ask for the camera now, so the prompt does not interrupt the person later. The tracker itself
+        // starts only when the page's pointing mode needs it.
+        if (!hasCamera()) cameraPermission.launch(Manifest.permission.CAMERA)
     }
 
     private fun hasCamera() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-    private fun startTracker() = gaze.start(prefs.getBoolean(KEY_FILTER, true))
+    /** Start or stop the tracker to match what the page wants. Main thread. */
+    private fun reconcile() {
+        if (destroyed) return
+        if (cameraWanted) {
+            if (gaze.running) return
+            if (hasCamera()) gaze.start(prefs.getBoolean(KEY_FILTER, true)) else gaze.fail("camera permission denied")
+        } else if (gaze.running || gaze.state != EyedidGaze.State.OFF) {
+            dropTrackerScreens()
+            gaze.release()
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -176,14 +199,27 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     private inner class Bridge {
         @JavascriptInterface fun gazeActive(): Boolean = gaze.active
 
+        /**
+         * The page's pointing mode ("off" before "Click to start", and on pages without a board).
+         * Camera modes claim the camera synchronously, so gazeActive() is already true when this
+         * returns and the page will not open the camera itself.
+         */
+        @JavascriptInterface fun setPointingMode(mode: String) {
+            val want = mode in CAMERA_MODES
+            cameraWanted = want
+            if (want) gaze.claim()
+            main.post { reconcile() }
+        }
+
         @JavascriptInterface fun person(): String = person
 
-        @JavascriptInterface fun gazeFilter(): Boolean = gaze.gazeFilter
+        @JavascriptInterface fun gazeFilter(): Boolean = prefs.getBoolean(KEY_FILTER, true)
 
         @JavascriptInterface fun setGazeFilter(on: Boolean) {
             main.post {
                 prefs.edit().putBoolean(KEY_FILTER, on).apply()
-                if (on != gaze.gazeFilter) gaze.start(on) // an init option: the tracker restarts
+                // An init option: a running tracker restarts with it; otherwise it applies at the next start.
+                if (on != gaze.gazeFilter && gaze.running) gaze.start(on)
             }
         }
 
@@ -287,6 +323,15 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         calibrationEvent("canceled", who)
     }
 
+    /** The tracker is going away: close its screens now (its callbacks will not come any more). */
+    private fun dropTrackerScreens() {
+        calibratingFor?.let { calibrationEvent("canceled", it) }
+        calibratingFor = null
+        calPoint = null
+        validation = null
+        gazeOverlay.hide()
+    }
+
     private fun cancelTrackerScreens() {
         if (calibratingFor != null) {
             gaze.stopCalibration() // onCalibrationCanceled follows
@@ -350,6 +395,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         private const val KEY_FILTER = "gazeFilter"
         private const val KEY_CAL = "cal."
         private const val DEFAULT_PERSON = "patient"
+        private val CAMERA_MODES = setOf("auto", "webcam", "gaze")
         private const val SETTLE_BEFORE_SAMPLES_MS = 1_000L // the SDK sample waits 1 s on each dot
         private const val VALIDATE_SETTLE_MS = 800L
         private const val VALIDATE_COLLECT_MS = 1_500L

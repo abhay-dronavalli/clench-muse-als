@@ -1,14 +1,18 @@
 import { useSyncExternalStore } from 'react'
 import type { Lang, PointingMode, Screen } from '../contracts'
 import { STRINGS } from '../board/strings'
-import { nativeGazeActive } from './native'
+import { nativeGazeActive, subscribeNativeGaze } from './native'
 import { cursor, dwell, eyesLost, gazeConnected, showCursor } from './stores'
 import { useTrackerStatus } from './useTrackerStatus'
 
-/** PRD section 11: a light on screen whenever the camera is on. */
+/**
+ * PRD section 11: a light on screen whenever the camera is on: the page's own head tracker, or the
+ * tablet shell's eye tracker (which owns the camera while nativeGazeActive() is true).
+ */
 export function CameraLight({ lang }: { lang: Lang }) {
   const status = useTrackerStatus()
-  if (status.kind !== 'on' && status.kind !== 'starting') return null
+  const native = useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
+  if (status.kind !== 'on' && status.kind !== 'starting' && !native) return null
   return (
     <span className="flex items-center gap-2 rounded-full bg-zinc-900/90 px-3 py-1 text-base font-semibold text-zinc-200 ring-1 ring-red-500/60">
       <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" aria-hidden />

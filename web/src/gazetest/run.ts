@@ -2,8 +2,9 @@
 //
 // A tile is prompted; it is a hit when the highlight (the same TilePointer the board uses, so with
 // its filter and hold) lands on it within 2 s. Between prompts a short pause, with the eyes still on
-// the last target. Targets never repeat back to back, and the first is never the tile already
-// highlighted, so every prompt needs a real eye movement.
+// the last target. Each target is picked when its prompt starts and is never the tile highlighted at
+// that moment (after a miss the highlight can rest anywhere, not only on the last target) nor the
+// previous target, so every prompt needs a real eye movement and no hit is free.
 //
 // Success for a person: hit rate >= 90% (docs/eye-tracking.md, "Gaze test").
 
@@ -23,29 +24,27 @@ export interface Trial {
 
 export type Phase = { kind: 'gap'; until: number } | { kind: 'prompt'; target: number; since: number } | { kind: 'done' }
 
-/** `n` targets over `tiles` tiles, never the same twice in a row and never `avoid` first. */
-export function makeTargets(n: number, tiles: number, avoid: number | null, random: () => number = Math.random): number[] {
-  const out: number[] = []
-  let prev = avoid
-  for (let i = 0; i < n; i++) {
-    const choices = [...Array(tiles).keys()].filter((t) => t !== prev)
-    const next = choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
-    out.push(next)
-    prev = next
-  }
-  return out
+/** A random tile out of `tiles` that is none of `avoid` (nulls ignored). */
+export function pickTarget(tiles: number, avoid: (number | null)[], random: () => number = Math.random): number {
+  const choices = [...Array(tiles).keys()].filter((t) => !avoid.includes(t))
+  if (choices.length === 0) return 0 // only with a single tile; never for the 6-tile grid
+  return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
 }
 
 export class TestRun {
-  readonly targets: number[]
+  readonly count: number
+  readonly tiles: number
   readonly trials: Trial[] = []
   phase: Phase
-  private i = 0
   private wrong = 0
   private lastTile: number | null = null
+  private previous: number | null = null
+  private readonly random: () => number
 
-  constructor(targets: number[], start: number) {
-    this.targets = targets
+  constructor(count: number, tiles: number, start: number, random: () => number = Math.random) {
+    this.count = count
+    this.tiles = tiles
+    this.random = random
     this.phase = { kind: 'gap', until: start + GAP_MS }
   }
 
@@ -64,7 +63,9 @@ export class TestRun {
     if (ph.kind === 'done') return
     if (ph.kind === 'gap') {
       if (t >= ph.until) {
-        this.phase = { kind: 'prompt', target: this.targets[this.i], since: t }
+        const target = pickTarget(this.tiles, [tile, this.previous], this.random)
+        this.phase = { kind: 'prompt', target, since: t }
+        this.previous = target
         this.wrong = 0
         this.lastTile = tile
       }
@@ -81,8 +82,7 @@ export class TestRun {
 
   private finish(trial: Trial, t: number) {
     this.trials.push(trial)
-    this.i++
-    this.phase = this.i >= this.targets.length ? { kind: 'done' } : { kind: 'gap', until: t + GAP_MS }
+    this.phase = this.trials.length >= this.count ? { kind: 'done' } : { kind: 'gap', until: t + GAP_MS }
   }
 }
 

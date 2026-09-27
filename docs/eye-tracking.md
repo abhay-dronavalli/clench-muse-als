@@ -104,7 +104,15 @@ tracker connected" notice instead.
 The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns the front camera.
 
 - Page to shell: `window.ClenchNative` (an Android `JavascriptInterface`, `web/src/facetrack/native.ts`):
-  `gazeActive()`, `calibrate(person)`, `person()`, `gazeFilter()`, `setGazeFilter(on)`.
+  `gazeActive()`, `setPointingMode(mode)`, `calibrate(person)`, `person()`, `gazeFilter()`,
+  `setGazeFilter(on)`.
+- The tracker runs only while the page asks for it: the board calls `setPointingMode` with the Core's
+  pointing mode whenever SETTINGS arrive (so never before "Click to start"), and `/gaze-test` calls
+  it with `gaze` for the gaze source and `off` otherwise. Auto, Webcam and Gaze start the tracker;
+  Scan, Head tilt and `off` stop it and give the camera back. Every page load resets it to off. In a
+  camera mode the call claims the camera before it returns (`gazeActive()` is true at once), so the
+  render that follows never opens the camera for the head.
+- The board's red "Camera on" light also shows while the shell's tracker has the camera.
 - Shell to page: `window.clenchGaze.feed({ x, y, found, confidence, state })` about 30 times a second,
   with `x`, `y` already fractions of the WebView (the shell subtracts the WebView's position on the
   screen and divides by its size). `state` is Eyedid's tracking state (`SUCCESS`, `GAZE_MISSING`,
@@ -134,7 +142,9 @@ tablet shell can load it too). It needs no Core.
   wrong highlights on the way, blinks. Kept per person in this browser, with JSON and CSV export.
   A person passes with a run at 90% or better; the goal is three of the four of us, with the tablet
   mounted at a fixed distance.
-- Settings: One Euro on/off and its parameters, the Eyedid SDK filter (tablet only), the hold, the
+- Targets are picked when each prompt starts, never the tile highlighted at that moment (after a
+  miss the highlight can rest anywhere) nor the previous target, so no hit is free.
+- Settings (locked during a run, so a run has one set of settings): One Euro on/off and its parameters, the Eyedid SDK filter (tablet only), the hold, the
   sticky margin (this page only), and the dwell ring. The board uses the same gaze settings.
 
 Without a tracker, a simulated eye in the browser console checks the page:
