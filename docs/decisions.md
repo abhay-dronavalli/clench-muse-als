@@ -788,3 +788,7 @@ choices below are Taher's.
   to the requested fallback behavior; new tests cover the loss/recovery path and stale selection.
   Exact SETTINGS fixtures now include the announced `onboarding: false` value.
 
+
+- The board now starts in English (`lang: en` in `data/profile.yaml`; it was Spanish for Luis). Spanish
+  stays one tap away (the dev panel's EN/ES) and fully supported; the Spanish help-alert test now asks
+  for Spanish explicitly instead of relying on the profile.
