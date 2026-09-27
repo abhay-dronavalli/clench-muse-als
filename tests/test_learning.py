@@ -368,7 +368,7 @@ def test_learning_setting_switches_day1_mode_live(menu, profile, db, loop):
     assert learned != YAML_HOME and learned[0] == "suggested" and learned[-1] == "other"
 
     s.handle(Settings(pointing_mode="auto", scan_ms=1000, learning=False))
-    assert Settings(pointing_mode="auto", scan_ms=1000, lang="en", speak_picks=True, learning=False, long_clench_ms=2500, tile_switch_margin=0.05, muse_enabled=False, trip=False, trip_layout="car") in sent
+    assert Settings(pointing_mode="auto", scan_ms=1000, lang="en", speak_picks=True, learning=False, long_clench_ms=2500, tile_switch_margin=0.05, muse_enabled=False, onboarding=False, trip=False, trip_layout="car") in sent
     assert [t.id for t in last_screen(sent).tiles] == YAML_HOME  # back home, menu.yaml order
     assert not s.suggester.use_history
 

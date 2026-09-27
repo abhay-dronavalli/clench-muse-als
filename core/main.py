@@ -316,8 +316,8 @@ def create_app(
                     profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')
                 hub.broadcast(app.state.sensor_signal)
                 session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
-            if role == 'board' and hub.count('board') == 0 and session.muse_enabled:
-                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+            if role == 'board' and hub.count('board') == 0 and (session.muse_enabled or session.onboarding):
+                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False, onboarding=False)))
             if role == "board" and hub.count("board") == 0 and session.face_ok:
                 log.info("last board disconnected: no webcam face any more")
                 session.handle(FaceOk(ok=False))

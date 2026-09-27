@@ -9,7 +9,9 @@ import com.google.android.filament.Skybox
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.SceneView
 import io.github.sceneview.node.CubeNode
+import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.ModelNode
+import io.github.sceneview.node.Node
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.concurrent.thread
@@ -48,6 +50,10 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private var seconds = 0f // scene time, for the clouds' own drift
     private var shift = 0f // horizontal lens shift: the car in the right half in the split layout
     private var shiftTarget = CAR_SHIFT
+    private var preview = false
+    private val lookOrbit = LookOrbit()
+    private var lookX = 0.5f
+    private var lookSeenAt = 0L
 
     private class Effect(
         val action: String,
@@ -89,6 +95,54 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         shiftTarget = if (mode == "split") SPLIT_SHIFT else CAR_SHIFT
     }
 
+    /**
+     * The onboarding's preview: just the car, on a soft light platform against a plain light backdrop.
+     * Out of it (the app itself) the car drives through its world again: road, grass, trees, sky.
+     */
+    fun setPreview(on: Boolean) {
+        preview = on
+        lookSeenAt = 0L
+        if (on) clearEffect()
+        applyLook()
+    }
+
+    private val daySky by lazy { Skybox.Builder().color(0.42f, 0.64f, 0.92f, 1f).build(view.engine) }
+    private val plainBackdrop by lazy { Skybox.Builder().color(0.80f, 0.86f, 0.88f, 1f).build(view.engine) }
+    private val stage = mutableListOf<Node>()
+
+    /** The world for the app, the platform for the preview. */
+    private fun applyLook() {
+        view.scene.skybox = if (preview) plainBackdrop else daySky
+        world?.setVisible(!preview)
+        stage.forEach { it.isVisible = preview; it.childNodes.forEach { c -> c.isVisible = preview } }
+    }
+
+    /** A soft round platform under the car and a darker oval under its body (preview only). */
+    private fun buildStage() {
+        val engine = view.engine
+        val platform = CylinderNode(engine, 1.1f, 0.01f, Float3(0f, ground - 0.005f, 0f), 64, stageColor("platform", 226, 232, 234))
+        val shadow = Node(engine).apply {
+            position = Float3(0f, ground + 0.0005f, 0f)
+            scale = Float3(1f, 1f, 0.5f)
+            addChildNode(CylinderNode(engine, 0.6f, 0.002f, Float3(0f, 0f, 0f), 48, stageColor("shadow", 188, 196, 200)))
+        }
+        listOf(platform, shadow).forEach {
+            view.addChildNode(it)
+            stage += it
+        }
+    }
+
+    private fun stageColor(key: String, r: Int, g: Int, b: Int): MaterialInstance = materials.getOrPut(key) {
+        view.materialLoader.createColorInstance(Color.rgb(r, g, b), 0f, 0.95f, 0.05f)
+    }
+
+    fun look(x: Float, found: Boolean) {
+        if (found && x.isFinite()) {
+            lookX = x
+            lookSeenAt = System.nanoTime()
+        } else lookSeenAt = 0L
+    }
+
     /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
     fun setSpeed(mph: Int) {
         speedTarget = (mph / CRUISE_MPH).coerceIn(0f, 2f)
@@ -118,6 +172,8 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private fun buildWorld() {
         built = true
         world = CarWorld(view, ground, seed)
+        buildStage()
+        applyLook()
     }
 
     private fun load() {
@@ -169,6 +225,14 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         if (!shown) return
         val dt = if (lastNanos == 0L) 0f else ((nanos - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = nanos
+        if (preview) {
+            val angle = lookOrbit.update(lookX, nanos - lookSeenAt < 500_000_000L, dt)
+            val (x, y, z) = CarMotion.orbit(angle, 1.9f, 0.45f)
+            view.cameraNode.setShift(0.0, 0.0)
+            view.cameraNode.position = Float3(x, y, z)
+            view.cameraNode.lookAt(Float3(0f, CAR_LIFT, 0f))
+            return // parked world, upright model; only camera yaw changes during setup
+        }
         // Cruising, or stopped for Pull over; always eased, never a jolt.
         val target = if (nanos < stillUntilNanos) 0f else 1f
         drive += (target - drive) * (1f - exp(-dt / DRIVE_EASE_S))
