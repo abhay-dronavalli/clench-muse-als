@@ -6,6 +6,15 @@
     <!-- Eyedid authenticates its license key over the network; the board loads from the laptop. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- The Muse 2 over Bluetooth LE (com.clench.eyetrack.muse), only when MUSE_PROFILE is set. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 and older: the legacy Bluetooth permissions, and location to scan. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
     <application
         android:name=".EyeTrackApp"
         android:label="Clench Eye Track"

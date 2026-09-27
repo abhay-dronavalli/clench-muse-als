@@ -337,6 +337,12 @@ def create_app(
         log.info("head range saved: %s", head_range.model_dump())
         return head_range
 
+    @app.get("/api/time")
+    async def get_time() -> dict[str, float]:
+        """The Core's clock, for a sensor on another device (the tablet) to stamp gestures with:
+        refuse_reason drops any gesture more than a second off this clock."""
+        return {"t": time.time()}
+
     @app.get("/api/sensor")
     async def get_sensor() -> dict[str, object]:
         return app.state.sensor_service.status()

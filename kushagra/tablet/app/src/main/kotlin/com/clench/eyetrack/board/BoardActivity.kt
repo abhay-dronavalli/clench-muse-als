@@ -30,6 +30,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import camp.visual.eyedid.gazetracker.metrics.state.TrackingState
 import com.clench.eyetrack.BuildConfig
 import com.clench.eyetrack.board.GazeMath.Frac
+import com.clench.eyetrack.muse.ClenchProfile
+import com.clench.eyetrack.muse.MuseSensor
 
 /**
  * The patient board in a WebView (BOARD_URL, by default http://localhost:5173/ through
@@ -45,6 +47,8 @@ import com.clench.eyetrack.board.GazeMath.Frac
  *   - Gaze goes to the page as fractions of the WebView, about 30 times a second.
  *   - Calibration: five points on a native screen, saved per person and reloaded at start, then
  *     checked with one target; a miss asks to recalibrate.
+ *   - With MUSE_PROFILE set, the Muse 2 connects to the tablet over Bluetooth and its clenches go to
+ *     the Core's /ws/sensor (com.clench.eyetrack.muse.MuseSensor), in place of the laptop's sensor.
  */
 class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
@@ -72,6 +76,13 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) gaze.fail("camera permission denied") else reconcile()
+        startMuse() // after the camera prompt, so the two prompts never overlap
+    }
+
+    private var muse: MuseSensor? = null
+
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.all { it }) startMuse() else Log.w(TAG, "Muse: Bluetooth permission denied; the tablet will not read the headband")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -141,7 +152,31 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         web.loadUrl(BuildConfig.BOARD_URL)
         // Ask for the camera now, so the prompt does not interrupt the person later. The tracker itself
         // starts only when the page's pointing mode needs it.
-        if (!hasCamera()) cameraPermission.launch(Manifest.permission.CAMERA)
+        if (!hasCamera()) cameraPermission.launch(Manifest.permission.CAMERA) else startMuse()
+    }
+
+    private val bluetoothPermissions =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+    /** The Muse on the tablet, if this build names a calibration profile (MUSE_PROFILE). */
+    private fun startMuse() {
+        if (muse != null || destroyed || BuildConfig.MUSE_PROFILE.isEmpty()) return
+        val missing = bluetoothPermissions.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) return bluetoothPermission.launch(missing.toTypedArray())
+        val profile = try {
+            ClenchProfile(BuildConfig.MUSE_PROFILE, BuildConfig.MUSE_EMG_REST, BuildConfig.MUSE_EMG_THRESHOLD,
+                BuildConfig.MUSE_EMG_PEAK.takeIf { it.isFinite() })
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Muse: profile ${BuildConfig.MUSE_PROFILE} is unusable: ${e.message}")
+            return
+        }
+        val origin = android.net.Uri.parse(BuildConfig.BOARD_URL).let { "${it.scheme}://${it.encodedAuthority}" }
+        muse = MuseSensor(applicationContext, profile, origin, BuildConfig.MUSE_NAME.ifEmpty { null }, BuildConfig.MUSE_MOTION_LIMIT)
+            .also { it.start() }
     }
 
     private fun hasCamera() =
@@ -173,6 +208,8 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     override fun onDestroy() {
         destroyed = true
+        muse?.stop()
+        muse = null
         gaze.release()
         web.destroy()
         super.onDestroy()
