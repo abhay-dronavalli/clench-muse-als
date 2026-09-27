@@ -654,3 +654,24 @@ Muse gestures to control all of Windows, not only the board tab.
   Closing the board does not pause Muse while an agent is in charge. The agent gets SCREEN (only
   to draw the help countdown), SETTINGS and ACTION_RESULT, and never CONFIRM, SPEAK or audio; the
   board tab still speaks.
+- Chunks 2 to 4 (the agent and Eyedid), 2026-09-27:
+  - **No C++ after all.** `eyedid_core.dll` exports a plain C API, so `desktop/eyedid/worker.py`
+    calls it through ctypes in its own process (crash isolation kept) and speaks JSON lines. The
+    camera millimetres to pixels transform copies the SDK wrapper's `makeCameraToDisplayConverter`
+    and is tested against it. The SDK prints its own log to stdout; the worker moves fd 1 to stderr
+    and keeps a private copy of stdout for the protocol.
+  - The worker opens the camera with DirectShow first (Media Foundation took 12 s to open here). A
+    NaN or -1001 coordinate from the SDK is sent as null.
+  - `PySide6-Essentials` is pinned below 6.9: this repo's venv is built on Anaconda's Python, which
+    loads its own MSVC runtime (14.42) first, and PySide6 6.11 needs 14.44 ("DLL load failed ...
+    procedure could not be found"). 6.8.3 works.
+  - Snap rule: sure when d2 - d1 >= 8 mm and d2 >= 1.5 x d1 (the plan's ratio-with-slack rule
+    called a button 6 px from its neighbour "sure", well inside the tracker's error).
+  - A palette of six big tiles in the middle of the screen, opened from a "Clench" tab on the right
+    edge, replaces the planned dock column (it would cover the scrollbars of maximized windows).
+  - Keys: F8 (tap CLENCH, hold LONG_CLENCH, timed at the press), F9 DOUBLE_BLINK, F7 calibrate,
+    F10 pause, Ctrl+F8 switch target. Global and swallowed; injected keys are ignored.
+  - The agent re-asks for the desktop target after every Core reconnect until the person switches
+    to the board, so a Core restart does not silently leave the gestures on a hidden board.
+  - Calibration: five dots, 1 s settle each (as on the tablet), saved per person with the screen's
+    size; a calibration for another screen is not loaded. The check dot is left for chunk 5.
