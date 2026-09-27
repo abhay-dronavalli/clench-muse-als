@@ -18,6 +18,7 @@ dist/
 !.env.example
 
 # Local data
+data/browser-profile/
 data/recordings/*.csv
 test/recordings/*.csv
 *.sqlite3

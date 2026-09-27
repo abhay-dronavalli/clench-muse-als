@@ -11,7 +11,7 @@ function statusText(s: TrackerStatus): string {
     case 'starting':
       return 'starting camera…'
     case 'on':
-      return `tracking (${s.delegate})`
+      return window.clenchTransport ? 'tracking (board camera)' : `tracking (${s.delegate})`
     case 'error':
       return `camera problem: ${s.problem}`
   }
@@ -55,7 +55,8 @@ export function CameraPreview({ onRetry }: { onRetry: () => void }) {
       </div>
       {on && (
         <div className="mt-1 flex items-start gap-2">
-          <video ref={video} autoPlay muted playsInline className="h-24 w-32 -scale-x-100 rounded bg-black object-cover" />
+          {window.clenchTransport ? <p className="w-32 text-xs text-zinc-400">Camera preview stays on the board.</p> :
+            <video ref={video} autoPlay muted playsInline className="h-24 w-32 -scale-x-100 rounded bg-black object-cover" />}
           <div className="font-mono text-xs leading-5 text-zinc-300">
             {pose?.face ? (
               <>

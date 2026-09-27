@@ -2,6 +2,11 @@
   "_about": "A simulated week of use for the 'it learns him' demo (PRD section 9, 'Showing it in the demo'). Patterns, not timestamps: scripts/seed_demo.py --load turns them into 7 days of events ending now, in both languages by default (--lang both|es|en). Each pattern is a leaf of data/menu.yaml (path), with its exact phrase in English and Spanish, action and contact (checked against the menu at load time), the hours of the day it is usually said (one use per listed hour on each chosen day, at a random minute) and on how many of the 7 days. The pattern with focus=true is the one --focus-hour ties to the demo hour. We say plainly in the demo that this week is simulated.",
   "patient": "Luis",
   "days": 7,
+  "computer_searches": [
+    {"site": "youtube", "query_es": "Celia Cruz", "query_en": "Celia Cruz", "hour": 19, "days": 7},
+    {"site": "youtube", "query_es": "boleros", "query_en": "classic boleros", "hour": 20, "days": 4},
+    {"site": "youtube", "query_es": "noticias Univision", "query_en": "Miami news", "hour": 9, "days": 3}
+  ],
   "patterns": [
     {
       "name": "breakfast hunger",
@@ -34,11 +39,11 @@
       "days_per_week": 3
     },
     {
-      "name": "TV at night",
-      "path": "room.tv.on",
-      "phrase_en": "Please turn on the TV.",
-      "phrase_es": "Por favor, prende la televisión.",
-      "action": "room_control",
+      "name": "Tired at night",
+      "path": "feel.tired",
+      "phrase_en": "I'm tired. I'd like to rest.",
+      "phrase_es": "Tengo sueño. Quiero descansar.",
+      "action": "speak",
       "contact": null,
       "hours": [20],
       "days_per_week": 5

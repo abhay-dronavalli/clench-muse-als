@@ -26,6 +26,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from core.contracts import Lang
+from core.computer.search import clean_query
 
 MAX_SENTENCES = 3
 MAX_OPTIONS = 5
@@ -47,6 +48,39 @@ class SuggestContext:
     recent_messages: tuple[str, ...] = ()  # last 5 confirmed sentences in `lang`, newest first
     contacts: tuple[str, ...] = ()  # first names of the contacts, in `lang`
     shown: tuple[str, ...] = ()  # labels / sentences already on screen: never repeat these
+
+
+@dataclass(frozen=True)
+class SearchContext:
+    site: str
+    lang: Lang
+    hour: int
+    patient_name: str
+    recent_searches: tuple[str, ...] = ()
+    top_phrases: tuple[str, ...] = ()
+    shown: tuple[str, ...] = ()
+
+
+class SearchSuggestions(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    queries: list[str]
+
+    @field_validator("queries", mode="before")
+    @classmethod
+    def _clean(cls, values):
+        if not isinstance(values, list):
+            raise ValueError("queries must be a list")
+        out, seen = [], set()
+        for value in values:
+            query = clean_query(value)
+            if query and query.casefold() not in seen:
+                out.append(query)
+                seen.add(query.casefold())
+        return out[:5]
+
+
+class SearchSuggestionsSchema(BaseModel):
+    queries: list[str]
 
 
 def text_key(text: str) -> str:
@@ -249,6 +283,8 @@ class BundleSchema(BaseModel):
 class LLMProvider(Protocol):
     name: str
     model: str
+
+    async def search_suggestions(self, ctx: SearchContext) -> SearchSuggestions: ...
 
     async def compose(self, ctx: SuggestContext) -> Sentences:
         """Up to 3 short first-person sentences for ctx.path. Raises on any failure."""

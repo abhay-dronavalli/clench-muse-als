@@ -20,7 +20,7 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'computer'
 export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
@@ -104,6 +104,58 @@ export interface Point {
 export interface FaceOk {
   type: 'FACE_OK'
   ok: boolean
+}
+
+export interface ComputerTile {
+  id: string
+  label: string
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+export interface ComputerState {
+  type: 'COMPUTER_STATE'
+  active: boolean
+  seq: number
+  tiles: ComputerTile[]
+  highlight: number | null
+  paused: boolean
+  pointer: ActivePointer
+}
+
+export interface ComputerPoint {
+  type: 'COMPUTER_POINT'
+  seq: number
+  tile: number | null
+  source: 'webcam' | 'gaze'
+  found: boolean
+  status: 'tracking' | 'no_tracker' | 'lost' | 'camera_error' | 'starting' | 'off'
+  t: number
+  pick?: boolean
+}
+
+export interface ComputerTelemetry {
+  type: 'COMPUTER_TELEMETRY'
+  x: number | null
+  y: number | null
+  show_cursor: boolean
+  dwell: boolean
+  progress: number
+  camera: 'on' | 'off' | 'starting' | 'error'
+  yaw: number | null
+  pitch: number | null
+  eye_connected: boolean
+  head_range: HeadRange | null
+  voice_source: string | null
+}
+
+export interface ComputerControl {
+  type: 'COMPUTER_CONTROL'
+  action: 'cursor' | 'dwell' | 'retry' | 'calibrate' | 'calibration_done' | 'head_range'
+  value?: boolean
+  head_range?: HeadRange
 }
 
 // --- Board -> Core ---
@@ -346,6 +398,10 @@ export type Message =
   | Signal
   | Point
   | FaceOk
+  | ComputerState
+  | ComputerPoint
+  | ComputerTelemetry
+  | ComputerControl
   | Ready
   | Reset
   | AudioDone

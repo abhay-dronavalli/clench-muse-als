@@ -1,0 +1,68 @@
+id: room
+label_en: Room
+label_es: Cuarto
+children:
+- id: tv
+  label_en: TV
+  label_es: Televisión
+  children:
+  - id: 'on'
+    label_en: 'On'
+    label_es: Prender
+    phrase_en: Please turn on the TV.
+    phrase_es: Por favor, prende la televisión.
+    action: room_control
+  - id: 'off'
+    label_en: 'Off'
+    label_es: Apagar
+    phrase_en: Please turn off the TV.
+    phrase_es: Por favor, apaga la televisión.
+    action: room_control
+- id: lights
+  label_en: Lights
+  label_es: Luces
+  children:
+  - id: 'on'
+    label_en: 'On'
+    label_es: Prender
+    phrase_en: Please turn on the lights.
+    phrase_es: Por favor, prende la luz.
+    action: room_control
+  - id: 'off'
+    label_en: 'Off'
+    label_es: Apagar
+    phrase_en: Please turn off the lights.
+    phrase_es: Por favor, apaga la luz.
+    action: room_control
+- id: music
+  label_en: Music
+  label_es: Música
+  children:
+  - id: play
+    label_en: Play
+    label_es: Poner
+    phrase_en: Please play some music.
+    phrase_es: Por favor, pon música.
+    action: room_control
+  - id: stop
+    label_en: Stop
+    label_es: Quitar
+    phrase_en: Please stop the music.
+    phrase_es: Por favor, quita la música.
+    action: room_control
+- id: blinds
+  label_en: Blinds
+  label_es: Persianas
+  children:
+  - id: open
+    label_en: Open
+    label_es: Abrir
+    phrase_en: Please open the blinds.
+    phrase_es: Por favor, abre las persianas.
+    action: room_control
+  - id: close
+    label_en: Close
+    label_es: Cerrar
+    phrase_en: Please close the blinds.
+    phrase_es: Por favor, cierra las persianas.
+    action: room_control

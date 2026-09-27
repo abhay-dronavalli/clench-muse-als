@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen, ComputerState } from '../contracts'
+import { useComputerPointing } from '../facetrack/useComputerPointing'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
-import { loadHeadRange } from '../facetrack/headRange'
+import { loadHeadRange, saveHeadRange } from '../facetrack/headRange'
+import { tracker } from '../facetrack/tracker'
 import {
   CameraLight,
   CameraNotice,
@@ -16,7 +18,7 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
-import { gazeTuning } from '../facetrack/stores'
+import { gazeTuning, showCursor } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
@@ -33,6 +35,7 @@ type View =
   | { kind: 'confirm'; confirm: Confirm }
   | { kind: 'speaking'; text: string }
   | { kind: 'help'; countdown: number }
+  | { kind: 'computer' }
 
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
@@ -50,6 +53,8 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
+  const [computer, setComputer] = useState<ComputerState | null>(null)
+  const computerShown = useRef<ComputerState | null>(null)
   const [view, setViewState] = useState<View>({ kind: 'waiting' })
   // What is on screen as of the last Core message, updated synchronously (not after a render), so
   // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
@@ -64,6 +69,7 @@ export default function BoardPage() {
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  const [computerCalibrating, setComputerCalibrating] = useState(false)
   // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
   const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
@@ -78,9 +84,23 @@ export default function BoardPage() {
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
+      case 'COMPUTER_STATE':
+        computerShown.current = msg
+        setComputer(msg)
+        if (!msg.active) setComputerCalibrating(false)
+        break
+      case 'COMPUTER_CONTROL':
+        if (msg.action === 'cursor') showCursor.set(!!msg.value)
+        if (msg.action === 'dwell') gazeTuning.set({ ...gazeTuning.get(), dwell: !!msg.value })
+        if (msg.action === 'retry') void tracker.start()
+        if (msg.action === 'calibrate') setComputerCalibrating(true)
+        if (msg.action === 'calibration_done') setComputerCalibrating(false)
+        if (msg.action === 'head_range' && msg.head_range) void saveHeadRange(msg.head_range).then(setRange).catch(console.error)
+        break
       case 'SCREEN':
         setLang(msg.lang)
         if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
+        else if (msg.screen === 'computer') setView({ kind: 'computer' })
         else setView({ kind: 'menu', screen: msg })
         break
       case 'CONFIRM':
@@ -171,6 +191,12 @@ export default function BoardPage() {
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
   usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
+  useComputerPointing({ state: computer, mode, connected, send, range: range ?? DEFAULT_RANGE,
+    savedRange: range, voiceSource, paused: calibrating || computerCalibrating, margin, pick: (seq, tile) => {
+      const current = computerShown.current
+      if (!current?.active || current.seq !== seq || current.paused || shown.current.kind !== 'computer') return false
+      return send({ type: 'COMPUTER_POINT', seq, tile, source: 'gaze', found: true, status: 'tracking', t: Date.now()/1000, pick: true })
+    } })
 
   const start = () => {
     unlockSpeech()
@@ -211,6 +237,17 @@ export default function BoardPage() {
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       {connected && backPrompt && view.kind !== 'help' && (
         <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />
+      )}
+      {connected && view.kind === 'computer' && (
+        <main className="flex flex-1 flex-col items-center justify-center gap-6 px-12 text-center">
+          <h1 className="text-6xl font-semibold">{lang === 'es' ? 'Modo computadora' : 'Computer mode'}</h1>
+          <p className="max-w-3xl text-3xl text-zinc-300">
+            {lang === 'es' ? 'El navegador está abierto. Mantén la mandíbula apretada para pedir ayuda.' :
+              'The browser is open. Hold a clench to call for help.'}
+          </p>
+          <p className="text-2xl text-zinc-400">{lang === 'es' ? 'Menú del navegador → Salir para volver.' :
+            'Browser menu → Exit to return.'}</p>
+        </main>
       )}
       <ToastStack toasts={toasts} />
       <MusePanel />

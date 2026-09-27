@@ -11,6 +11,7 @@ dependencies = [
     "python-dotenv",
     "httpx",
     "google-genai>=2.25.0",
+    "playwright>=1.55,<2",
 ]
 
 [dependency-groups]
