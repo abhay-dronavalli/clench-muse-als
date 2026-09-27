@@ -8,8 +8,9 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * How the trip screen's 3D car moves, as plain maths (no Android, unit tested): the idle sway, the
- * camera's short push toward the car, and each control's line particles. CarScene applies it to
+ * How the trip screen's 3D car scene moves, as plain maths (no Android, unit tested): the world
+ * scrolling past the parked car (so it looks like driving), the camera's slow circle around it, the
+ * short push toward the car on a control, and each control's line particles. CarScene applies it to
  * SceneView nodes every frame.
  *
  * Motion rules (some riders have sensory or vestibular sensitivity): everything eases in and out, no
@@ -25,9 +26,9 @@ object CarMotion {
     /** One particle line: where its middle is, how long it is (0 = not drawn), and how it leans. */
     data class Line(val x: Float, val y: Float, val z: Float, val length: Float, val tiltDeg: Float = 0f)
 
-    const val SWAY_DEG = 4f // idle sway either side of the resting angle
-    const val SWAY_PERIOD_S = 9.0
-    const val REST_YAW_DEG = -32f // a three-quarter view
+    const val DRIVE_SPEED = 1.4f // units (car lengths) per second the road and trees move past
+    const val ORBIT_PERIOD_S = 45.0 // one slow lap of the camera around the car
+    const val ORBIT_START_DEG = 35.0 // a front three-quarter view to begin with
     private const val LINE_LENGTH = 0.11f
 
     fun smooth(t: Float): Float {
@@ -38,9 +39,20 @@ object CarMotion {
     /** 0 -> 1 -> 0 over u in 0..1, zero slope at both ends (a line grows and shrinks, never pops). */
     fun bump(u: Float): Float = if (u <= 0f || u >= 1f) 0f else (0.5f - 0.5f * cos(2 * PI.toFloat() * u))
 
-    /** The idle sway around the resting angle, degrees; `amount` 0..1 (0 = still, for Pull over). */
-    fun yaw(seconds: Double, amount: Float): Float =
-        REST_YAW_DEG + SWAY_DEG * amount * sin(2 * PI * seconds / SWAY_PERIOD_S).toFloat()
+    /**
+     * Where a scenery piece placed at `base` is after the world has moved `travel` backwards, wrapped
+     * into [-span/2, span/2): pieces leaving behind the car come back in far ahead (out of sight).
+     */
+    fun wrap(base: Float, travel: Float, span: Float): Float {
+        val x = (base - travel + span / 2) % span
+        return (if (x < 0) x + span else x) - span / 2
+    }
+
+    /** The camera on its circle: x, y, z for orbit angle `degrees` (0 = straight out the car's side). */
+    fun orbit(degrees: Double, radius: Float, height: Float): Triple<Float, Float, Float> {
+        val a = Math.toRadians(degrees)
+        return Triple((radius * sin(a)).toFloat(), height, (radius * cos(a)).toFloat())
+    }
 
     /**
      * How far the camera moves toward the car at `progress` 0..1 of a control's sequence (units; the

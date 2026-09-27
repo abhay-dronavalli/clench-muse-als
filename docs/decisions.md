@@ -660,6 +660,13 @@ choices below are Taher's.
   full screen, framed in the page's car area. 2.3.0 because it is built with Kotlin 2.0 (the app is on
   Kotlin 2.1); SceneView 4.x needs Kotlin 2.4. The page drives it over the bridge (`carScene`,
   `carEffect`); in a normal browser the car area shows a soft placeholder.
+- Look (follow-up): the trip screen is light themed (white status strip and tiles, amber highlight,
+  copper for Pull over). The car drives through a simple daytime world: sky, grass, a road with lane
+  dashes, and trees on both sides. The car stays put while the dashes and trees move past and wrap
+  around, and the camera circles the car once every 45 s (instead of the car swaying). Pull over eases
+  the scenery and the camera to a stop. Trees stand back beyond the camera's circle so none can come
+  between the camera and the car; the camera frames the car at about 17-35% down the screen, above the
+  tiles, with a band of sky at the top (checked on the Tab S9 Ultra).
 - Motion (CarMotion, unit tested): a slow idle sway, a small camera push toward the car, and plain
   line particles per control (windows trace the door up or down, warm lines rise and spread, cool lines
   settle, music pulses outward in three beats). Every line grows from and shrinks to nothing; no

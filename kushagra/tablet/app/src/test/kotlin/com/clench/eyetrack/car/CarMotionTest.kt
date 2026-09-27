@@ -60,9 +60,23 @@ class CarMotionTest {
     }
 
     @Test
-    fun stillMeansStill() {
-        assertEquals(CarMotion.REST_YAW_DEG, CarMotion.yaw(2.3, amount = 0f), 1e-6f)
-        val swing = (0..90).map { CarMotion.yaw(it / 10.0, 1f) }
-        assertTrue(swing.max() - swing.min() <= 2 * CarMotion.SWAY_DEG + 1e-3f)
+    fun sceneryWrapsAroundAndKeepsItsSpacing() {
+        val span = 10f
+        for (travel in listOf(0f, 3.3f, 9.99f, 57.2f)) {
+            val xs = (0 until 10).map { CarMotion.wrap(-5f + it, travel, span) }
+            assertTrue(xs.all { it >= -span / 2 && it < span / 2 })
+            val sorted = xs.sorted()
+            sorted.zipWithNext().forEach { (a, b) -> assertEquals(1f, b - a, 1e-3f) } // even spacing, none lost
+        }
+        // Moving forward: a piece drifts backwards (toward -x) a frame at a time.
+        assertTrue(CarMotion.wrap(0f, 0.1f, span) < CarMotion.wrap(0f, 0f, span))
+    }
+
+    @Test
+    fun theCameraCircleKeepsItsDistance() {
+        for (deg in listOf(0.0, 35.0, 90.0, 200.0)) {
+            val (x, _, z) = CarMotion.orbit(deg, 2f, 0.5f)
+            assertEquals(2f, kotlin.math.sqrt(x * x + z * z), 1e-4f)
+        }
     }
 }
