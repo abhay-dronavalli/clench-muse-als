@@ -206,3 +206,13 @@ def test_serves_cached_audio_only(tmp_path):
         assert health["voice"] == "browser speech (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID missing)"
         assert health["speak_picks"] is True
         assert health["learning"] is True and health["jev"] == "off"
+
+
+def test_api_time_is_the_cores_clock_for_a_sensor_on_another_device():
+    """The tablet's Muse sensor stamps gestures on this clock (the Core refuses any over 1 s off)."""
+    import time
+
+    with make_client(FakeClock()) as client:
+        before = time.time()
+        t = client.get("/api/time").json()["t"]
+        assert before <= t <= time.time()

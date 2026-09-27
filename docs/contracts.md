@@ -34,6 +34,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 |---|---|
 | `GET /api/head-range` | the saved head range (HeadRange below), or `null` before the first calibration (the board then uses its defaults) |
 | `PUT /api/head-range` | save a HeadRange from the calibration overlay; answers with it. 422 when the sides are not around the center |
+| `GET /api/time` | `{"t": <epoch seconds>}`, the Core's clock. A sensor on another device (the tablet) stamps gestures on it, since the Core refuses any gesture more than a second off its own clock |
 | `GET /audio/<sha256>.mp3` | cached ElevenLabs audio named in PLAY_AUDIO |
 
 | Message | Sender | Receiver | Meaning |
