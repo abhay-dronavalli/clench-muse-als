@@ -719,3 +719,25 @@ choices below are Taher's.
   an arrow moving along it with the ride's progress. No dragging or zooming. If the script, the key or
   the route fails, the drawn map takes over. Not yet run with a real key.
 
+## 22. Onboarding: eyes, headband, a test clench (branch muse-on-android)
+
+- "Click to start" opens a short onboarding (`web/src/board/Onboarding.tsx`; the Dev panel's Run setup
+  opens it again), styled as a calm ride welcome with a teal accent. Ride-themed but without any
+  company's name or logo. Steps: (1) the eye tracker's calibration (the shell's own five targets,
+  started with `ClenchNative.calibrate`; the tracker is switched to Auto pointing first if it was off),
+  (2) the headband: connect with the saved profile (no Muse calibration here: the tablet's built-in
+  profile, or the laptop sensor's newest `test/calibration.*.json`), wait for a live signal with every
+  sensor touching for 2 s, (3) one test clench. Every step can be skipped.
+- The test clench is recognised from the Core's input log (INPUT_EVENT) while Muse input is still
+  paused, so it never picks anything on the board. Muse input is switched on only when the clench has
+  worked and the rider presses Finish.
+- The shell holds its own startup "not calibrated yet" prompt back while the onboarding runs
+  (`ClenchNative.setOnboarding`).
+- Calibration targets are large and high-contrast (teal disc, white centre, a ring that fills) on a
+  light backdrop, and the calibration area is inset (8% of the screen, at least the target's size) so
+  no target is drawn off the edge. If the SDK refuses the inset area it falls back to the whole
+  screen (logged).
+- Fix (not onboarding code): `ClenchNative.calibrate` never calibrated. Inside the bridge class, the
+  bare `calibrate(...)` call resolved to the bridge method itself, so it re-posted itself to the main
+  thread forever. It now calls the activity's method explicitly.
+
