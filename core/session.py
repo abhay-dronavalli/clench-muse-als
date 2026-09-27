@@ -524,7 +524,20 @@ class Session:
     def _on_tap(self, msg: Tap) -> None:
         """A touch on the board: a CLENCH aimed at one tile (or at the confirm card). Everything a
         CLENCH must pass (debounce, the go-back prompt's aftermath) applies; the help countdown and the
-        go-back prompt ignore taps, so a stray touch can neither cancel help nor answer the prompt."""
+        go-back prompt ignore tile taps, so a stray touch can neither cancel help nor answer the prompt.
+        Their large Cancel / Stay here buttons send TAP `cancel`: a deliberate touch, so nothing depends
+        on blinks (the tablet has no DOUBLE_BLINK yet)."""
+        if msg.cancel and self.state is SessionState.HELP_COUNTDOWN:
+            log.info("TAP on Cancel: the help countdown is cancelled")
+            self._cancel_help()
+            return
+        if msg.cancel and self._back is not None:
+            log.info("TAP on Stay here: the go-back prompt is closed, staying")
+            kind = self._back
+            self._close_back()
+            if kind == "menu" and self.state is SessionState.SCANNING:
+                self._resume()
+            return
         if self._back is not None:
             log.info("TAP ignored: the go-back prompt is open (a clench answers it)")
             return
@@ -1133,6 +1146,9 @@ class Session:
         """Trip mode on or off. A new trip starts a fresh (mock) ride. While scanning, the board switches
         screens at once (first tile); otherwise (confirming, speaking, help) it applies from the next screen."""
         log.info("trip mode %s", "on: the trip screen" if self.trip else "off: the menus" + (" (the ride goes on)" if self.ride_active else " (ride ended)"))
+        if self.trip:
+            # Car mode always opens in Split (decisions #30); switching to Car lasts until Car mode is left.
+            self.trip_layout = "split"
         if self.trip and self.ride_active:
             self._emit(self.car_link.state())  # back to the ride under way
         elif self.trip:

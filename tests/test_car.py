@@ -191,3 +191,26 @@ def test_scan_reaches_the_corner_and_help_works_in_car_mode(in_trip, sched, sent
     assert last_screen(sent).highlight == len(screen.tiles)  # the corner, after the grid
     in_trip.handle(LongClench(t=0.0, duration=2.5))
     assert in_trip.state is SessionState.HELP_COUNTDOWN
+
+
+# --- touch fallbacks for blinks (the tablet has no DOUBLE_BLINK yet) ---------------------------------
+
+
+def test_the_help_countdown_is_cancelled_only_by_the_explicit_cancel_touch(in_trip, sched, sent):
+    in_trip.handle(LongClench(t=0.0, duration=2.5))
+    assert in_trip.state is SessionState.HELP_COUNTDOWN
+    screen = in_trip.current_view()
+    in_trip.handle(Tap(tile=0, seq=getattr(screen, "seq", 0) or 0, t=0.0))  # a stray tile touch: ignored
+    assert in_trip.state is SessionState.HELP_COUNTDOWN
+    in_trip.handle(Tap(tile=None, seq=None, cancel=True, t=0.0))  # the large Cancel button
+    assert in_trip.state is SessionState.SCANNING
+
+
+def test_the_go_back_prompt_is_dismissed_by_the_stay_touch(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Comfort")
+    settle(sched)
+    in_trip.handle(DoubleBlink(t=0.0))  # the go-back prompt opens
+    assert in_trip._back is not None
+    in_trip.handle(Tap(tile=None, seq=None, cancel=True, t=0.0))  # Stay here
+    assert in_trip._back is None
+    assert [t.label for t in last_screen(sent).tiles][0] == "Cooler"  # still on Comfort
