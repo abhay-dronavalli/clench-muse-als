@@ -23,7 +23,8 @@ import { STRINGS } from './strings'
  * eases to a stop. No flashing anywhere: every change is a slow opacity or scale transition.
  */
 
-const TRIP_LAYOUTS: TripLayout[] = ['car', 'split', 'map']
+// The layout switch offers Car and Split (Map is off the switch; the Core still accepts it).
+const TRIP_LAYOUTS: TripLayout[] = ['car', 'split']
 const COPPER = 'rgba(192, 90, 44, 0.16)' // the pull-over tint: warm rust, low contrast
 // In a browser (no 3D scene behind the page): a soft sky-to-grass backdrop in its place.
 const BROWSER_BACKDROP = 'bg-[linear-gradient(to_bottom,#b9d9f4_0%,#e4f1fb_30%,#d3ebc8_45%,#a4d18f_100%)]'
@@ -69,16 +70,16 @@ function Telemetry({
         </div>
         {item(s.volume, car ? `${car.volume}/10` : dash)}
       </div>
-      <div className="flex shrink-0 flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-4">
         {TRIP_LAYOUTS.map((l) => (
           <button
             key={l}
             type="button"
             onClick={() => onLayout(l)}
             aria-pressed={l === layout}
-            className={`min-h-18 rounded-2xl px-4 py-4 text-3xl font-semibold leading-tight transition-colors focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#007a72] ${l === layout ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-800 ring-1 ring-black/10 hover:bg-zinc-200'}`}
+            className={`min-h-32 rounded-3xl px-4 py-6 text-5xl font-bold leading-tight transition-colors focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#007a72] ${l === layout ? 'bg-zinc-900 text-white ring-8 ring-amber-500' : 'bg-zinc-100 text-zinc-800 ring-2 ring-black/15 hover:bg-zinc-200'}`}
           >
-            {s.layout[l]}
+            {l === layout ? `✓ ${s.layout[l]}` : s.layout[l]}
           </button>
         ))}
       </div>
