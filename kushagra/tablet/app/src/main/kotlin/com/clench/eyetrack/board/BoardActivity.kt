@@ -353,6 +353,10 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             main.post { if (!destroyed) car.setSpeed(mph) }
         }
 
+        @JavascriptInterface fun carLayout(mode: String) {
+            main.post { if (!destroyed) car.setLayout(mode) }
+        }
+
         @JavascriptInterface fun museAvailable(): Boolean = BuildConfig.MUSE_PROFILE.isNotEmpty()
 
         @JavascriptInterface fun museStatus(): String = museStatusJson()

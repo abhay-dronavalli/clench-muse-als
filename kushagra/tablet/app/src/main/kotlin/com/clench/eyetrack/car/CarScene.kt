@@ -9,10 +9,7 @@ import com.google.android.filament.Skybox
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.SceneView
 import io.github.sceneview.node.CubeNode
-import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.ModelNode
-import io.github.sceneview.node.Node
-import io.github.sceneview.node.SphereNode
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.concurrent.thread
@@ -21,8 +18,8 @@ import kotlin.math.max
 
 /**
  * The trip screen's 3D car (SceneView / Filament), drawn full screen behind the transparent board
- * WebView. A daytime drive: sky, grass, a road with lane dashes, trees. The car stays put facing down
- * the road while the dashes and trees move past it and wrap around (it looks like driving), and the
+ * WebView. A daytime drive through a random world (CarWorld / WorldPlan). The car stays put facing down
+ * the road while the world moves past it and wraps around (it looks like driving), and the
  * camera makes one slow circle around the car every 45 s. The page (web/src/board/trip.tsx) drives it
  * through ClenchNative.carScene(on) and carEffect(action, ms) (CAR_ACTION); the maths is CarMotion.
  *
@@ -46,9 +43,11 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private var shown = false
     private var built = false
 
-    /** A piece of scenery that moves past: its node, its place at travel 0, and its fixed y / z. */
-    private class Mover(val node: Node, val baseX: Float, val y: Float, val z: Float, val span: Float)
-    private val movers = mutableListOf<Mover>()
+    private var world: CarWorld? = null
+    private val seed = System.nanoTime() // a different world every time the app starts
+    private var seconds = 0f // scene time, for the clouds' own drift
+    private var shift = 0f // horizontal lens shift: the car in the right half in the split layout
+    private var shiftTarget = 0f
 
     private class Effect(
         val action: String,
@@ -81,6 +80,14 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         if (on && car == null && !loading) load() // the world follows once the car's size is known
     }
 
+    /**
+     * The page's trip layout: "car" (the car centred), "split" (the map on the left: the car slides into
+     * the right half), "map" (the map covers the car's area; the scene still shows below it).
+     */
+    fun setLayout(mode: String) {
+        shiftTarget = if (mode == "split") SPLIT_SHIFT else 0f
+    }
+
     /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
     fun setSpeed(mph: Int) {
         speedTarget = (mph / CRUISE_MPH).coerceIn(0f, 2f)
@@ -109,41 +116,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
 
     private fun buildWorld() {
         built = true
-        val g = ground
-        val engine = view.engine
-        // Grass to the horizon, and the road along x (the car drives in the right-hand lane, at z = 0).
-        view.addChildNode(CubeNode(engine, Float3(80f, 0.02f, 80f), Float3(0f, g - 0.011f, 0f), color("grass", 96, 164, 78)))
-        view.addChildNode(CubeNode(engine, Float3(80f, 0.004f, ROAD_WIDTH), Float3(0f, g + 0.001f, ROAD_Z), color("road", 70, 72, 78)))
-        for (edge in listOf(ROAD_Z - ROAD_WIDTH / 2 + 0.03f, ROAD_Z + ROAD_WIDTH / 2 - 0.03f)) {
-            view.addChildNode(CubeNode(engine, Float3(80f, 0.005f, 0.018f), Float3(0f, g + 0.002f, edge), color("paint", 240, 240, 235)))
-        }
-        // Lane dashes and trees move past; each set wraps over its own span.
-        val dashSpan = DASHES * DASH_GAP
-        repeat(DASHES) { i ->
-            val node = CubeNode(engine, Float3(0.3f, 0.005f, 0.022f), Float3(0f, 0f, 0f), color("paint", 240, 240, 235))
-            addMover(node, -dashSpan / 2 + i * DASH_GAP, g + 0.002f, ROAD_Z, dashSpan)
-        }
-        val treeSpan = TREES * TREE_GAP
-        repeat(TREES) { i ->
-            // Both sides, set back at slightly different distances so the rows do not look planted.
-            val side = if (i % 2 == 0) 1f else -1f
-            // Set back beyond the camera's circle, so a tree never comes between the camera and the car.
-            val setback = TREE_SETBACK + 0.6f * ((i * 7) % 5) / 4f
-            val z = if (side > 0) ROAD_Z + ROAD_WIDTH / 2 + setback else ROAD_Z - ROAD_WIDTH / 2 - setback
-            val tree = Node(engine)
-            val trunkH = 0.22f + 0.06f * ((i * 3) % 4) / 3f
-            tree.addChildNode(CylinderNode(engine, 0.025f, trunkH, Float3(0f, trunkH / 2, 0f), 10, color("trunk", 110, 78, 52)))
-            val canopy = 0.15f + 0.05f * ((i * 5) % 3) / 2f
-            val leaf = if (i % 3 == 0) color("leaf2", 64, 128, 60) else color("leaf", 52, 112, 58)
-            tree.addChildNode(SphereNode(engine, canopy, Float3(0f, trunkH + canopy * 0.8f, 0f), 14, 18, leaf))
-            addMover(tree, -treeSpan / 2 + i * TREE_GAP + 0.3f * side, g, z, treeSpan)
-        }
-    }
-
-    private fun addMover(node: Node, baseX: Float, y: Float, z: Float, span: Float) {
-        node.position = Float3(baseX, y, z)
-        view.addChildNode(node)
-        movers += Mover(node, baseX, y, z, span)
+        world = CarWorld(view, ground, seed)
     }
 
     private fun load() {
@@ -201,7 +174,10 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         speed += (speedTarget - speed) * (1f - exp(-dt / SPEED_EASE_S))
         travel += CarMotion.DRIVE_SPEED * speed * drive * dt
         orbitDeg += 360.0 / CarMotion.ORBIT_PERIOD_S * drive * dt
-        for (m in movers) m.node.position = Float3(CarMotion.wrap(m.baseX, travel, m.span), m.y, m.z)
+        seconds += dt
+        world?.update(travel, seconds)
+        shift += (shiftTarget - shift) * (1f - exp(-dt / LAYOUT_EASE_S))
+        view.cameraNode.setShift(shift.toDouble(), 0.0)
 
         val e = effect
         var push = 0f
@@ -265,13 +241,8 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         private const val SPEED_EASE_S = 1.2f // how gently the scenery follows a new speed
         private const val CRUISE_MPH = 32f // the scenery's DRIVE_SPEED is this speed
         private const val CAR_LIFT = 0.006f // tyres on the road's surface (its top is ~0.0045 above ground)
-        private const val ROAD_WIDTH = 1.15f
-        private const val ROAD_Z = -0.29f // the car (z = 0) is in the right-hand lane
-        private const val DASHES = 24
-        private const val DASH_GAP = 0.75f
-        private const val TREES = 22
-        private const val TREE_GAP = 1.1f
-        private const val TREE_SETBACK = 2.6f // from the road's edge; the camera circles at 2.3
+        private const val SPLIT_SHIFT = 0.3f // lens shift that centres the car in the right half (measured on the tablet)
+        private const val LAYOUT_EASE_S = 0.4f
         // The camera circles a little above the car, looking gently down at LOOK_Y below it: a band of
         // sky at the top, the horizon near 15% down, and the car at about 17-35% down the screen, above
         // the tiles (which start near 40%) and never cut off.
