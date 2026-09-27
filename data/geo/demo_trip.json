@@ -1,0 +1,1520 @@
+{
+ "generated_at": "2026-09-27T09:58:33+00:00",
+ "attribution": [
+  "© OpenStreetMap contributors (ODbL)",
+  "USGS 3D Elevation Program (public domain)"
+ ],
+ "duration_note": "Drive times are OSRM free-flow estimates from OpenStreetMap road speeds, without live traffic.",
+ "dropoff": {
+  "destination": "Miami-Dade College Kendall Campus, Jack Kassewitz Building, 11011 SW 104th St, Miami, FL 33176",
+  "destination_point": {
+   "latitude": 25.6754083,
+   "longitude": -80.3724577
+  },
+  "radius_m": 150.0,
+  "candidates": [
+   {
+    "id": "d0773075",
+    "rank": 1,
+    "score": 98.0,
+    "stop": {
+     "latitude": 25.6754736,
+     "longitude": -80.372058
+    },
+    "entrance": {
+     "latitude": 25.6754635,
+     "longitude": -80.3722555
+    },
+    "heading_to_entrance_deg": 266.8,
+    "entrance_osm_id": 9156556625,
+    "entrance_kind": "main",
+    "road_osm_id": 867343966,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 19.9,
+    "walk_kind": "step-free path",
+    "walk_polyline": "uvu{CjtpiN???B?D?B@X??",
+    "slope": {
+     "max_grade_pct": 2.0,
+     "avg_grade_pct": 1.8,
+     "climb_m": 0.35,
+     "length_m": 19.8,
+     "samples": 5,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156556625"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 2.0% / avg 1.8% over 19.8 m of the walk (5 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 0.9,
+      "used": 0.9,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways, with a ramp (OSM way 991007975, incline=down)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 9156549571, 2 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1020167163) 0 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.94,
+      "used": 0.94,
+      "weight": 2.0,
+      "evidence": "20 m along mapped footways"
+     }
+    ],
+    "unknown": [],
+    "description": "Main entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 2.0%), ramp on a step-free path, lowered curb, sidewalk, quiet road, short walk"
+   },
+   {
+    "id": "98e170ad",
+    "rank": 2,
+    "score": 92.9,
+    "stop": {
+     "latitude": 25.6752504,
+     "longitude": -80.3719702
+    },
+    "entrance": {
+     "latitude": 25.6754635,
+     "longitude": -80.3722555
+    },
+    "heading_to_entrance_deg": 309.7,
+    "entrance_osm_id": 9156556625,
+    "entrance_kind": "main",
+    "road_osm_id": 1264203246,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 52.8,
+    "walk_kind": "step-free path",
+    "walk_polyline": "iuu{CxspiN?AG@A??EE?AHADABCBEBKD?B@X??",
+    "slope": {
+     "max_grade_pct": 1.3,
+     "avg_grade_pct": 0.6,
+     "climb_m": 0.36,
+     "length_m": 48.2,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156556625"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.3% / avg 0.6% over 48.2 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 0.9,
+      "used": 0.9,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways, with a ramp (OSM way 991007975, incline=down)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 9978565513, 4 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1089322898) 1 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.53,
+      "used": 0.53,
+      "weight": 2.0,
+      "evidence": "53 m along mapped footways"
+     }
+    ],
+    "unknown": [],
+    "description": "Main entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.3%), ramp on a step-free path, lowered curb, sidewalk, quiet road"
+   },
+   {
+    "id": "68843bd1",
+    "rank": 3,
+    "score": 88.8,
+    "stop": {
+     "latitude": 25.6752105,
+     "longitude": -80.3715206
+    },
+    "entrance": {
+     "latitude": 25.6754635,
+     "longitude": -80.3722555
+    },
+    "heading_to_entrance_deg": 290.9,
+    "entrance_osm_id": 9156556625,
+    "entrance_kind": "main",
+    "road_osm_id": 1264203250,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 202.8,
+    "walk_kind": "step-free path",
+    "walk_polyline": "auu{C~ppiN\\A?GAW?GAEA[o@@?F@R?F?DBrBE?AHADABCBEBKD?B@X??",
+    "slope": {
+     "max_grade_pct": 1.7,
+     "avg_grade_pct": 0.4,
+     "climb_m": 0.51,
+     "length_m": 189.6,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156556625"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.7% / avg 0.4% over 189.6 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 0.9,
+      "used": 0.9,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways, with a ramp (OSM way 991007975, incline=down)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=flush on OSM node 9156556525, 17 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 991007941) 12 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "203 m along mapped footways"
+     }
+    ],
+    "unknown": [],
+    "description": "Main entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.7%), ramp on a step-free path, lowered curb, sidewalk, quiet road, long walk"
+   },
+   {
+    "id": "420eca12",
+    "rank": 4,
+    "score": 81.2,
+    "stop": {
+     "latitude": 25.6756572,
+     "longitude": -80.3716253
+    },
+    "entrance": {
+     "latitude": 25.6755782,
+     "longitude": -80.3722615
+    },
+    "heading_to_entrance_deg": 262.2,
+    "entrance_osm_id": 9156556627,
+    "entrance_kind": "yes",
+    "road_osm_id": 867343964,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 80.8,
+    "walk_kind": "step-free path",
+    "walk_polyline": "{wu{CtqpiNK?A??D@^?N?DC??D?J^h@?D??",
+    "slope": {
+     "max_grade_pct": 2.3,
+     "avg_grade_pct": 1.4,
+     "climb_m": 1.1,
+     "length_m": 77.6,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156556627"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 2.3% / avg 1.4% over 77.6 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 0.9,
+      "used": 0.9,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways, with a ramp (OSM way 1090247865, incline=down)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=flush on OSM node 13121472104, 6 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1427339773) 6 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "81 m along mapped footways"
+     }
+    ],
+    "unknown": [],
+    "description": "Entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, gentle slope (max 2.3%), ramp on a step-free path, lowered curb, sidewalk, quiet road, long walk"
+   },
+   {
+    "id": "6c06f9c6",
+    "rank": 5,
+    "score": 79.4,
+    "stop": {
+     "latitude": 25.674529,
+     "longitude": -80.3723092
+    },
+    "entrance": {
+     "latitude": 25.6750575,
+     "longitude": -80.3724334
+    },
+    "heading_to_entrance_deg": 348.0,
+    "entrance_osm_id": 9156612516,
+    "entrance_kind": "yes",
+    "road_osm_id": 1089322908,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 202.1,
+    "walk_kind": "step-free path",
+    "walk_polyline": "ypu{C|upiNNE?Ja@@c@@BlBK@JAAu@Ak@E?M@_@???",
+    "slope": {
+     "max_grade_pct": 1.1,
+     "avg_grade_pct": 0.3,
+     "climb_m": 0.37,
+     "length_m": 171.2,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156612516"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.1% / avg 0.3% over 171.2 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1368603735) 4 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "202 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.1%), step-free path, sidewalk, quiet road, long walk; unknown: curb"
+   },
+   {
+    "id": "4962f93a",
+    "rank": 6,
+    "score": 78.1,
+    "stop": {
+     "latitude": 25.6760876,
+     "longitude": -80.372285
+    },
+    "entrance": {
+     "latitude": 25.6759718,
+     "longitude": -80.3722815
+    },
+    "heading_to_entrance_deg": 178.4,
+    "entrance_osm_id": 9156662415,
+    "entrance_kind": "yes",
+    "road_osm_id": 1092508474,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 12.9,
+    "walk_kind": "step-free path",
+    "walk_polyline": "qzu{CxupiNVA??",
+    "slope": {
+     "max_grade_pct": 6.1,
+     "avg_grade_pct": 6.1,
+     "climb_m": 0.83,
+     "length_m": 12.9,
+     "samples": 4,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156662415"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.4,
+      "used": 0.4,
+      "weight": 3.0,
+      "evidence": "max 6.1% / avg 6.1% over 12.9 m of the walk (4 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 991021948) 13 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "13 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, step-free path, sidewalk, quiet road, short walk, steep slope (max 6.1%); unknown: curb"
+   },
+   {
+    "id": "41997908",
+    "rank": 7,
+    "score": 75.6,
+    "stop": {
+     "latitude": 25.6747263,
+     "longitude": -80.3720255
+    },
+    "entrance": {
+     "latitude": 25.6750575,
+     "longitude": -80.3724334
+    },
+    "heading_to_entrance_deg": 312.0,
+    "entrance_osm_id": 9156612516,
+    "entrance_kind": "yes",
+    "road_osm_id": 573282510,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 84.5,
+    "walk_kind": "step-free path",
+    "walk_polyline": "aru{CdtpiNFAAH?Bg@@?T?L?\\_@???",
+    "slope": {
+     "max_grade_pct": 5.5,
+     "avg_grade_pct": 1.6,
+     "climb_m": 1.17,
+     "length_m": 75.6,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156612516"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.4,
+      "used": 0.4,
+      "weight": 3.0,
+      "evidence": "max 5.5% / avg 1.6% over 75.6 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 0.9,
+      "used": 0.9,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways, with a ramp (OSM way 1559322011, incline=down)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 9978565494, 6 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1089322903) 4 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "84 m along mapped footways"
+     }
+    ],
+    "unknown": [],
+    "description": "Entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, ramp on a step-free path, lowered curb, sidewalk, quiet road, steep slope (max 5.5%), long walk"
+   },
+   {
+    "id": "5888a59d",
+    "rank": 8,
+    "score": 69.4,
+    "stop": {
+     "latitude": 25.6762531,
+     "longitude": -80.3721053
+    },
+    "entrance": {
+     "latitude": 25.6759718,
+     "longitude": -80.3722815
+    },
+    "heading_to_entrance_deg": 209.4,
+    "entrance_osm_id": 9156662415,
+    "entrance_kind": "yes",
+    "road_osm_id": 573287243,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 216.7,
+    "walk_kind": "step-free path",
+    "walk_polyline": "q{u{CttpiNZKAc@AsAA]?C?EXA?F@d@?D?DBhB?@@h@??",
+    "slope": {
+     "max_grade_pct": 4.6,
+     "avg_grade_pct": 1.0,
+     "climb_m": 1.42,
+     "length_m": 208.9,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 9156662415"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 4.6% / avg 1.0% over 208.9 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": null,
+      "used": 0.3,
+      "weight": 1.0,
+      "evidence": "road has no sidewalk tag and no footway is mapped nearby"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "217 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "curb",
+     "sidewalk"
+    ],
+    "description": "Entrance, Jack Kassewitz Building (I)(9) from service road",
+    "reason": "Wheelchair-accessible entrance, gentle slope (max 4.6%), step-free path, quiet road, long walk; unknown: curb, sidewalk"
+   }
+  ],
+  "request": {
+   "request_id": "dropoff-d0773075",
+   "point": {
+    "latitude": 25.6754736,
+    "longitude": -80.372058
+   },
+   "description": "Main entrance, Jack Kassewitz Building (I)(9) from service road",
+   "reason": "Wheelchair-accessible entrance, flat (max 2.0%), ramp on a step-free path, lowered curb, sidewalk, quiet road, short walk",
+   "fallback_point": {
+    "latitude": 25.6752504,
+    "longitude": -80.3719702
+   }
+  },
+  "osm_fetched_at": "2026-09-27T09:23:32+00:00",
+  "notes": []
+ },
+ "ride": {
+  "pickup": "FIU Modesto A. Maidique Campus, 11200 SW 8th St, Miami, FL 33199",
+  "destination": "Miami-Dade College Kendall Campus, Jack Kassewitz Building, 11011 SW 104th St, Miami, FL 33176 (drop-off: Main entrance, Jack Kassewitz Building (I)(9) from service road)",
+  "pickup_point": {
+   "latitude": 25.7553898,
+   "longitude": -80.3762833
+  },
+  "destination_point": {
+   "latitude": 25.6754736,
+   "longitude": -80.372058
+  },
+  "routes": [
+   {
+    "id": "route-1",
+    "label": "Fastest and smoothest",
+    "duration_s": 980.5,
+    "distance_m": 10482.8,
+    "summary": "Southwest 17th Street, Southwest 107th Avenue",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??M?I?C?SBU@MBM@KPy@F]HGBGDGDC@AFEFCHCDCB?DMDCDEBGDI@I@G@G?EA_CAqAAgB?c@?KAMAMAKCKAIEMAEEK_@aAa@}@O]GQEICMCMCQCK?MAO@S@M@MFWBOHWHWFQDW@QBQ?Q?QASCQESEOGQIOKQIKKMMIWUJQd@q@^q@J_@BCHSJe@Fa@BS@S@sB@g@@OlDK~@Cj@Cj@C`AGVAlAEzEKlCGfCGtCG`ACFAV?ZOJ?D?j@@B?L?P?V?D?P?`@?l@?f@?N?r@?`@?R?L?dA?bA@H?lC@lA?z@ApC?jA?j@?P?H?R?r@?b@?V?fA?L?n@?T@T?dG@lA?fA@j@?P?F?`A?v@?X?hA?dB?fA?t@?d@@B?P?hA?r@?R?\\?b@?p@?J?X?J?x@?P?F?V?^?J?FAT?xACx@CF?ZARAn@A~ACfAChEIzBEl@Cd@AlBE@?J?f@Ad@An@AfAAlBEhAClBExAC`AC\\AdACh@Ah@AnAAxBGvBEhAEvAAvAErBC~@Cv@AhCGbACbACbAAdACdAC`ACj@A`@AH?ZAR?DAR?TAPH@?lCE|DI~DIvACz@AlCIjFIx@CpCE|BGD?TAZ?\\AlHOtACp@ApBEhCGtACx@CtAAv@Ct@C|ACP?D?PA`@AB?dACP?r@CF?J?VAJ?H?bA?r@AzBCL?V?vBC~CCxCAVAT?jIEpA?H?x@AbAA^?p@?v@AtCEP?z@?|@Ar@A`BAN?N?fAAjAATAV?@?tA?f@Ad@?|@ArAAtB?`@?ZAJ?n@?pAAD?TA^?VAH?T?T?D?N?T@N@L@L@RBF@L@RDJBJBJBLBFBHBJBFBFBHDNFTLPHRLPLRNJHHHPNFFDFNN\\`@BBNNZ\\RPJHFFHDDBJHPJPJPJD@LFTHPHHBHBHBJBF@PDXFNBRBT@TBR@J?L?LGLAL?J?TAT?VAZ?TAXA^?VArACJ?@?LAj@AR?^AR?VAbBErACv@A~AEpACRHb@A`BER?JAdAAd@A@PHzG@xA@P?V?ZB~@?H?N@b@@h@@P?L@R?R@|A@F?@@B?@@@@@@@LBB@B@B?",
+    "sharp_turns": 7,
+    "climb_m": 6.6,
+    "steepest_grade_pct": 1.6,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 19,
+    "stop_signs": 6,
+    "traffic_calming": 4,
+    "traffic_calming_kinds": {
+     "hump": 4
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 99.8,
+    "bridge_m": 40.0,
+    "comfort_cost": 27.67,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533841,
+       "longitude": -80.3779016
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7536736,
+       "longitude": -80.3704918
+      },
+      "detail": "88° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7529827,
+       "longitude": -80.3682105
+      },
+      "detail": "79° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6758052,
+       "longitude": -80.3679285
+      },
+      "detail": "87° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6756409,
+       "longitude": -80.3719563
+      },
+      "detail": "67° left"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533618,
+       "longitude": -80.3775602
+      },
+      "detail": "traffic_calming=hump (OSM node 99208952)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7534028,
+       "longitude": -80.3724227
+      },
+      "detail": "traffic_calming=hump (OSM node 99208963)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533835,
+       "longitude": -80.3729633
+      },
+      "detail": "traffic_calming=hump (OSM node 4176910166)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7531386,
+       "longitude": -80.3696161
+      },
+      "detail": "traffic_calming=hump (OSM node 4777156734)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535565,
+       "longitude": -80.3705955
+      },
+      "detail": "OSM node 4777156739"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6757045,
+       "longitude": -80.3705652
+      },
+      "detail": "OSM node 9156549540"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6756741,
+       "longitude": -80.3711722
+      },
+      "detail": "OSM node 9566047541"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6757281,
+       "longitude": -80.3698902
+      },
+      "detail": "OSM node 9621921339"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7469394,
+       "longitude": -80.367797
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7465457,
+       "longitude": -80.367714
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7395756,
+       "longitude": -80.367735
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7325644,
+       "longitude": -80.367773
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7321457,
+       "longitude": -80.3677639
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7227049,
+       "longitude": -80.3672859
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7156464,
+       "longitude": -80.3669149
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7152772,
+       "longitude": -80.3669506
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7084102,
+       "longitude": -80.3666018
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7022694,
+       "longitude": -80.3662887
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7012538,
+       "longitude": -80.3662318
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6972275,
+       "longitude": -80.3661329
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6904624,
+       "longitude": -80.365985
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6871798,
+       "longitude": -80.365928
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6841363,
+       "longitude": -80.3671224
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6837741,
+       "longitude": -80.3674832
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6827688,
+       "longitude": -80.3680618
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6794051,
+       "longitude": -80.3680615
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6759812,
+       "longitude": -80.3679376
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   },
+   {
+    "id": "route-2",
+    "label": "Alternative",
+    "duration_s": 1063.1,
+    "distance_m": 12762.2,
+    "summary": "Southwest 117th Avenue, Homestead Extension of Florida's Turnpike",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??L?F?B@L@L@JBNDRPx@Pv@BT@F@P@N?R?PATCTCRETGRGPYv@O\\ENYr@GNGRGRCNCNAJAJ?LAL@N?Z?Z?VA`@?Z?NAN?T@r@?r@@zD?D?Rd@ArBEtDGpLO`CEnCED?rC?xDKT?tCEtCAnAEp@A~IKjHKR?b@ArIMVAV?zDGRAlFItAAvEMrACV?n@AbFGb@AH?hACtBEF?R??R?H@~@?tC?rA?dAOr@CFCFCDEDEFGDGDIDGBIBU?M?KAIAKCIEIEIGIIIIGKEKEKCKAIAKAI?M@M@K@KBKDKDIFIFKHIFGHEHGHCHCJCJALAv@Av@O`AA`IMdAA~IK~@?`AA`A?`A?hK@`A?`A@`AA`A?`AA`AA`ACbAA`AC~@Eb@An@Cd@ApGW~@C`AC`AE~@A`ACdAC~JOfCE~PU~@AbIGdAA`A?bA?`A?~@?`A?`A?`A@~@@|TP`A?`A?`A@bA?~@@j@?j@@r@B^B\\B\\B\\BVBh@Fh@Hh@Jj@Jh@Lh@Lh@Nh@Nh@Pf@Rf@Rf@Rd@Tf@Xd@Vd@Xd@Xd@XdS~LnBnAd@Xd@Xf@Vf@Tr@Vp@Vv@Tz@Tr@N\\X^HrATvAVTFTDRFRFRHRHRJRJPJPLPLNLPNNLpAnAPLPLPJPHPF\\J\\HTBVGV@V?R?NALAPCHCDALCHCDCDEBEDG@E@IAwAA{@CmBEmEC_CAkB?S?]C}@?m@Ac@AkAAi@?[Aw@?YAQAs@?G?YAc@A[AgAAiA?]A}@Ao@A_AAMAiB?I?EAS?a@CeB?_@As@Am@EwDA_BAQC{BAgB?OCqBCqB?GA[N?F?TAN?f@ANALAhACXALAD?PAx@A^AXAz@?z@CN?VAbAEn@AJAL?LAJAZ?VAVAV?V?RAX@PAP?p@A`@A`AATAT?VAZAt@ADAP?LAH?xAENBL?R?^AtA?P?RIAgBGeE?W?m@?M@OD[BWBU@WBY?M@O?O?O?c@AUAWCWK}@CGKm@Qk@m@gBCKCMAK?K?K@M?K@K@GBGBG@EBGBGDEBGHIHIJIJGJCFELCLA\\Al@ApEI`CGf@?fBEJA?ZB~@?H?N@b@@h@@P?L@R?R@|A@F?@@B?@@@@@@@LBB@B@B?",
+    "sharp_turns": 10,
+    "climb_m": 31.1,
+    "steepest_grade_pct": 4.8,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 12,
+    "stop_signs": 9,
+    "traffic_calming": 7,
+    "traffic_calming_kinds": {
+     "hump": 3,
+     "table": 4
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 99.7,
+    "bridge_m": 330.0,
+    "comfort_cost": 36.07,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533837,
+       "longitude": -80.3779204
+      },
+      "detail": "80° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7537759,
+       "longitude": -80.3842359
+      },
+      "detail": "91° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7321291,
+       "longitude": -80.3833686
+      },
+      "detail": "87° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6861646,
+       "longitude": -80.3910056
+      },
+      "detail": "66° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6865333,
+       "longitude": -80.376519
+      },
+      "detail": "86° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6787713,
+       "longitude": -80.3761319
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6757207,
+       "longitude": -80.3701124
+      },
+      "detail": "88° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6756408,
+       "longitude": -80.3719569
+      },
+      "detail": "67° left"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.753214,
+       "longitude": -80.3787071
+      },
+      "detail": "traffic_calming=hump (OSM node 5022513450)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7537814,
+       "longitude": -80.3820726
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585765)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.75379,
+       "longitude": -80.3823801
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585766)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6757045,
+       "longitude": -80.3705652
+      },
+      "detail": "OSM node 9156549540"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6756741,
+       "longitude": -80.3711722
+      },
+      "detail": "OSM node 9566047541"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.675775,
+       "longitude": -80.3701074
+      },
+      "detail": "OSM node 9569992546"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6765023,
+       "longitude": -80.3701453
+      },
+      "detail": "traffic_calming=table (OSM node 9703107110)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6782015,
+       "longitude": -80.3702314
+      },
+      "detail": "traffic_calming=table (OSM node 9703170037)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6786645,
+       "longitude": -80.3729915
+      },
+      "detail": "traffic_calming=table (OSM node 9703170065)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6787783,
+       "longitude": -80.3745971
+      },
+      "detail": "traffic_calming=table (OSM node 9703170091)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6822601,
+       "longitude": -80.3762742
+      },
+      "detail": "OSM node 9706387391"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6840169,
+       "longitude": -80.3763838
+      },
+      "detail": "OSM node 9779811186"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6789183,
+       "longitude": -80.3761632
+      },
+      "detail": "OSM node 10080009258"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7537875,
+       "longitude": -80.3815888
+      },
+      "detail": "OSM node 12535191670"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.753779,
+       "longitude": -80.3841127
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7468636,
+       "longitude": -80.383963
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7393546,
+       "longitude": -80.383679
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7348392,
+       "longitude": -80.383466
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7322686,
+       "longitude": -80.38336
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6863774,
+       "longitude": -80.3911121
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6861961,
+       "longitude": -80.3873561
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6862382,
+       "longitude": -80.3860059
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6862774,
+       "longitude": -80.3848928
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6863711,
+       "longitude": -80.3820593
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6865413,
+       "longitude": -80.3766921
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6804451,
+       "longitude": -80.3761964
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   }
+  ],
+  "fastest_id": "route-1",
+  "smoothest_id": "route-1",
+  "tiles": [
+   {
+    "route_id": "route-1",
+    "kind": "fastest_and_smoothest",
+    "label": "Fastest and smoothest, 16 min",
+    "detail": "7 sharp turns, 19 traffic lights, 6 stop signs, 4 speed bumps",
+    "ride_profile": {
+     "route_preference": "ROUTE_PREFERENCE_SMOOTHEST",
+     "uses_wheelchair": true,
+     "needs_extra_boarding_time": true
+    }
+   },
+   {
+    "route_id": "route-2",
+    "kind": "alternative",
+    "label": "Via Homestead Extension of Florida's Turnpike, 18 min",
+    "detail": "7 fewer traffic lights, but 3 more speed bumps, 3 more sharp turns, 3 more stop signs",
+    "ride_profile": null
+   }
+  ],
+  "osm_fetched_at": "2026-09-27T09:32:09+00:00",
+  "notes": []
+ },
+ "notes": []
+}

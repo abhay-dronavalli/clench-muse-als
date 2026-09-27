@@ -267,7 +267,9 @@ def test_switching_modes_live_mid_screen(menu, profile, sched, sent):
     session.handle(settings("scan"))
     assert last_screen(sent).pointer == "scan" and session.highlight == 5
     sched.advance(SCAN_S)
-    assert session.highlight == 0  # scanning on from tile 5, wrapping
+    assert session.highlight == 6  # scanning on from tile 5: the Car mode corner
+    sched.advance(SCAN_S)
+    assert session.highlight == 0  # then wrapping
 
     session.handle(settings("auto"))
     session.handle(FaceOk(ok=True))
@@ -392,7 +394,8 @@ def test_last_board_leaving_counts_as_face_lost():
 
 def test_gaze_follows_gaze_points_only(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent, mode="gaze")
-    assert last_screen(sent).pointer == "gaze"
+    assert last_screen(sent).pointer == "scan"
+    session.handle(FaceOk(ok=True))
     point(session, 3, source="gaze")
     assert last_screen(sent).highlight == 3
     point(session, 1, source="webcam")  # the head does not drive Gaze mode
@@ -404,6 +407,7 @@ def test_gaze_follows_gaze_points_only(menu, profile, sched, sent):
 
 def test_gaze_clench_looks_back_like_webcam(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent, mode="gaze")
+    session.handle(FaceOk(ok=True))
     point(session, 2, source="gaze")
     sched.advance(1.0)
     point(session, 3, source="gaze")  # the eyes moved as the jaw clenched
@@ -431,4 +435,24 @@ def test_gaze_mode_from_settings(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent, mode="scan")
     session.handle(Settings(pointing_mode="gaze", scan_ms=1000))
     assert isinstance(session.pointer, GazePointer) and session.settings().pointing_mode == "gaze"
-    assert last_screen(sent).pointer == "gaze"
+    assert last_screen(sent).pointer == "scan"  # eyes have not been detected yet
+
+
+def test_gaze_scans_after_loss_and_recovers_without_accepting_head_points(menu, profile, sched, sent):
+    session = make_session(menu, profile, sched, sent, mode="gaze")
+    sched.advance(SCAN_S)
+    assert session.highlight == 1
+    session.handle(FaceOk(ok=True))
+    point(session, 3, source="gaze")
+    session.handle(FaceOk(ok=False))
+    sched.advance(FACE_LOST_S - 0.1)
+    assert session.pointer.source == "gaze"
+    sched.advance(0.2)
+    assert session.pointer.source == "scan"
+    sched.advance(SCAN_S)
+    assert session.highlight == 4
+    session.handle(FaceOk(ok=True))
+    point(session, 0, source="webcam")
+    assert session.pointer.source == "scan"
+    point(session, 2, source="gaze")
+    assert session.pointer.source == "gaze" and session.highlight == 2

@@ -1,0 +1,70 @@
+import type { Signal, TripLayout, ActivePointer } from '../contracts'
+import { museFresh } from '../sensor/status'
+
+export type SetupStep = 'welcome' | 'eyes' | 'band' | 'clench' | 'done'
+/** The start screen starts setup by itself after this long (a tap starts it at once, with sound). */
+export const LAUNCH_MS = 4000
+/** How long a step may take at most (a step that succeeds moves on at once). Short where nothing needs doing. */
+export const STEP_MS: Record<SetupStep, number> = { welcome: 5000, eyes: 45000, band: 30000, clench: 20000, done: 2000 }
+/** The eye calibration starts this long after the eyes step opens (time to read the instruction). */
+export const CALIBRATE_AFTER_MS = 5000
+/** A clean headband signal this long moves on to the clench test. */
+export const GOOD_SIGNAL_MS = 1000
+/** The eyes step with no eye tracker (a browser): just long enough to read why it is skipped. */
+export const NO_EYES_MS = 2000
+export const NEXT_STEP: Record<SetupStep, SetupStep | null> = { welcome: 'eyes', eyes: 'band', band: 'done', clench: 'done', done: null }
+
+export function nextSetupStep(step: SetupStep, expired: boolean, eyesFinished: boolean,
+  goodForMs: number, verifiedClench: boolean): SetupStep | 'exit' | null {
+  if (step === 'eyes' && eyesFinished) return 'band'
+  if (step === 'band' && goodForMs >= GOOD_SIGNAL_MS) return 'clench'
+  if (step === 'clench' && verifiedClench) return 'done'
+  return expired ? NEXT_STEP[step] ?? 'exit' : null
+}
+
+/** Monotonic countdown; hidden pages and blocked setup never consume time. */
+export class SetupCountdown {
+  private previous: number
+  remaining: number
+  constructor(duration: number, now: number) { this.remaining = duration; this.previous = now }
+  tick(now: number, paused: boolean): number {
+    if (!paused) this.remaining = Math.max(0, this.remaining - Math.max(0, now - this.previous))
+    this.previous = now
+    return this.remaining
+  }
+}
+
+export function signalReady(signal: Signal | null, now: number): boolean {
+  return museFresh(signal, now) && !signal?.blocked && signal?.ch.length === 4 &&
+    signal.ch.every((v) => Number.isFinite(v) && v >= 1 && v <= 200)
+}
+
+export function canEnableMuse(clenched: boolean, signal: Signal | null, now: number): boolean {
+  return clenched && signalReady(signal, now)
+}
+
+/** A scan needs the complete board. The chosen layout is retained for when pointing resumes. */
+export function effectiveTripLayout(preferred: TripLayout, pointer: ActivePointer | null): TripLayout {
+  return pointer === 'scan' ? 'car' : preferred
+}
+
+/** Pair deliberate bilateral blinks, reject stale tracking and a pair spanning different options. */
+export class SetupBlinks {
+  private first: { at: number; option: string } | null = null
+  private fired = -Infinity
+  blink(at: number, option: string, recentlySeen: boolean, bilateral: boolean): boolean {
+    if (!recentlySeen || !bilateral || at - this.fired < 1200) {
+      this.first = null
+      return false
+    }
+    const previous = this.first
+    if (previous && at - previous.at < 100) return false
+    if (previous && previous.option === option && at - previous.at <= 750) {
+      this.first = null
+      this.fired = at
+      return true
+    }
+    this.first = { at, option }
+    return false
+  }
+}

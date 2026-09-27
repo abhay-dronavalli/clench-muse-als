@@ -5,3 +5,4 @@
 /build
 /app/build
 /app/src/main/assets/face_landmarker.task
+/app/src/main/assets/*.glb

@@ -43,11 +43,36 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "READY": (contracts.Ready, {"type": "READY"}),
     "RESET": (contracts.Reset, {"type": "RESET"}),
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
+    "TAP": (contracts.Tap, {"type": "TAP", "tile": 3, "seq": 42, "cancel": False, "t": 1727300011.2}),
+    "CAR_ACTION": (contracts.CarAction, {"type": "CAR_ACTION", "action": "window_down", "window": "front_left", "ms": 900}),
+    "CAR_STATE": (
+        contracts.CarState,
+        {
+            "type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72,
+            "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4,
+            "phase": "EN_ROUTE", "music_playing": True, "on_highway": False,
+        },
+    ),
+    "CAR_RESULT": (
+        contracts.CarResult,
+        {"type": "CAR_RESULT", "request_id": "r-1", "action_id": "pull_over", "status": "DELAYED",
+         "message": "Pulling over at the next safe spot.", "expected_in_seconds": 120, "rtt_ms": 150},
+    ),
+    "CAR_LOG": (
+        contracts.CarLog,
+        {"type": "CAR_LOG", "t": 1727300011.2, "direction": "to_car", "kind": "ActionRequest",
+         "summary": "pull_over", "request_id": "r-1", "rtt_ms": None},
+    ),
+    "CAR_SIM": (
+        contracts.CarSim,
+        {"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"],
+         "timeout_s": 30, "urgent": True, "on_highway": None, "phase": None},
+    ),
     "SETTINGS": (
         contracts.Settings,
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
-            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None,
+            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None, "onboarding": None, "trip": None, "trip_layout": None,
         },
     ),
     "SCREEN": (
@@ -68,7 +93,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "path": [],
             "countdown": None,
             "loading": False,
-            "pointer": "scan",
+            "pointer": "scan", "prompt": None, "corner": None,
         },
     ),
     "CONFIRM": (

@@ -636,3 +636,376 @@ choices below are Taher's.
   answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
   sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
   unchanged and still preferred.
+- Touch on the board (new board message TAP, `docs/contracts.md`): a tap on a tile picks that tile
+  and a tap on the "Say this?" sentence confirms, each exactly as a CLENCH would (same debounce, the
+  confirm step still required; no look-back, the finger names the tile). The tablet has no keyboard
+  for the stand-in and the Muse is often off while testing. Taps are ignored while the go-back prompt
+  is open and during the help countdown, so a stray touch can neither answer the prompt nor cancel a
+  call for help; going back stays the Dev panel's Double blink (then Clench). Always on, also with a
+  mouse on the laptop.
+
+## 21. The trip screen: car controls and the 3D car (branch muse-on-android)
+
+- The communication menus are the pre-trip flow. A dev panel button (Start trip / End trip, SETTINGS
+  `trip`) switches to the trip screen: exactly six controls (Window up, Window down, Warmer, Cooler,
+  Music, Pull over), no "Other...", no ranking, fixed order so the eyes learn the places
+  (`core/trip.py`). It is a Core screen like any other, so scan, head, gaze, dwell, clench, tap and
+  help all work unchanged. A real "Start trip" tile can replace the dev button later.
+- Routine controls act as soon as they are picked, with no confirm screen (the brief: they repeat
+  often and must stay under a second). PRD D5 still holds: nothing is spoken or sent for them. The
+  Core sends CAR_ACTION and locks input for its `ms` (0.9 s; state ACTING): clenches, taps and
+  pointing are ignored so a stray clench cannot land on a tile as the others fade back. LONG_CLENCH
+  still starts the help countdown during the lock.
+- Pull over is a safety action: it opens its own confirm screen ("Pull over here?", Confirm and
+  Cancel buttons; a clench confirms, a double blink cancels through the usual go-back prompt, a tap
+  on Cancel cancels at once: TAP `cancel`). Confirmed, it says "Please pull over here." and runs a mock
+  `pull_over` action (ACTION_RESULT toast).
+- Trip events are logged but never reach the sentence history or the Suggested list
+  (`node_id` `trip.*` excluded like `help`).
+- The 3D car is drawn natively with SceneView 2.3.0 (Filament) behind the see-through board WebView,
+  full screen, framed in the page's car area. 2.3.0 because it is built with Kotlin 2.0 (the app is on
+  Kotlin 2.1); SceneView 4.x needs Kotlin 2.4. The page drives it over the bridge (`carScene`,
+  `carEffect`); in a normal browser the car area shows a soft placeholder.
+- Look (follow-up): the trip screen is light themed (white status strip and tiles, amber highlight,
+  copper for Pull over). The car drives through a simple daytime world: sky, grass, a road with lane
+  dashes, and trees on both sides. The car stays put while the dashes and trees move past and wrap
+  around, and the camera circles the car once every 45 s (instead of the car swaying). Pull over eases
+  the scenery and the camera to a stop. Trees stand back beyond the camera's circle so none can come
+  between the camera and the car; the camera frames the car at about 17-35% down the screen, above the
+  tiles, with a band of sky at the top (checked on the Tab S9 Ultra).
+- Motion (CarMotion, unit tested): the scrolling and the camera circle above, a small camera push toward the car, and plain
+  line particles per control (windows trace the door up or down, warm lines rise and spread, cool lines
+  settle, music pulses outward in three beats). Every line grows from and shrinks to nothing; no
+  flashing, no hard cuts. Pull over has no particles: the drive eases to a stop, the page takes a warm
+  copper tint, and the sequence is shorter (0.6 s).
+- The model (`kushagra/tablet/app/src/main/assets/jaguar_i-pace.glb`, 8.9 MB) is git-ignored like the
+  face model; without it the car area stays dark and the screen works the same.
+- Follow-up: the trip menu is a small tree instead of six flat controls (`core/trip.py`): Windows >
+  Up / Down > Front left, Front right, Rear left, Rear right, All windows; Temperature > Warmer /
+  Cooler; Music > Louder / Softer; Pull over (confirm); Slow down; Support (confirm, then a mock
+  `support` call: an outward action, so it confirms like messages and calls). Every level below the
+  top ends with a Back tile (touch riders have no double blink; a double blink still works). After a
+  routine control the level stays, so a control can be repeated.
+- The Core keeps a mock car (`Car` in `core/trip.py`) and sends its telemetry as CAR_STATE: speed,
+  arrival, battery, cabin temperature, each window's % open, music volume. Windows move 25% a step,
+  temperature 1°F, volume 1, Slow down takes 5 mph off (never below 10); Pull over stops the car (and
+  Slow down cannot restart it). Arrival and battery move once a minute. The tablet's scenery moves at
+  the telemetry's speed.
+- A translucent white panel rises from the bottom of the trip screen to just below the car; the tiles
+  sit on it. The car is lifted a hair so its tyres sit on the road, and the ground is placed from the
+  car's measured size.
+- Fix in `EyedidGaze` (not trip code): releasing the tracker removed its callbacks while the SDK's
+  gaze thread could still deliver a queued frame, which crashed the app (NullPointerException in
+  GazeTrackerCore) when the pointing mode switched to Scan mid-tracking. Released trackers now get
+  callbacks that ignore everything instead.
+- Trip layouts (`web/src/board/tripLayout.ts`, a Car / Split / Map switch in the telemetry strip,
+  remembered in the browser): the upper part shows the 3D car, the route map on the left with the car
+  on the right (the scene's lens shifts so the car centres in the right half), or the map alone. The
+  tiles never move between layouts, so head and gaze pointing aim at the same places.
+- The route map (`RouteMap.tsx`) is drawn and offline for now: a city of streets, parks and a river,
+  the route (driven part grey), the car and the destination. It shows the whole route when it fits the
+  box and otherwise follows the car; the car advances as arrival counts down (CAR_STATE). It keeps its
+  props so a Google Maps implementation can replace the drawing later (VITE_GOOGLE_MAPS_API_KEY).
+- The trip scene's world is random each time the app starts (`WorldPlan`, unit tested): round trees,
+  pines, cypresses, bushes, houses, flowers, rocks, clouds drifting, far hills, a sun; each piece is
+  re-rolled when it wraps around. Everything taller than a flower stands beyond the camera's circle
+  (tested over many seeds), and there is no traffic, so nothing ever sweeps between the camera and the
+  car. The panel behind the tiles is now dark smoked glass instead of white.
+- Trip layouts are a Core setting now (SETTINGS `trip_layout`, sent by the board's Car / Split / Map
+  switch on `/ws/board`), because Split changes which tiles exist: the route map takes the left half
+  of the screen and the right half shows the car above only the three most important top-level
+  controls (Windows, Pull over, Support; `SPLIT_TOP` in `core/trip.py`). The levels below stay whole.
+  Scan, gaze and clench count the Core's tiles, so this had to live in the Core, not the page.
+- The telemetry moved from a top strip to a column on the left (with the layout switch at its foot),
+  so the 3D scene gets the full height. The car's lens shift centres it in the space right of the
+  column (and in the right half for Split).
+- Google Maps (optional): with `VITE_GOOGLE_MAPS_API_KEY` in the repository's `.env` (Vite now reads
+  that one `.env`; only `VITE_` values reach the page) the map is a real Google map: the driving route
+  from `VITE_TRIP_ORIGIN` to `VITE_TRIP_DESTINATION` (Directions), the driven part in grey and the car as
+  an arrow moving along it with the ride's progress. No dragging or zooming. If the script, the key or
+  the route fails, the drawn map takes over. Not yet run with a real key.
+
+## 22. Onboarding: eyes, headband, a test clench (branch muse-on-android)
+
+- "Click to start" opens a short onboarding (`web/src/board/Onboarding.tsx`; the Dev panel's Run setup
+  opens it again), styled as a calm ride welcome with a teal accent. Ride-themed but without any
+  company's name or logo. Steps: (1) the eye tracker's calibration (the shell's own five targets,
+  started with `ClenchNative.calibrate`; the tracker is switched to Auto pointing first if it was off),
+  (2) the headband: connect with the saved profile (no Muse calibration here: the tablet's built-in
+  profile, or the laptop sensor's newest `test/calibration.*.json`), wait for a live signal with every
+  sensor touching for 2 s, (3) one test clench. Every step can be skipped.
+- The test clench is recognised from the Core's input log (INPUT_EVENT) while Muse input is still
+  paused, so it never picks anything on the board. Muse input is switched on only when the clench has
+  worked and the rider presses Finish.
+- The shell holds its own startup "not calibrated yet" prompt back while the onboarding runs
+  (`ClenchNative.setOnboarding`).
+- Calibration targets are large and high-contrast (teal disc, white centre, a ring that fills) on a
+  light backdrop, and the calibration area is inset (8% of the screen, at least the target's size) so
+  no target is drawn off the edge. If the SDK refuses the inset area it falls back to the whole
+  screen (logged).
+- Fix (not onboarding code): `ClenchNative.calibrate` never calibrated. Inside the bridge class, the
+  bare `calibrate(...)` call resolved to the bridge method itself, so it re-posted itself to the main
+  thread forever. It now calls the activity's method explicitly.
+
+## 23. Tablet layout controls and onboarding entry readability
+
+- The Kotlin board shell renders Car / Split / Map and the startup screen from the web app, so
+  these visual changes live in `web/src/board/`. Layout labels grow from 20 px to 30 px semibold,
+  with buttons at least 72 px tall and more space between them. The existing sidebar width stays
+  288 px to preserve the native car framing. Telemetry scrolls independently on short screens so
+  the three layout buttons stay visible. Selected state is also exposed with `aria-pressed`.
+- The startup screen uses onboarding's light gradient, white rounded card and teal palette. Its
+  explicit "Click to start" button uses dark teal for readable white text, with hover, pressed and
+  keyboard focus states. It still unlocks speech and opens the existing setup flow on a deliberate
+  click; clicking the surrounding background no longer starts setup.
+
+## 24. Timed eye onboarding, blink selection, and complete scan fallback
+
+- Requested follow-up: launch shows an 8 s countdown and Start now. Setup then progresses through
+  welcome (6 s), eyes (up to 45 s), headband (up to 30 s), test clench (up to 20 s when the headband
+  passed), and completion (6 s). Each step shows its countdown/progress. Touch or a deliberate
+  double blink can advance sooner; successful calibration, 2 s of clean signal, and a verified
+  clench advance their steps early. Timers pause while disconnected, during help, or when hidden.
+  Expiry skips unavailable hardware; it never declares calibration successful or enables Muse.
+  Without a compatible native eye tracker, the eye introduction lasts 6 s instead of waiting 45 s.
+- Eye setup shows the existing Jaguar I-Pace model from the tablet's 3D scene at the centre. The
+  parked car stays upright: horizontal gaze turns the camera at up to 30 degrees/s with eased
+  acceleration, fixed radius and fixed height. Centre gaze stops it; lost gaze eases to a stop.
+  Native calibration targets appear over the car and report progress to the web page. Native
+  bridge additions and compatibility behavior are in `docs/eye-tracking.md`.
+- Setup options scan every 2.2 s until gaze is available. Live gaze holds the highlight and can
+  select an option after 250 ms looking inside its button. Two bilateral blinks 100-750 ms apart
+  activate the same option; the highlight holds for 800 ms during the pair, and selection has a
+  1.2 s cooldown. A pair cannot cross steps or options, and requires eyes seen within 1.5 s.
+  Blinks select setup options only, never patient messages, calls, or safety confirmations.
+- SETTINGS gains optional `onboarding`. The Core ignores ordinary picks during setup, including
+  test clenches and taps on a hidden confirm. LONG_CLENCH and help cancellation remain available.
+  The gate clears when the last board leaves. Muse remains paused until a verified test clench and
+  fresh, unblocked contact on all four channels; the timer cannot turn it on. The keyboard stand-in
+  stays mounted for the emergency fallback.
+- Both Auto and explicit Gaze now scan before eye detection and after 3 s without tracking. Gaze
+  still accepts only gaze points. While scanning, Car layout and the six top-level trip controls
+  are shown. Split/Map remain the preference and return when pointing resumes, at the current menu
+  depth. Changes preserve the highlighted control by id and invalidate stale points/taps with seq.
+- The Android shell supplies native TTS without a browser gesture. A normal browser can auto-open
+  setup visually but still requires a tap to unlock speech; Start and setup touch interaction do
+  that. With no native shell, the preview explains that the 3D car requires the updated tablet app.
+- Tests that expected explicit Gaze never to scan, or Split to scan only three tiles, were updated
+  to the requested fallback behavior; new tests cover the loss/recovery path and stale selection.
+  Exact SETTINGS fixtures now include the announced `onboarding: false` value.
+
+
+- The board now starts in English (`lang: en` in `data/profile.yaml`; it was Spanish for Luis). Spanish
+  stays one tap away (the dev panel's EN/ES) and fully supported; the Spanish help-alert test now asks
+  for Spanish explicitly instead of relying on the profile.
+
+- Finishing the onboarding starts the ride: it turns trip mode on (the trip screen with the 3D car,
+  map and car controls). Before, it left the rider on the communication menus, which looked like the
+  old screens; they are still there with trip mode off (Dev panel End trip).
+
+- Calibration fix: the calibration area was measured on the calibration overlay, which is still 0 x 0
+  when nothing has shown it yet (the onboarding holds the startup prompt back), so the SDK refused every
+  start. The area (and the one-dot check) is now measured on the full-screen board WebView.
+- The trip scene is just the car: a soft light platform and a plain light backdrop, no road or
+  scenery (removed `CarWorld` / `WorldPlan`, and the `carSpeed` bridge that moved the scenery). The
+  camera still circles; the line particles and the Pull over stop are unchanged.
+- Onboarding waits are shorter: welcome and "all set" 2 s, the eye calibration starts 1 s into its
+  step, 1 s of clean headband signal moves on, 2 s for the no-eye-tracker note. Steps still move on
+  at once when they succeed.
+
+- Correction: "just the car" is for the onboarding preview only. In the app the car drives through
+  its world again (road, grass, trees, houses, clouds, hills, day sky; `CarWorld` / `WorldPlan` and the
+  `carSpeed` bridge are back). The preview hides the world and shows the car on a soft light
+  platform against a plain backdrop.
+
+- Cleaner onboarding text: one language at a time (the start screen had Spanish printed next to the
+  English; it now follows the board's language like the rest), and short lines instead of full
+  sentences of instructions ("Follow the dots when they appear.", "Next: Headband in 3s", "Tap or double
+  blink to choose"). The start screen starts setup by itself after 4 s instead of 8.
+
+## 25. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
+
+- New module `core/geo/`, pages `/trip` and `/trip/live` (`web/src/trip/`), tests in `tests/geo/`.
+  Layer 2 ranks drop-off points near the destination; Layer 1 compares routes for comfort. Result
+  shapes map one-to-one onto `RideProfile`, `DropoffRequest` and `LatLng` in
+  `proto/clench/rider/v1/rider.proto` (checked by a test). No gRPC server, no board tiles: the board
+  has no car or trip mode yet.
+- **Google terms decide the data sources.** The Google Maps Platform terms (ToS 3.2.3 and the
+  Service Specific Terms, as of 2026-09) forbid caching Google content (except place IDs and pano
+  IDs), storing results derived from it (3.2.3(a), (c)), using it with or near a non-Google map
+  (3.2.3(e)), speaking it with text-to-speech (3.2.3(a)(iv), (c)(vi)), and using it in connection
+  with a system embedded in a vehicle (3.2.3(f)). So everything that is scored, stored, committed,
+  shown on the map, spoken, or sent to the car comes from open data:
+  - OpenStreetMap: Nominatim (geocoding), Overpass (entrances, kerbs, sidewalks, steps, ramps,
+    signals, stop signs, traffic calming, surfaces, bridges), OSRM on routing.openstreetmap.de
+    (routes, up to 3 alternatives). ODbL: "(c) OpenStreetMap contributors" on every page.
+  - USGS 3DEP elevation (public domain): EPQS (1 m lidar in Miami-Dade) for the short walks,
+    OpenTopoData `ned10m` for routes.
+  - Google Places (accessibility fields) and Street View Static (image + Gemini ramp/steps label) are
+    fetched live on `/trip/live` only, a page with no map, with Google attribution. Never cached,
+    never scored, never spoken, never sent to the car. A candidate the live image shows with steps
+    gets a warning there; its rank does not change (demoting it would be content derived from Street
+    View in a result that goes to the car).
+- Open-data responses are cached on disk in `data/geo_cache/` (git-ignored by its own .gitignore),
+  keyed by request. Each service has its own minimum gap between requests (Nominatim / OSRM /
+  OpenTopoData 1.1 s, EPQS 1 s, Overpass 2 s), a descriptive User-Agent, and timeouts; a 429 pauses
+  30 s and retries once; Overpass tries three public mirrors. A failed request falls back to the
+  cache and the page shows a note. The computed demo result is committed in
+  `data/geo/demo_trip.json`; `scripts/geo_trip.py --send` regenerates it.
+- Drive times are OSRM free-flow estimates (no traffic) and are labelled so everywhere.
+- **Demo destination changed** from HCA Florida Kendall Hospital: OSM has neither its main building
+  nor any entrance within 600 m, so every candidate had entrance access unknown, and the live image
+  of the top pick showed steps. Only 41 entrances within 15 km of FIU are tagged `wheelchair=*`; the
+  best-mapped place is Miami-Dade College Kendall Campus, Jack Kassewitz Building (OSM way
+  106965112): a `main` entrance with `wheelchair=yes`, lowered and flush kerbs, a mapped sidewalk
+  network, and mapped steps and ramps. Pickup stays FIU (11200 SW 8th St).
+- Drop-off scoring: eight factors from 0 (bad) to 1 (good), weights in `data/geo.yaml`. **Unknown
+  is never good**: a factor the data does not give counts as `unknown_penalty` (0.3) and is named in
+  the reason ("unknown: curb"). Missing OSM tags are unknown, not absent ("no steps mapped" is not
+  "no steps"). The walk follows mapped footpaths, step-free first (no `highway=steps`, no
+  `wheelchair=no`); a ramp is a footway with `incline=*`. With no connecting footpath it is a
+  straight line, flagged. Slope over a walk shorter than 10 m is measured over a 10 m line centred
+  on it (lidar is about 10 cm accurate). Targets are the destination building's own entrances; with
+  none mapped, any entrance within 150 m; with none, building walls (entrance unknown).
+- Comfort: sharp turns are runs of turning at >= 1 degree per meter totalling >= 60 degrees (a
+  rounded corner is one turn, a highway curve none). Stop signs and traffic calming count only on an
+  OSM way running with the route, facing our direction (`direction=*`, `oneway` incl. `-1`), so the
+  opposite carriageway and cross streets are not counted. `traffic_calming=no` is not calming.
+  Signals within 40 m are one intersection. Samples on OSM bridges are left out of the grade
+  (bare-earth elevation reads a bridge as a dip). Comfort cost = weights x counts in `data/geo.yaml`;
+  a meter of road with no surface tag costs 0.7 of a rough meter (1 - unknown_penalty), and a route
+  with unknown climb or grade is scored with the worst value known on the other routes.
+- Tiles: "Fastest" and "Smoothest", or one "Fastest and smoothest" tile when one route is both
+  (the demo trip: route 1 via SW 107th Ave is both), plus each other route as "Via <road>" with its
+  trade-off, all text generated from the computed differences. RideProfile can only ask for
+  fastest or smoothest, so an alternative tile has no RideProfile.
+- Rider settings for RideProfile (`uses_wheelchair`, `needs_extra_boarding_time`) live in
+  `data/geo.yaml` for the demo; they are not map data.
+- The proto was in the working tree at `proto/clench/rider.proto`; the branch has it at
+  `proto/clench/rider/v1/rider.proto`, matching its package and its own header comment.
+
+## 26. One ride flow: Car mode on the board, the car link, and /car-sim (branch integration/waymo)
+
+- Integration of geo/public-data (#25) and android-ui-enhancement (#21). tablet-kushi-ui (the native
+  "Clench Mobility" app) is not merged: it has its own input path (a debug bar; Muse and gaze were
+  to-dos), its own confirm and emergency screens and its own fake car. Its content is reused in the
+  board instead: the trip confirm, the destination and drop-off wording, "help on the way".
+- Car mode is the teammate's trip screen (#21), regrouped into three levels: **Trip** (the route tiles
+  from the committed open-data result, "Fastest and smoothest, 16 min" plus the alternative, and "Drop
+  off at [point]?"; the level's prompt shows each route's trade-off, that times are estimates without
+  traffic, and the drop-off's reason), **Comfort** (Cooler, Warmer, Music off / on, Volume down, Windows
+  > Up / Down > which), **Trip changes** (Pull over, Slow down, Contact Support). "Volume up" and the
+  old Louder / Softer did not fit the six-tile limit next to Back; Music on comes back as the Music tile.
+- Safety follows rider.proto: LOW (temperature, music, volume, windows, slow down) is sent at once
+  with no confirm screen, as #21 decided; HIGH (pull over, contact Support, drop-off, route change)
+  always opens the confirm screen, and only a confirmed HIGH request is ever sent. The mock car also
+  refuses an unconfirmed HIGH request, as a second guard.
+- **The car link** (`core/car/link.py`): `CarLink` takes ActionRequest / DropoffRequest / RideProfile
+  and SupportAnswer, and calls back with ActionResult (CAR_RESULT), RideState (CAR_STATE) and
+  SupportQuestion, with proto field names. A gRPC server can sit in front of it later. The only link
+  today is `MockCar` (`core/car/mock.py`), in process, with a simulated 120 ms round trip. It answers
+  every request with ACCEPTED, COMPLETED, DELAYED or REJECTED and a short sentence: pull over on the
+  highway is DELAYED to the next safe spot (then COMPLETED), a window down at highway speed is REJECTED
+  ("Windows stay up at highway speed"), limits and unknown actions are REJECTED. Demo times are short
+  (pull over completes in 6 s, 12 s from the highway).
+- What is said: every answer to a confirmed request, and a LOW control's answer only when it is
+  DELAYED or REJECTED (the rider must hear why nothing happened). Every answer is also a toast.
+- Route choice: RideProfile can only ask for fastest or smoothest and has no request_id, so a route
+  tile sends an ActionRequest `route:<id>` from the car's catalog (the car lists the routes it offers)
+  and, when the tile has one, the RideProfile behind it. Proto gap: a request_id on RideProfile, or a
+  route id, would make this cleaner.
+- Support questions (CAR_SIM `ask` from /car-sim, proto SupportQuestion): the question takes the board
+  (`support_question` screen, the question in the new SCREEN `prompt`, `answer` tiles) as soon as the
+  rider is scanning; it waits during a confirm, a sentence, or the help countdown. An answer goes
+  through the confirm screen (hard rule 1). No answer before the timeout sends `no_response` with
+  whether a board was connected. Help (long clench) works on it like anywhere else.
+- `/car-sim` (web) on `/ws/car-sim`: the car's state, the car link's log with round-trip times (CAR_LOG),
+  Support questions, and the situation (highway, phase).
+- The board's route map draws our OSRM route to the MDC Kendall drop-off (from /api/geo/trip), on the
+  Google map when a key is set or the drawn map otherwise. No Google Directions on the car screen
+  (Google Maps terms 3.2.3(f), use with in-vehicle systems); VITE_TRIP_ORIGIN / VITE_TRIP_DESTINATION
+  are gone.
+- Contracts (all three files): ScreenName `support_question`, TileKind `answer`, ActionName `dropoff` /
+  `route` / `support_answer`, SCREEN `prompt`, CAR_STATE `phase` / `music_playing` / `on_highway`, and new
+  CAR_RESULT, CAR_LOG, CAR_SIM. All additive: older clients keep working.
+
+## 27. Flow order, the Car mode corner button, one onboarding, and planning any trip (branch integration/waymo)
+
+- Order: onboarding first (eye calibration, headband, signal check, test clench), then the normal Home
+  board. Finishing onboarding no longer opens the trip screen.
+- **Corner button** (SCREEN `corner`, kind `corner`): a tile outside the six-tile grid, index
+  `len(tiles)`, so gaze, head, taps and the scan reach it (the scan last). On Home it is "Car mode":
+  picking it opens the confirm screen ("Start Car mode?", action `car_mode`), then the car screen. In
+  Car mode it is "Home" (large, top-left, apart from the car controls): it leaves the car screen
+  without a confirm (leaving is harmless) and **does not end the ride**: the ride keeps running
+  (`ride_active`), and Car mode on Home returns to it. Help (long clench) works on every screen as
+  before. Contracts: SCREEN `corner`, TileKind `corner`, ActionName `car_mode`.
+- One onboarding, the light theme: the car preview during the eye step is gone (the calibration dots
+  are the tablet's native overlay, above the page). Car visuals only in Car mode. After calibration a
+  gaze check: two big targets light up in turn; 0.6 s of gaze on each passes; otherwise "Redo
+  calibration" or "Continue anyway". The test clench's meter shows the threshold as a black line.
+- **Plan a trip** (Car mode > Trip > Plan a trip, or CAR_SIM `plan` with any address from /car-sim):
+  layers 1 and 2 are computed live with the same core/geo pipeline, in a worker thread, from the
+  configured pickup. The Trip level says "Planning your trip to ..." meanwhile. After 20 s or a
+  failure the rider is told why and the demo trip stays; a plan that finishes later is still used and
+  announced ("Your trip to Hospital is ready now"), and its data stays cached, so a retry is quick.
+  Saved places are in data/geo.yaml (`places`); "Home" is a public stand-in the caregiver replaces.
+  MDC Kendall uses the committed demo trip directly. /api/geo/trip now serves the Core's current trip
+  (a planned one, else the committed one), so the board's map follows it. A first live plan usually
+  takes more than 20 s (USGS EPQS answers one point a second for the walk slopes).
+
+## 28. Laptop 2 is the car: /car-sim over the hotspot, car speakers, Start / End ride
+
+- /car-sim runs on a second laptop on the same network: laptop 1 starts Vite with `--host`, laptop 2
+  opens http://<laptop 1 IP>:5173/car-sim. Vite proxies /ws and /api to the Core, so the Core stays on
+  127.0.0.1:8000 and only port 5173 must be open on laptop 1. The Core has no WebSocket origin check,
+  so a LAN origin is accepted (checked with a LAN origin through the proxy).
+- Car speakers: while the car reports music on, /car-sim loops `web/public/carsim/music-loop.wav` (an
+  8 s chord loop synthesized for this, no licensed audio) at the car's volume; "Music off" on the board
+  stops it. Browsers need one click on the page first ("Enable car speakers").
+- CAR_SIM `start_ride` (the board shows Car mode; the car's action, so no confirm) and `end_ride` (the
+  ride ends, the board returns to Home). Help works as always.
+- Saved places: "Hospital" is now "Miami Cancer Institute" (the entrance the Baptist campus search
+  lands on) and "Home" is "Home (demo)" (a public stand-in).
+
+## 29. Car mode starts with Plan a trip; saved places are committed data
+
+- Entering Car mode (the corner button or /car-sim Start ride) opens **Plan a trip**: the car parked
+  (CAR_STATE phase `BOARDING`, 0 mph, new in RidePhase), the title, and the saved places as tiles.
+  A place opens its **routes** screen (one tile per route, e.g. "Fastest and smoothest, 18 min" and the
+  alternative, or Fastest / Smoothest) with the drop-off and a short reason. A route opens the
+  trip-style confirm (destination, route, time, drop-off; HIGH safety). On confirm the DropoffRequest
+  and the route go to the car, the car departs (`EN_ROUTE`), and the ride controls show: Comfort, and
+  Trip changes (Pull over, Slow down, Contact Support, **Change trip** back to Plan a trip).
+- Each saved place's results are committed like the demo trip: `data/geo/places/<key>.json` (computed
+  numbers only, built from the local open-data cache), MDC Kendall = `data/geo/demo_trip.json`. The
+  board loads them at start, so every pick is instant on any machine; the board never plans live.
+  data/geo_cache stays out of git; Google data stays live-only on /trip/live. The typed-address box
+  on /car-sim is hidden.
+- Home (demo) (Tamiami Park) has routes but no mapped entrance, building or reachable road, so no
+  drop-off: its routes screen says "No accessible drop-off is mapped here. The car chooses where to
+  stop." rather than inventing one.
+- Shorter, larger text in Car mode: drop-off names without OSM codes like "(I)(9)", the reason cut to
+  its first three points plus its unknowns, one line each, no " · " lines.
+
+## 30. Gaze on confirm screens, touch fallbacks for blinks, two onboardings, Split by default
+
+- Gaze on confirm screens: the board only pointed on menu screens (`screen` is null on a confirm,
+  BoardPage) and drew the gaze dot only with the tiles, so gaze looked dead on every confirm. The dot
+  now shows on confirm screens and the gaze lights the **Confirm** target (display only). Cancel is
+  never lit by gaze: on a confirm screen any clench confirms, so lighting Cancel would mislead.
+- No DOUBLE_BLINK on the tablet: the laptop's double blinks come from the headband through the
+  Python sensor service (MNE, sensor/detect/mne_blinks.py); the tablet reads the Muse natively
+  (MuseSensor.kt) and sends clenches only, as MNE has no Android port (#20). Not ported, Eyedid blinks
+  not mapped. Instead nothing depends on blinks: the help countdown has a large touch **Cancel** and the
+  "Go back?" prompt a large **Stay here** (TAP `cancel`); a stray tile touch still cannot cancel help.
+- App onboarding (first launch): black and gold; no blink input (gaze highlights, a touch or the
+  step's timer acts); intro 5 s (what comes next), eye instructions 5 s then Eyedid calibration and the
+  gaze check, headband up to 30 s, a test clench only with a headband, then Home.
+- Car mode onboarding (each time Car mode opens): white theme with the tablet's 3D car revolving
+  behind (the shell's existing car preview); intro 5 s, a one-target gaze check (a miss offers a
+  recalibration by touch), headband (connected: shown and on at once; else up to 30 s), a test clench
+  with a headband, then Car mode. The Core ignores ordinary input meanwhile (SETTINGS onboarding);
+  help works.
+- Car mode always opens in **Split**; the Car button switches until Car mode is left.
+- The ride controls (Comfort, Trip changes) share the full width.

@@ -106,9 +106,11 @@ interface Props {
   cameraWanted: boolean
   /** open the head-range calibration overlay on the board */
   onCalibrate: () => void
+  /** open the onboarding again (eyes, headband, a test clench) */
+  onSetup: () => void
 }
 
-export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate }: Props) {
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onSetup }: Props) {
   const [open, setOpen] = useState(false)
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
@@ -116,6 +118,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const [lang, setLang] = useState<Lang | null>(null)
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [learning, setLearning] = useState<boolean | null>(null)
+  const [trip, setTrip] = useState<boolean | null>(null) // trip mode: the trip screen (car controls)
   const [longClenchMs, setLongClenchMs] = useState(DEFAULT_LONG_CLENCH_MS)
   const [margin, setMargin] = useState<number | null>(null) // tile_switch_margin, 0..0.2
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -142,6 +145,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       if (msg.lang) setLang(msg.lang)
       if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
       if (msg.learning !== undefined) setLearning(msg.learning)
+      if (msg.trip != null) setTrip(msg.trip)
       if (msg.long_clench_ms !== undefined) setLongClenchMs(msg.long_clench_ms)
       if (msg.tile_switch_margin !== undefined && !marginSliding.current) setMargin(msg.tile_switch_margin)
     },
@@ -265,6 +269,12 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
     emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, learning: !learning })
   }
 
+  // Trip mode: the ride's trip screen (six car controls, the 3D car on the tablet) instead of the menus.
+  const toggleTrip = () => {
+    if (!known || trip === null) return
+    emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, trip: !trip })
+  }
+
   const took =
     metrics &&
     `Took ${clenches(metrics.selections)}, ${seconds(metrics.scan_steps, scanMs ?? 1000)} waiting ` +
@@ -327,14 +337,35 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         </button>
       </div>
 
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className={`${btn} text-xs`}
+          onMouseDown={noFocus}
+          onClick={reset}
+          title="RESET: back to Home with the highlight on the first tile"
+        >
+          Reset to Home
+        </button>
+        <button
+          type="button"
+          className={`${btn} text-xs ${trip ? 'text-orange-200' : ''}`}
+          onMouseDown={noFocus}
+          onClick={toggleTrip}
+          disabled={!known || trip === null}
+          title="Trip mode: the trip screen with the car controls (SETTINGS trip)"
+        >
+          {trip ? 'End trip' : 'Start trip'}
+        </button>
+      </div>
       <button
         type="button"
         className={`${btn} mb-3 w-full text-xs`}
         onMouseDown={noFocus}
-        onClick={reset}
-        title="RESET: back to Home with the highlight on the first tile"
+        onClick={onSetup}
+        title="Onboarding: eye calibration, headband connection, a test clench"
       >
-        Reset to Home
+        Run setup
       </button>
 
       <div className="mb-2 flex items-center justify-between">

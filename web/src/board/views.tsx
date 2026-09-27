@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useGazeOver } from '../facetrack/gazeOver'
 import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
+import { LAUNCH_MS, SetupCountdown } from './onboardingFlow'
 
 export function Breadcrumb({ screen }: { screen: Screen }) {
   const parts = [STRINGS[screen.lang].home, ...screen.path]
@@ -32,9 +34,13 @@ function RefreshIcon() {
 const TEXT: Record<Tile['kind'], string> = {
   branch: 'text-5xl leading-tight xl:text-6xl',
   leaf: 'text-5xl leading-tight xl:text-6xl',
+  answer: 'text-5xl leading-tight xl:text-6xl', // a Support question's answer (core/car)
+  corner: 'text-3xl leading-tight', // drawn by BoardPage's CornerButton, not in the grid
   // A whole sentence: smaller so it wraps onto a few lines and is never cut off.
   suggestion: 'text-3xl leading-snug xl:text-4xl',
   other: 'text-5xl leading-tight xl:text-6xl',
+  car: 'text-5xl leading-tight xl:text-6xl', // trip controls draw in trip.tsx; here only for completeness
+  back: 'text-5xl leading-tight xl:text-6xl',
 }
 
 function tileLook(tile: Tile, on: boolean): string {
@@ -57,7 +63,7 @@ function tileLook(tile: Tile, on: boolean): string {
  * While the Core is loading AI options (`screen.loading`) the picked tile pulses gently and a
  * "Finding options…" line shows; the Core has paused the scan.
  */
-export function TileGrid({ screen }: { screen: Screen }) {
+export function TileGrid({ screen, onTap }: { screen: Screen; onTap?: (tile: number) => void }) {
   const loading = screen.loading === true
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -70,7 +76,10 @@ export function TileGrid({ screen }: { screen: Screen }) {
               data-tile-index={i} // webcam pointing measures the tiles on screen (facetrack/)
               aria-current={on}
               aria-busy={on && loading}
+              // A touch or click picks this tile (TAP), for a caregiver or testing without a headband.
+              onClick={onTap && !loading ? () => onTap(i) : undefined}
               className={[
+                onTap && !loading ? 'cursor-pointer select-none' : '',
                 'flex items-center justify-center gap-4 rounded-3xl p-6 text-center font-bold',
                 'break-words transition-transform duration-150',
                 TEXT[tile.kind],
@@ -101,12 +110,18 @@ export function TileGrid({ screen }: { screen: Screen }) {
   )
 }
 
-export function ConfirmView({ confirm, lang }: { confirm: Confirm; lang: Lang }) {
+export function ConfirmView({ confirm, lang, onTap }: { confirm: Confirm; lang: Lang; onTap?: () => void }) {
   const s = STRINGS[lang]
+  const [confirmRef, gazeOn] = useGazeOver<HTMLParagraphElement>() // gaze lights the sentence (a clench confirms it)
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-12 p-12 text-center">
       <p className="text-4xl font-semibold text-yellow-300">{s.confirm[confirm.action]}</p>
-      <p className="max-w-6xl rounded-3xl p-10 text-6xl font-bold leading-tight ring-[12px] ring-yellow-300 xl:text-7xl">
+      <p
+        ref={confirmRef}
+        aria-current={gazeOn}
+        onClick={onTap} // a touch or click on the sentence confirms it (TAP), like a clench
+        className={`max-w-6xl rounded-3xl p-10 text-6xl font-bold leading-tight ring-[12px] ring-yellow-300 transition-transform xl:text-7xl ${gazeOn ? 'scale-105 bg-yellow-300/20' : ''} ${onTap ? 'cursor-pointer select-none' : ''}`}
+      >
         {confirm.text}
       </p>
       <p className="whitespace-pre text-3xl text-zinc-300">{s.hint}</p>
@@ -139,7 +154,7 @@ export function SpeakingView({ text, lang }: { text: string; lang: Lang }) {
  * "Go back?" over the board after a double blink (BACK_PROMPT). A clench confirms; doing nothing lets
  * the bar run out and nothing changes. The bar shows how long is left.
  */
-export function BackPromptView({ kind, ms, lang }: { kind: 'menu' | 'confirm'; ms: number; lang: Lang }) {
+export function BackPromptView({ kind, ms, lang, onStay }: { kind: 'menu' | 'confirm'; ms: number; lang: Lang; onStay?: () => void }) {
   const s = STRINGS[lang].back
   const [full, setFull] = useState(true)
   useEffect(() => {
@@ -157,12 +172,19 @@ export function BackPromptView({ kind, ms, lang }: { kind: 'menu' | 'confirm'; m
           <div className="h-4 rounded-full bg-sky-400"
             style={{ width: full ? '100%' : '0%', transition: full ? 'none' : `width ${ms}ms linear` }} />
         </div>
+        {onStay && (
+          // A touch closes the prompt and stays (nothing depends on blinks: the tablet has none yet).
+          <button type="button" onClick={onStay}
+            className="pointer-events-auto mt-8 w-full rounded-3xl bg-white px-10 py-8 text-5xl font-bold text-zinc-900">
+            {lang === 'es' ? 'Quedarme aquí' : 'Stay here'}
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-export function HelpCountdownView({ countdown, lang }: { countdown: number; lang: Lang }) {
+export function HelpCountdownView({ countdown, lang, onCancel }: { countdown: number; lang: Lang; onCancel?: () => void }) {
   const s = STRINGS[lang].help
   return (
     <div
@@ -172,20 +194,48 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
       <p className="text-6xl font-bold">{s.title}</p>
       <p className="text-[18rem] font-black leading-none tabular-nums">{countdown}</p>
       <p className="text-5xl font-semibold">{s.cancel}</p>
+      {onCancel && (
+        // A large touch Cancel: stopping a false alarm must not depend on blinks (the tablet has none yet).
+        <button type="button" onClick={onCancel}
+          className="mt-4 min-w-[28rem] rounded-3xl bg-white px-16 py-10 text-7xl font-black text-red-700 shadow-2xl">
+          {lang === 'es' ? 'Cancelar' : 'Cancel'}
+        </button>
+      )}
     </div>
   )
 }
 
-export function StartOverlay({ onStart }: { onStart: () => void }) {
+export function StartOverlay({ onStart, lang }: { onStart: (gesture?: boolean) => void; lang: Lang }) {
+  const t = STRINGS[lang].start
+  const [left, setLeft] = useState(LAUNCH_MS / 1000)
+  const startRef = useRef(onStart)
+  useLayoutEffect(() => { startRef.current = onStart })
+  useEffect(() => {
+    const countdown = new SetupCountdown(LAUNCH_MS, performance.now())
+    const timer = window.setInterval(() => {
+      const remaining = countdown.tick(performance.now(), document.hidden)
+      setLeft(Math.max(0, Math.ceil(remaining / 1000)))
+      if (remaining <= 0) { window.clearInterval(timer); startRef.current(false) }
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [])
   return (
-    <button
-      type="button"
-      onClick={onStart}
-      className="fixed inset-0 z-40 flex cursor-pointer flex-col items-center justify-center gap-8 bg-black text-white"
-    >
-      <span className="text-8xl font-bold tracking-tight">Clench</span>
-      <span className="rounded-3xl px-12 py-6 text-5xl font-semibold ring-8 ring-yellow-300">Click to start</span>
-      <span className="text-2xl text-zinc-400">Turns on speech. Haga clic para empezar.</span>
-    </button>
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black p-6 text-amber-50">
+      <div className="flex w-full max-w-3xl flex-col items-center gap-8 rounded-[2.5rem] bg-zinc-900 px-8 py-12 text-center shadow-2xl shadow-black/60 sm:px-16 sm:py-16">
+        <h1 className="text-6xl font-bold tracking-tight text-[#d4a017] sm:text-8xl">Clench</h1>
+        <button
+          type="button"
+          onClick={() => onStart(true)}
+          className="w-full rounded-3xl bg-[#d4a017] px-8 py-6 text-3xl font-bold text-white shadow-lg shadow-[#d4a017]/30 transition-colors hover:bg-[#b8890f] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#d4a017] active:bg-[#9c740c] sm:text-5xl"
+        >
+          {t.button}
+        </button>
+        <p className="text-2xl text-zinc-300">{t.auto(left)}</p>
+        <div role="progressbar" aria-label={t.auto(left)} aria-valuemin={0} aria-valuemax={LAUNCH_MS / 1000} aria-valuenow={LAUNCH_MS / 1000 - left} className="h-3 w-full overflow-hidden rounded-full bg-zinc-700">
+          <div className="h-full bg-[#d4a017] transition-[width]" style={{ width: `${(1 - left / (LAUNCH_MS / 1000)) * 100}%` }} />
+        </div>
+        <p className="text-lg text-zinc-400">{t.hint}</p>
+      </div>
+    </div>
   )
 }
