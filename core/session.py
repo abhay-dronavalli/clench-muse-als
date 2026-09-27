@@ -733,16 +733,19 @@ class Session:
         self.media = {"provider": ref.provider, "id": ref.id, "title": title, "playing": True}
         log.info("playing %s %s on the board: %s", ref.provider, ref.id, title)
         self._emit(Media(action="play", provider=ref.provider, id=ref.id, title=title))
-        frame = self.frame
-        self._push(Frame(kind="player", level=frame.level, prefix=_join(item.id, "player"), items=[], crumb=item))
+        prefix = _join(item.id, "player")
+        self._push(Frame(kind="player", level=self.frame.level, prefix=prefix, items=self._player_items(prefix), crumb=item))
 
-    def _player_items(self) -> list[Item]:
+    def _tile_count(self) -> int:
+        """Tiles on screen: the frame's items, and "Other..." except on the player."""
+        return len(self.frame.items) + (0 if self.frame.kind == "player" else 1)
+
+    def _player_items(self, prefix: str) -> list[Item]:
         media = self.media or {"provider": "youtube", "playing": False}
         keys = ["pause" if media["playing"] else "resume", "restart"]
         if media["provider"] == "youtube":  # Spotify's player has no volume control
             keys += ["volume_down", "volume_up"]
         keys.append("back")
-        prefix = self.frame.prefix if self.frame.kind == "player" else "player"
         return [Item(kind="leaf", id=_join(prefix, k), event_id=_join(prefix, k), ai_label=CONTROL_LABEL[self.lang][k])
                 for k in keys]
 
@@ -1169,7 +1172,7 @@ class Session:
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
         home = len(self._stack) == 1
         shortcut_jev = self._prefetch_shortcut() if home else None
-        count = len(self.frame.items) + 1
+        count = self._tile_count()
         self.pointer.on_tiles_changed(count)
         if first_tile:
             self.pointer.place(count, 0)
@@ -1376,7 +1379,7 @@ class Session:
         old = self.pointer
         old.close()
         new = make_pointer(mode, self._scheduler, self._on_highlight, self.scan_ms, self._on_pointer_source)
-        new.place(len(self.frame.items) + 1, old.highlight)
+        new.place(self._tile_count(), old.highlight)
         new.on_face(self.face_ok)
         self.pointer = new
         self.pointing_mode = mode
@@ -1406,7 +1409,7 @@ class Session:
             if self.state in (SessionState.SCANNING, SessionState.LOADING):
                 self._enter_frame()
                 return
-            self.pointer.on_tiles_changed(len(self.frame.items) + 1)
+            self.pointer.on_tiles_changed(self._tile_count())
         elif self.state is SessionState.LOADING:
             self._cancel_wait()
             self._resume()
@@ -1448,7 +1451,7 @@ class Session:
     def _screen(self) -> Screen:
         frame = self.frame
         if frame.kind == "player":
-            frame.items = self._player_items()  # labels follow the language and play / pause
+            frame.items = self._player_items(frame.prefix)  # labels follow the language and play / pause
         tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind,
                       image=i.node.media.picture if i.node is not None and i.node.media is not None else None)
                  for i in frame.items]
