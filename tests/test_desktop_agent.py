@@ -301,7 +301,7 @@ def test_losing_the_desktop_target_drops_an_armed_click(ctl):
 
 def test_palette_tiles_fit_the_screen_and_do_not_overlap(ctl):
     tiles = ctl.palette_tiles()
-    assert len(tiles) == 7
+    assert len(tiles) == 9
     for i, a in enumerate(tiles):
         assert SCREEN.encloses(a.rect)
         assert not any(a.rect.intersects(b.rect) for b in tiles[i + 1:])
@@ -379,3 +379,77 @@ def test_typed_text_is_unicode_key_presses_with_enter_for_newlines():
     assert text_keys("é\r\n") == [(0, 0xE9, down), (0, 0xE9, up), (VK_RETURN, 0, 0), (VK_RETURN, 0, KEYEVENTF_KEYUP)]
     # an emoji is two UTF-16 units, each pressed and released
     assert [scan for _, scan, _ in text_keys("\U0001F600")] == [0xD83D, 0xD83D, 0xDE00, 0xDE00]
+
+
+# --- scroll and drag -----------------------------------------------------------------------------
+
+from desktop.agent.interaction import (SCROLL_EVERY_S, WHEEL_NOTCH, MoveTo, Press, Release,  # noqa: E402
+                                       Scroll)
+
+
+def arm(ctl, action, now):
+    open_palette(ctl, now)
+    assert use_tile(ctl, action, now + 1) == [] and ctl.armed == action
+
+
+def test_scroll_zones_scroll_the_window_under_the_spot(ctl):
+    arm(ctl, "scroll", 1.0)
+    look(ctl, 320, 310, 3.0)
+    assert ctl.on_gesture("CLENCH", 3.0, 3.0) == [] and ctl.mode == "scroll"
+    up = ctl.scroll.up.center
+    assert ctl.tick(3.05, up, True) == []  # not at once
+    assert ctl.tick(3.001 + SCROLL_EVERY_S, up, True) == [Scroll(330, 315, WHEEL_NOTCH)]
+    assert ctl.tick(3.2, up, True) == []  # one notch per 150 ms
+    assert ctl.tick(3.5, ctl.scroll.anchor, True) == []  # the still band between the zones
+    down = ctl.scroll.down.center
+    assert ctl.tick(3.7, down, True) == [Scroll(330, 315, -WHEEL_NOTCH)]
+    past = (down[0], ctl.scroll.down.bottom + 20)  # past the zone: twice as fast
+    assert ctl.tick(3.7 + SCROLL_EVERY_S / 2, past, True) == [Scroll(330, 315, -WHEEL_NOTCH)]
+    assert ctl.tick(4.5, up, False) == []  # eyes lost: no scrolling
+    ctl.tick(5.0, (320, 310), True)
+    assert ctl.on_gesture("CLENCH", 5.0, 5.0) == [] and ctl.mode == "pointing"
+    assert ctl.armed == "left"
+
+
+def test_the_scroll_control_fits_on_the_screen_near_an_edge(ctl):
+    from desktop.agent.interaction import scroll_control
+
+    c = scroll_control(10, 5, SCREEN, PX_MM)
+    assert SCREEN.encloses(c.up) or c.up.top >= 0 and c.up.left >= 0
+    assert c.up.top >= SCREEN.top and c.down.bottom <= SCREEN.bottom and c.up.left >= SCREEN.left
+
+
+def test_a_double_blink_stops_scrolling(ctl):
+    arm(ctl, "scroll", 1.0)
+    look(ctl, 320, 310, 3.0)
+    ctl.on_gesture("CLENCH", 3.0, 3.0)
+    assert ctl.on_gesture("DOUBLE_BLINK", 4.0, 4.0) == [] and ctl.mode == "pointing"
+
+
+def start_drag(ctl, at=1.0):
+    arm(ctl, "drag", at)
+    look(ctl, 320, 310, at + 2)
+    assert ctl.on_gesture("CLENCH", at + 2, at + 2) == [Press(330, 315)] and ctl.mode == "drag"
+
+
+def test_a_drag_follows_the_eyes_and_drops_where_they_are(ctl):
+    start_drag(ctl)
+    assert ctl.tick(3.5, (800, 600), True) == [MoveTo(800, 600)]
+    assert ctl.tick(3.6, (801, 600), True) == []  # a pixel of jitter does not move it
+    assert ctl.tick(3.7, (1400, 200), False) == []  # eyes lost: it holds still
+    look(ctl, 900, 650, 5.0)
+    assert ctl.on_gesture("CLENCH", 5.0, 5.0) == [Release(900, 650)] and ctl.mode == "pointing"
+
+
+def test_a_double_blink_cancels_the_drag_where_it_started(ctl):
+    start_drag(ctl)
+    ctl.tick(3.5, (800, 600), True)
+    assert ctl.on_gesture("DOUBLE_BLINK", 4.0, 4.0) == [Keys("escape"), Release(330, 315)]
+
+
+def test_help_or_the_board_never_leaves_the_button_held(ctl):
+    start_drag(ctl)
+    assert ctl.set_help(True) == [Keys("escape"), Release(330, 315)] and ctl.mode == "pointing"
+    ctl.set_help(False)
+    start_drag(ctl, at=10.0)
+    assert ctl.set_input_target("board") == [Keys("escape"), Release(330, 315)]

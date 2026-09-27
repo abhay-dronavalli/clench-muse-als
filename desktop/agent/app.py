@@ -24,7 +24,7 @@ from desktop.agent.bridge import GazeBridge, gaze_message
 from desktop.agent.gaze import Gaze, SavitzkyGolay
 from desktop.agent.hotkeys import Key, KeyboardHook, StandIn
 from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Compose, Controller, Effect, FocusBoard,
-                                       Keys, SetTarget, ZoomShot)
+                                       Keys, MoveTo, Press, Release, Scroll, SetTarget, ZoomShot)
 from desktop.agent.links import CoreLink, EyedidSource, MouseSource
 from desktop.agent.snap import Rect
 from desktop.agent.uia import UiaFinder
@@ -96,6 +96,7 @@ class Agent:
                  if a.sg_window_ms > 0 else "no Savitzky-Golay", "" if a.no_one_euro else ", then One Euro")
 
     def stop(self) -> None:
+        self._run(self.ctl.set_input_target("board"))  # never quit with the button held
         if isinstance(self.source, EyedidSource):
             self.source.stop()
 
@@ -120,7 +121,7 @@ class Agent:
         self.stand_in.tick(now)
         fresh = self.gaze.fresh(now)
         self.gaze_point = self.gaze.point if fresh else None
-        self.ctl.tick(now, self.gaze.point, fresh)
+        self._run(self.ctl.tick(now, self.gaze.point, fresh))
         self._ask_uia(now)
         if self.gaze.last_sample_at > self._bridged_at:
             self._bridged_at = self.gaze.last_sample_at
@@ -142,7 +143,7 @@ class Agent:
             if not payload:
                 self.help_countdown = None
                 self.ctl.set_help(False)
-                self.ctl.set_input_target("board")  # nobody routes gestures to us now
+                self._run(self.ctl.set_input_target("board"))  # nobody routes gestures to us now
         elif kind == "eyedid":
             self._eyedid(payload, now)
         elif kind == "uia":
@@ -156,7 +157,7 @@ class Agent:
         kind = msg.get("type")
         if kind == "SETTINGS":
             self.settings = msg
-            self.ctl.set_input_target(msg.get("input_target") or "board")
+            self._run(self.ctl.set_input_target(msg.get("input_target") or "board"))
             self.ctl.set_lang(msg.get("lang") or "en")
             if msg.get("long_clench_ms"):
                 self.stand_in.long_ms = int(msg["long_clench_ms"])
@@ -169,7 +170,7 @@ class Agent:
         elif kind == "SCREEN":
             on = msg.get("screen") == "help_countdown"
             self.help_countdown = int(msg.get("countdown") or 0) if on else None
-            self.ctl.set_help(on)
+            self._run(self.ctl.set_help(on))
         elif kind == "ACTION_RESULT":
             what = ACTION_TEXT.get(msg.get("action", ""), msg.get("action", ""))
             who = f" {msg['contact']}" if msg.get("contact") else ""
@@ -212,7 +213,16 @@ class Agent:
                     winput.click(e.x, e.y, e.button, e.double)
                     self._uia_at = (float("-inf"), (0.0, 0.0))  # the screen changed: look again
                 elif isinstance(e, Keys):
-                    winput.alt_left()
+                    winput.escape() if e.combo == "escape" else winput.alt_left()
+                elif isinstance(e, Scroll):
+                    winput.scroll(e.x, e.y, e.delta)
+                elif isinstance(e, Press):
+                    winput.press(e.x, e.y)
+                elif isinstance(e, MoveTo):
+                    winput.move_to(e.x, e.y)
+                elif isinstance(e, Release):
+                    winput.release(e.x, e.y)
+                    self._uia_at = (float("-inf"), (0.0, 0.0))
                 elif isinstance(e, ZoomShot):
                     self._zoom_shot(e)
                 elif isinstance(e, SetTarget):

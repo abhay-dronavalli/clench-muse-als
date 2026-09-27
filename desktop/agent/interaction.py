@@ -5,8 +5,13 @@ come in as arguments, effects go out as values, and the running agent carries th
             zooms). The "Clench" tab on the right edge opens the palette.
   zoom      a 3x picture of the area; the highlight follows the gaze inside it; a clench clicks the
             matching real point (snapped to an element when sure). A double blink closes it.
-  palette   the agent's own big tiles: right click, double click, Clench board, calibrate, pause,
-            close. The nearest tile is highlighted, as on the board. A double blink closes it.
+  palette   the agent's own big tiles: right click, double click, scroll, drag, type, Clench board,
+            calibrate, pause, close. The nearest tile is highlighted, as on the board. A double blink
+            closes it. Right click, double click, scroll and drag arm the next clench.
+  scroll    a control at the spot the clench picked: looking into its Up or Down zone scrolls the
+            window under it, faster past the zone. A clench or a double blink ends it.
+  drag      the button is held from the spot the clench picked; the pointer follows the eyes; a clench
+            drops there, a double blink cancels (Esc, then release where it started).
   back      "Go back?" for BACK_CONFIRM_S: a clench sends Alt+Left, doing nothing does nothing and
             then clenches are ignored for LATE_CLENCH_S (the Core's rule, decisions.md 17).
   calibrating  gestures do nothing but a double blink, which stops the calibration.
@@ -28,9 +33,12 @@ BACK_CONFIRM_S = 3.0
 LATE_CLENCH_S = 1.0
 DEBOUNCE_S = 0.3
 TOAST_S = 2.5
+SCROLL_EVERY_S = 0.15  # one wheel notch this often while the eyes are in a scroll zone (twice past it)
+WHEEL_NOTCH = 120  # Windows' WHEEL_DELTA: one notch, usually three lines
+DRAG_MOVE_PX = 3  # move the held pointer only when the gaze moved at least this much
 
-Mode = Literal["pointing", "zoom", "palette", "back", "calibrating"]
-Armed = Literal["left", "right", "double"]
+Mode = Literal["pointing", "zoom", "palette", "back", "calibrating", "scroll", "drag"]
+Armed = Literal["left", "right", "double", "scroll", "drag"]
 
 
 @dataclass(frozen=True)
@@ -78,24 +86,88 @@ class CancelCalibration:
     pass
 
 
-Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCalibration, Compose]
+@dataclass(frozen=True)
+class Scroll:
+    x: float
+    y: float
+    delta: int  # + up, - down, in wheel units (WHEEL_NOTCH = one notch)
+
+
+@dataclass(frozen=True)
+class Press:
+    """Put the pointer at (x, y) and hold the left button down (a drag starts)."""
+
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
+class MoveTo:
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
+class Release:
+    """Put the pointer at (x, y) and let the left button go."""
+
+    x: float
+    y: float
+
+
+Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCalibration, Compose, Scroll, Press,
+               MoveTo, Release]
+
+
+@dataclass(frozen=True)
+class ScrollControl:
+    """Where the scroll zones are: `up` above the anchor, `down` below, a still band between."""
+
+    anchor: tuple[float, float]
+    up: Rect
+    down: Rect
+
+    def direction(self, x: float, y: float) -> tuple[int, bool]:
+        """(+1 up / -1 down / 0, fast): fast when the eyes are past the zone's outer edge."""
+        up, down = self.up, self.down
+        if up.left <= x < up.right and y < up.bottom:
+            return 1, y < up.top
+        if down.left <= x < down.right and y >= down.top:
+            return -1, y >= down.bottom
+        return 0, False
+
+
+def scroll_control(x: float, y: float, screen: Rect, px_per_mm: float) -> ScrollControl:
+    """Zones 40 x 28 mm, 10 mm apart around the anchor, moved inward to fit the screen."""
+    w, h, gap = 40 * px_per_mm, 28 * px_per_mm, 5 * px_per_mm
+    cx = min(max(x, screen.left + w / 2), screen.right - w / 2)
+    cy = min(max(y, screen.top + h + gap), screen.bottom - h - gap)
+    return ScrollControl((x, y), Rect(cx - w / 2, cy - gap - h, cx + w / 2, cy - gap),
+                         Rect(cx - w / 2, cy + gap, cx + w / 2, cy + gap + h))
 
 TEXT = {
     "en": {
-        "right": "Right click", "double": "Double click", "type": "Type", "board": "Clench board",
-        "calibrate": "Calibrate eyes",
+        "right": "Right click", "double": "Double click", "scroll": "Scroll", "drag": "Drag", "type": "Type",
+        "board": "Clench board", "calibrate": "Calibrate eyes",
+        "armed_scroll": "Clench where you want to scroll", "armed_drag": "Clench what you want to drag",
+        "scrolling": "Look up or down to scroll. Clench or double blink to stop.",
+        "dragging": "Look where it goes, then clench to drop. Double blink cancels.",
         "pause": "Pause clicks", "resume": "Resume clicks", "close": "Close", "menu": "Clench",
         "no_eyes": "Eyes not detected", "look_inside": "Look inside the zoom", "paused": "Clicks are paused",
         "armed_right": "Next clench right-clicks", "armed_double": "Next clench double-clicks",
-        "disarmed": "Back to left click", "now_paused": "Clicks paused", "now_resumed": "Clicks back on",
+        "disarmed": "Back to left click", "up": "Up", "down": "Down", "now_paused": "Clicks paused", "now_resumed": "Clicks back on",
     },
     "es": {
-        "right": "Clic derecho", "double": "Doble clic", "type": "Escribir", "board": "Tablero Clench",
-        "calibrate": "Calibrar ojos",
+        "right": "Clic derecho", "double": "Doble clic", "scroll": "Desplazar", "drag": "Arrastrar",
+        "type": "Escribir", "board": "Tablero Clench", "calibrate": "Calibrar ojos",
+        "armed_scroll": "Aprieta donde quieras desplazar", "armed_drag": "Aprieta lo que quieras arrastrar",
+        "scrolling": "Mira arriba o abajo para desplazar. Aprieta o parpadea dos veces para parar.",
+        "dragging": "Mira adónde va y aprieta para soltar. Parpadea dos veces para cancelar.",
         "pause": "Pausar clics", "resume": "Reanudar clics", "close": "Cerrar", "menu": "Clench",
         "no_eyes": "No se detectan los ojos", "look_inside": "Mira dentro del zoom", "paused": "Clics en pausa",
         "armed_right": "El próximo apretón hace clic derecho", "armed_double": "El próximo apretón hace doble clic",
         "disarmed": "Vuelve el clic normal", "now_paused": "Clics en pausa", "now_resumed": "Clics activos",
+        "up": "Arriba", "down": "Abajo",
     },
 }
 
@@ -124,6 +196,10 @@ class Controller:
         self._late_until = float("-inf")
         self._last_clench = float("-inf")
         self._trail: Trail[Target | None] = Trail(2.0)
+        self.scroll: ScrollControl | None = None
+        self._scroll_at = float("-inf")
+        self.drag_from: tuple[float, float] | None = None
+        self._drag_at: tuple[float, float] | None = None  # where the held pointer was last put
         w, h = 9 * px_per_mm, 34 * px_per_mm
         cy = (screen.top + screen.bottom) / 2
         self.menu_tab = Candidate(Rect(screen.right - w, cy - h / 2, screen.right, cy + h / 2), "Clench", "agent:menu")
@@ -138,14 +214,15 @@ class Controller:
         return self.input_target == "desktop"
 
     def palette_tiles(self) -> list[Candidate]:
-        """Big tiles, 4 x 2, in the middle of the screen."""
-        keys = ["right", "double", "type", "board", "calibrate", "resume" if self.paused else "pause", "close"]
+        """Nine big tiles, 3 x 3, in the middle of the screen."""
+        keys = ["right", "double", "scroll", "drag", "type", "board", "calibrate",
+                "resume" if self.paused else "pause", "close"]
         s = self.screen
         gap = 3 * self.px_per_mm
-        cols = 4
-        tw, th = s.width * 0.2, s.height * 0.26
+        cols, rows = 3, 3
+        tw, th = s.width * 0.25, s.height * 0.25
         left0 = s.left + (s.width - cols * tw - (cols - 1) * gap) / 2
-        top0 = s.top + (s.height - 2 * th - gap) / 2
+        top0 = s.top + (s.height - rows * th - (rows - 1) * gap) / 2
         tiles = []
         for i, key in enumerate(keys):
             col, row = i % cols, i // cols
@@ -165,17 +242,21 @@ class Controller:
         if self.zoom is not None:
             self.zoom_candidates = [c for c in usable(candidates, self.screen) if c.rect.intersects(self.zoom.source)]
 
-    def set_input_target(self, target: str) -> None:
+    def set_input_target(self, target: str) -> list[Effect]:
+        """Returns what must happen at once (a held drag is let go)."""
         self.input_target = target
-        if not self.active:
-            self._to("pointing")
-            self.armed = "left"
+        if self.active:
+            return []
+        self.armed = "left"
+        return self._close()
 
-    def set_help(self, on: bool) -> None:
-        """The Core's help countdown is on screen: everything of ours closes, gestures stay with it."""
+    def set_help(self, on: bool) -> list[Effect]:
+        """The Core's help countdown is on screen: everything of ours closes (a held drag is let go),
+        gestures stay with it."""
         self.help = on
         if on and self.mode != "calibrating":
-            self._to("pointing")
+            return self._close()
+        return []
 
     def start_calibration(self) -> list[Effect]:
         """F7 or the palette: nothing else happens until it ends (a double blink stops it)."""
@@ -188,8 +269,9 @@ class Controller:
         if self.mode == "calibrating":
             self._to("pointing")
 
-    def tick(self, now: float, point: tuple[float, float] | None, fresh: bool) -> None:
-        """Called every frame: timers, and the highlight for the current gaze."""
+    def tick(self, now: float, point: tuple[float, float] | None, fresh: bool) -> list[Effect]:
+        """Called every frame: timers, the highlight for the current gaze, and what scrolling and
+        dragging do with it."""
         if self.back_until is not None and now >= self.back_until:
             self.back_until = None
             self._late_until = now + LATE_CLENCH_S  # doing nothing was the answer
@@ -208,10 +290,25 @@ class Controller:
                     target = choose(self.zoom_candidates, *real, self.radius / f, self.slack / f)
             elif self.mode == "palette":
                 target = nearest(self.palette_tiles(), *point)
+            elif self.mode == "drag":
+                target = Target(point)  # drop exactly where the eyes are: no snapping
         elif self.mode == "palette":
             target = self.target  # the palette keeps its tile while the eyes blink or wander
         self.target = target
         self._trail.add(now, target)
+        if not (self.eyes and point is not None and self.active and not self.help):
+            return []  # eyes lost: scrolling stops, a drag holds still
+        if self.mode == "scroll" and self.scroll is not None:
+            direction, fast = self.scroll.direction(*point)
+            every = SCROLL_EVERY_S / 2 if fast else SCROLL_EVERY_S
+            if direction and now - self._scroll_at >= every:
+                self._scroll_at = now
+                return [Scroll(*self.scroll.anchor, direction * WHEEL_NOTCH)]
+        elif self.mode == "drag" and self._drag_at is not None:
+            if abs(point[0] - self._drag_at[0]) + abs(point[1] - self._drag_at[1]) >= DRAG_MOVE_PX:
+                self._drag_at = point
+                return [MoveTo(*point)]
+        return []
 
     def on_gesture(self, kind: str, t: float, now: float) -> list[Effect]:
         if self.mode == "calibrating":
@@ -243,6 +340,13 @@ class Controller:
             target = self.target
         if self.mode == "palette":
             return self._palette(target)
+        if self.mode == "scroll":
+            self._to("pointing")  # done scrolling
+            return []
+        if self.mode == "drag":
+            point = target.point if target is not None else self._drag_at
+            self._to("pointing")
+            return [Release(*point)] if point is not None else []
         if target is None:
             self._say("look_inside" if self.mode == "zoom" and self.eyes else "no_eyes", now)
             return []
@@ -251,12 +355,12 @@ class Controller:
             return []
         if self.mode == "zoom":
             self._to("pointing")
-            return [self._click(*target.click_point)]
+            return self._act(*target.click_point, now)
         if self.paused:
             self._say("paused", now)
             return []
         if target.sure:
-            return [self._click(*target.click_point)]
+            return self._act(*target.click_point, now)
         zoom = make_zoom(*target.point, self.screen)
         self._to("zoom")
         self.zoom = zoom
@@ -266,9 +370,11 @@ class Controller:
     def _double_blink(self, now: float) -> list[Effect]:
         if self.mode == "back":
             return []  # already asking
-        if self.mode in ("zoom", "palette"):
+        if self.mode in ("zoom", "palette", "scroll"):
             self._to("pointing")  # our own screens: straight back, nothing is lost
             return []
+        if self.mode == "drag":
+            return self._close()  # cancel: Esc, then let go where it started
         if self.armed != "left":
             self.armed = "left"
             self._say("disarmed", now)
@@ -283,7 +389,7 @@ class Controller:
             return []
         self._to("pointing")
         now_toast = self._last_clench
-        if action in ("right", "double"):
+        if action in ("right", "double", "scroll", "drag"):
             self.armed = action  # type: ignore[assignment]
             self._say(f"armed_{action}", now_toast)
         elif action == "board":
@@ -297,9 +403,29 @@ class Controller:
             self._say("now_paused" if self.paused else "now_resumed", now_toast)
         return []
 
-    def _click(self, x: float, y: float) -> Click:
+    def _act(self, x: float, y: float, now: float) -> list[Effect]:
+        """What a clench on (x, y) does: the armed action once, then left click again."""
         armed, self.armed = self.armed, "left"
-        return Click(x, y, "right" if armed == "right" else "left", armed == "double")
+        if armed == "scroll":
+            self._to("scroll")
+            self.scroll = scroll_control(x, y, self.screen, self.px_per_mm)
+            self._scroll_at = now  # the first notch after a moment, not at once
+            self._say("scrolling", now)
+            return []
+        if armed == "drag":
+            self._to("drag")
+            self.drag_from = self._drag_at = (x, y)
+            self._say("dragging", now)
+            return [Press(x, y)]
+        return [Click(x, y, "right" if armed == "right" else "left", armed == "double")]
+
+    def _close(self) -> list[Effect]:
+        """Back to pointing from anywhere, letting go of a held drag (cancelled where it started)."""
+        effects: list[Effect] = []
+        if self.mode == "drag" and self.drag_from is not None:
+            effects = [Keys("escape"), Release(*self.drag_from)]
+        self._to("pointing")
+        return effects
 
     def _to(self, mode: Mode) -> None:
         if mode != "back":
@@ -307,6 +433,10 @@ class Controller:
         if mode != "zoom":
             self.zoom = None
             self.zoom_candidates = []
+        if mode != "scroll":
+            self.scroll = None
+        if mode != "drag":
+            self.drag_from = self._drag_at = None
         if mode != self.mode:
             self._trail = Trail(2.0)  # never look back into another screen
         self.mode = mode

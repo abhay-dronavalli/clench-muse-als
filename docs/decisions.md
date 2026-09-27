@@ -729,3 +729,21 @@ for Spanish explicitly instead of relying on the profile.
   reopens the last session's tabs, and a test that cleared "its" text box cleared a real unsaved
   note (recovered from the test's own output). Live typing tests use a window the test creates and
   owns, or none.
+
+## 23. Desktop control, chunk 6: scroll, drag, typing that arrives in order (branch desktop-control)
+
+- The palette is 3 x 3: Right click, Double click, Scroll, Drag, Type, Clench board, Calibrate eyes,
+  Pause, Close. Scroll and Drag arm the next clench, as Right and Double click do.
+- **Scroll:** the clench places a control on that spot: an Up and a Down zone (40 x 28 mm, 10 mm
+  apart, kept on the screen). Eyes in a zone turn the wheel one notch every 150 ms over the spot
+  (the window under it scrolls), every 75 ms past the zone's outer edge; the band between does
+  nothing. A clench or a double blink ends it; lost eyes stop it.
+- **Drag:** the clench presses the left button there; the pointer follows the filtered gaze (moves
+  under 3 px are ignored); a clench releases where the eyes were 250 ms before; a double blink
+  cancels (Esc, then release where it started). Lost eyes freeze the drag. The help countdown, a
+  switch to the board, the Core going away and the agent quitting all let go of the button: it is
+  never left held down.
+- **Typing arrives in order:** checked live against a text box in another process (Qt), one
+  SendInput batch put an emoji (two UTF-16 units) before the text in front of it; one character per
+  call, 5 ms apart, arrived exactly ("Hola, ¿qué tal? ... 😀 ñ"). Scroll and drag were checked live
+  the same way (a test window's scrollbar and slider moved as expected).

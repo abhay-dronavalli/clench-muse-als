@@ -35,8 +35,10 @@ BACK_TEXT = {"en": ("Go back?", "Clench to go back. Do nothing to stay."),
 CALIB_TEXT = {"en": ("Look at the dot", "Double blink to stop"),
               "es": ("Mira el punto", "Parpadea dos veces para parar")}
 BOARD_TEXT = {"en": "Clench board has control", "es": "El tablero Clench tiene el control"}
-ARMED_TEXT = {"en": {"right": "Right click armed", "double": "Double click armed"},
-              "es": {"right": "Clic derecho listo", "double": "Doble clic listo"}}
+ARMED_TEXT = {"en": {"right": "Right click armed", "double": "Double click armed", "scroll": "Scroll armed",
+                     "drag": "Drag armed"},
+              "es": {"right": "Clic derecho listo", "double": "Doble clic listo", "scroll": "Desplazar listo",
+                     "drag": "Arrastrar listo"}}
 ZOOM_TEXT = {"en": "Clench to click. Double blink to close.", "es": "Aprieta para hacer clic. Parpadea dos veces para cerrar."}
 
 
@@ -182,6 +184,10 @@ class Overlay(QWidget):
                     self.magnifier(p, x + ctl.radius * 0.7, y - ctl.radius * 0.7, mm)
             if ctl.mode == "back" and ctl.back_until is not None:
                 self.paint_back(p, lang, mm)
+            if ctl.mode == "scroll" and ctl.scroll is not None:
+                self.paint_scroll(p, mm)
+            if ctl.mode == "drag" and ctl.drag_from is not None:
+                self.paint_drag(p, mm)
         # the tab to the palette, always on the right edge
         self.card(p, tab.rect, YELLOW if tab_on else None, mm, radius=2.5 * mm)
         p.save()
@@ -212,6 +218,34 @@ class Overlay(QWidget):
         for text, color in notes:
             self.pill(p, text, None, top, color, size=4 * mm)
             top += 11 * mm
+
+    def paint_scroll(self, p: QPainter, mm: float) -> None:
+        ctl = self.agent.ctl
+        c = ctl.scroll
+        assert c is not None
+        gaze = self.agent.gaze_point
+        on = c.direction(*gaze)[0] if gaze is not None else 0
+        for zone, sign, label in ((c.up, 1, ctl.t("up")), (c.down, -1, ctl.t("down"))):
+            self.card(p, zone, SKY if on == sign else None, mm)
+            p.setPen(QColor("#111827") if on == sign else WHITE)
+            p.setFont(self._font(5 * mm, bold=True))
+            p.drawText(qrect(zone), Qt.AlignmentFlag.AlignCenter, ("\u25b2 " if sign > 0 else "\u25bc ") + label)
+        x, y = c.anchor
+        p.setPen(QPen(SKY, 0.6 * mm))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(x, y), 2 * mm, 2 * mm)
+
+    def paint_drag(self, p: QPainter, mm: float) -> None:
+        a = self.agent
+        assert a.ctl.drag_from is not None
+        x0, y0 = a.ctl.drag_from
+        p.setPen(QPen(YELLOW, 0.8 * mm, Qt.PenStyle.DashLine))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(x0, y0), 2.5 * mm, 2.5 * mm)
+        if a.gaze_point is not None:
+            x, y = a.gaze_point
+            p.drawLine(QPointF(x0, y0), QPointF(x, y))
+            self.crosshair(p, x, y, mm)
 
     def paint_back(self, p: QPainter, lang: str, mm: float) -> None:
         ctl = self.agent.ctl

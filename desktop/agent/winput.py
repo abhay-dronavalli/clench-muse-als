@@ -22,6 +22,8 @@ gdi32 = ctypes.WinDLL("gdi32")
 INPUT_MOUSE, INPUT_KEYBOARD = 0, 1
 MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
 MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
+MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL = 0x0001, 0x0800
+VK_ESCAPE = 0x1B
 KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE = 0x0001, 0x0002, 0x0004
 VK_RETURN = 0x0D
 VK_MENU, VK_LEFT = 0x12, 0x25
@@ -84,8 +86,8 @@ def _send(*inputs: INPUT) -> None:
         raise OSError(ctypes.get_last_error(), "SendInput was blocked (an administrator window?)")
 
 
-def _mouse(flags: int) -> INPUT:
-    return INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, 0, flags, 0, 0))
+def _mouse(flags: int, data: int = 0) -> INPUT:
+    return INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, data & 0xFFFFFFFF, flags, 0, 0))
 
 
 def _key(vk: int, up: bool = False, extended: bool = False) -> INPUT:
@@ -101,6 +103,33 @@ def click(x: float, y: float, button: str = "left", double: bool = False) -> Non
     if double:
         time.sleep(0.05)
         _send(_mouse(down), _mouse(up))
+
+
+def scroll(x: float, y: float, delta: int) -> None:
+    """Turn the wheel over (x, y): Windows scrolls the window under the pointer. + = up."""
+    user32.SetCursorPos(round(x), round(y))
+    _send(_mouse(MOUSEEVENTF_WHEEL, delta))
+
+
+def press(x: float, y: float) -> None:
+    """Hold the left button down at (x, y): a drag starts."""
+    user32.SetCursorPos(round(x), round(y))
+    _send(_mouse(MOUSEEVENTF_LEFTDOWN))
+
+
+def move_to(x: float, y: float) -> None:
+    """Move the pointer (a held drag follows). The zero move makes apps see a real mouse move."""
+    user32.SetCursorPos(round(x), round(y))
+    _send(_mouse(MOUSEEVENTF_MOVE))
+
+
+def release(x: float, y: float) -> None:
+    user32.SetCursorPos(round(x), round(y))
+    _send(_mouse(MOUSEEVENTF_LEFTUP))
+
+
+def escape() -> None:
+    _send(_key(VK_ESCAPE), _key(VK_ESCAPE, up=True))
 
 
 def alt_left() -> None:
@@ -124,12 +153,19 @@ def text_keys(text: str) -> list[tuple[int, int, int]]:
     return keys
 
 
-def type_text(text: str) -> None:
-    """Type `text` into the focused window. One SendInput call, so nothing the person does can land
-    in the middle of it."""
+def type_text(text: str, gap_s: float = 0.005) -> None:
+    """Type `text` into the focused window, one character per SendInput call, `gap_s` apart. Sent as
+    one batch, Qt put an emoji (two UTF-16 units) before the text in front of it (checked
+    2026-09-27); one character at a time arrives in order everywhere tried."""
     keys = text_keys(text)
-    if keys:
-        _send(*(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(vk, scan, flags, 0, 0)) for vk, scan, flags in keys))
+    i = 0
+    while i < len(keys):
+        # one character: a newline or a BMP character is 2 events, one outside the BMP is 4
+        n = 4 if keys[i][0] == 0 and 0xD800 <= keys[i][1] <= 0xDBFF else 2
+        _send(*(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(vk, scan, flags, 0, 0)) for vk, scan, flags in keys[i:i + n]))
+        i += n
+        if gap_s:
+            time.sleep(gap_s)
 
 
 def foreground() -> int:
