@@ -1,4 +1,4 @@
-"""Guided raw recording: the script cues each action, so the labels are exact.
+"""Guided raw recording: the script saves cue windows alongside the raw signal.
 
 `record.py` just dumps N seconds and leaves you to remember what happened.
 This one walks you through a fixed protocol -- rest, three kinds of clench,
@@ -82,6 +82,29 @@ PROTOCOL = [
     dict(kind="noise", name="chewing / yawning", seconds=20.0,
          cue="CHEW and YAWN",
          detail="Chew as if eating, and fit in a couple of real yawns."),
+]
+
+# A focused comparison for blinks missed or mistaken for clenches. Keep the
+# standard protocol above intact so existing recordings stay comparable.
+BLINK_PROTOCOL = [
+    PROTOCOL[0],
+    dict(kind="reps", name="gentle blinks", reps=6, hold=.25, gap=3.,
+         release_margin=1.5,
+         event="BLINK", cue="BLINK gently",
+         detail="One comfortable blink, jaw relaxed. Open fully afterwards."),
+    dict(kind="reps", name="firm blinks", reps=6, hold=.25, gap=3.,
+         release_margin=1.5,
+         event="BLINK", cue="BLINK firmly",
+         detail="One firmer blink like the ones that misfire. Do not bite or force it."),
+    dict(kind="reps", name="short clenches", reps=6, hold=.5, gap=4.,
+         event="CLENCH", cue="CLENCH briefly",
+         detail="Comfortable bite, eyes open; release at the second beep."),
+    dict(kind="noise", name="head movement", seconds=15.,
+         cue="Small comfortable head turns and nods",
+         detail="Jaw loose. No deliberate blinks or clenches. M marks a band slip."),
+    dict(kind="noise", name="final rest", seconds=15.,
+         cue="REST -- eyes open, jaw loose",
+         detail="Sit still. An observer can note any spontaneous blinks with M."),
 ]
 
 
@@ -175,12 +198,13 @@ class Session:
         self.actions.append(dict(event=spec["event"], phase=spec["name"], rep=index,
                                  t_start_unix=start_unix,
                                  t_end_unix=start_unix + hold + margin,
+                                 release_margin_seconds=margin,
                                  happened=True))
 
 
-def run_protocol(session, sound, speed):
+def run_protocol(session, sound, speed, protocol=PROTOCOL):
     """Cue every phase. `speed` divides all durations, for dress rehearsals."""
-    for spec in PROTOCOL:
+    for spec in protocol:
         banner(spec["name"].upper(), spec.get("detail", ""))
         phase_start = time.time()
 
@@ -204,13 +228,14 @@ def run_protocol(session, sound, speed):
                 countdown(spec["gap"] / speed, f"rep {index}/{spec['reps']} in", session)
                 beep(sound, 1180, 80)
                 print(f"  >>> {spec['cue']} <<<")
-                session.action(spec, index, time.time(), hold, RELEASE_MARGIN / speed)
+                session.action(spec, index, time.time(), hold,
+                               spec.get("release_margin", RELEASE_MARGIN) / speed)
                 keys = countdown(hold, "HOLD", session, bar=True)
                 beep(sound, 520, 80)
                 print("  release")
                 # X during or just after the hold retracts the label: that is how
                 # a rep you did not manage stops counting as a detection miss.
-                keys += countdown(0.8, "relax", session)
+                keys += countdown(0.8 / speed, "relax", session)
                 if "x" in keys:
                     session.actions[-1]["happened"] = False
                     print(f"  rep {index} marked as NOT DONE (label dropped)")
@@ -219,9 +244,9 @@ def run_protocol(session, sound, speed):
         session.phase(spec, phase_start, phase_end)
 
 
-def total_seconds(speed):
+def total_seconds(speed, protocol=PROTOCOL):
     total = 0.0
-    for spec in PROTOCOL:
+    for spec in protocol:
         if spec["kind"] in ("rest", "noise"):
             total += spec["seconds"]
         else:
@@ -266,7 +291,8 @@ def write_outputs(board, session, stamp, tag, label, profile, speed, aborted):
 
     channels, names = eeg_channels_and_names(board_id)
     actions = [dict(start=rel(a["t_start_unix"]), end=rel(a["t_end_unix"]),
-                    event=a["event"], phase=a["phase"], rep=a["rep"])
+                    event=a["event"], phase=a["phase"], rep=a["rep"],
+                    release_margin_seconds=a["release_margin_seconds"])
                for a in session.actions if a["happened"]]
     dropped = [dict(phase=a["phase"], rep=a["rep"], cued_at=rel(a["t_start_unix"]))
                for a in session.actions if not a["happened"]]
@@ -298,15 +324,15 @@ def write_outputs(board, session, stamp, tag, label, profile, speed, aborted):
     # The evaluator wants its own flatter shape, with the profile beside it.
     suffix = ".synthetic" if board_label(board) == "SYNTHETIC_BOARD" else ""
     profile_src = HERE / f"calibration.{profile}{suffix}.json"
+    profile_snapshot = RECORDINGS / f"{stamp}{tag}_calibration.json"
     if profile_src.exists():
-        shutil.copy2(profile_src, RECORDINGS / profile_src.name)
+        shutil.copy2(profile_src, profile_snapshot)
     else:
         print(f"\n  ! no {profile_src.name} to copy: calibrate this profile, then "
-              "copy its JSON into recordings/ before evaluating.")
-    manifest = [dict(recording=written["default"].name, profile=profile_src.name,
+              f"copy its JSON to {profile_snapshot.name} before evaluating.")
+    manifest = [dict(recording=written["default"].name, profile=profile_snapshot.name,
                      board_id=int(board_id), baseline=baseline or [2, 28],
-                     actions=[dict(start=a["start"], end=a["end"], event=a["event"])
-                              for a in actions])]
+                     actions=actions)]
     manifest_path = RECORDINGS / f"{stamp}{tag}_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
@@ -328,12 +354,12 @@ def write_outputs(board, session, stamp, tag, label, profile, speed, aborted):
     return labels_path
 
 
-def dry_run(sound, speed):
+def dry_run(sound, speed, protocol=PROTOCOL):
     """Practise the cues with no board and no files."""
     session = Session()
     banner("DRY RUN -- nothing is being recorded")
     try:
-        run_protocol(session, sound, speed)
+        run_protocol(session, sound, speed, protocol)
     except Aborted:
         print("\n  stopped early")
     print(f"\nCued {len(session.actions)} actions across {len(session.phases)} "
@@ -350,17 +376,20 @@ def main():
     parser.add_argument("--no-sound", action="store_true", help="no beeps")
     parser.add_argument("--dry-run", action="store_true",
                         help="walk through the cues without touching the headband")
+    parser.add_argument("--protocol", choices=["standard", "blink-comparison"],
+                        default="standard", help="choose the actions to record")
     args = parser.parse_args()
 
     sound = not args.no_sound
     speed = max(args.speed, 1.0)
-    minutes, seconds = divmod(total_seconds(speed), 60)
+    protocol = BLINK_PROTOCOL if args.protocol == "blink-comparison" else PROTOCOL
+    minutes, seconds = divmod(total_seconds(speed, protocol), 60)
 
     print(__doc__.split("Outputs")[0].rstrip())
-    print(f"Protocol: {len(PROTOCOL)} phases, about {int(minutes)}m {int(seconds):02d}s"
+    print(f"Protocol: {len(protocol)} phases, about {int(minutes)}m {int(seconds):02d}s"
           + (f" (sped up x{speed:g})" if speed != 1 else ""))
     if args.dry_run:
-        return dry_run(sound, speed)
+        return dry_run(sound, speed, protocol)
 
     RECORDINGS.mkdir(exist_ok=True)
     label = args.label or args.profile
@@ -384,7 +413,7 @@ def main():
         # stutters on its first packets.
         countdown(3.0, "starting in", session)
         try:
-            run_protocol(session, sound, speed)
+            run_protocol(session, sound, speed, protocol)
         except Aborted:
             aborted = True
             print("\n  Q pressed: stopping the protocol, keeping what was recorded")

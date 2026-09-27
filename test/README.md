@@ -1,5 +1,15 @@
 # Muse 2 + BrainFlow test bench
 
+## Library comparison (2026-09-26)
+
+See [LIBRARY_COMPARISON.md](LIBRARY_COMPARISON.md) for actual MNE, NeuroKit2 and
+muse-vtuber runs, measured synthetic limitations, and the commands to compare
+the same raw recording with every detector. The live detector is unchanged by
+this experiment. To capture gentle versus firm blinks and false clenches, use
+`record_protocol.py --protocol blink-comparison --profile taher` after disconnecting
+Station from the headband. This takes about 2.5 minutes and saves a separate
+calibration snapshot with the recording. Repeat with the friend's own profile.
+
 ## Reliability update (2026-09-26)
 
 See [INVESTIGATION.md](INVESTIGATION.md) for the original-code audit, measured

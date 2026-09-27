@@ -1,0 +1,5 @@
+# Optional offline evaluation only; keep separate from Muse Station's environment.
+-r requirements.txt
+mne==1.13.2
+neurokit2==0.2.13
+brainflow==5.23.0
