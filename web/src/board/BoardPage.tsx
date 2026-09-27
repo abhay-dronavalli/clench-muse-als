@@ -4,6 +4,7 @@ import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
+import { EyeCalibrationOverlay } from '../facetrack/EyeCalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
 import {
   CameraLight,
@@ -15,7 +16,9 @@ import {
   PointerBadge,
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
-import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
+import { gazeOwnsCamera, subscribeGazeOwner } from '../facetrack/cameraOwner'
+import { eyedidWeb } from '../facetrack/eyedidWeb'
+import { reportPointingMode } from '../facetrack/native'
 import { gazeTuning } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
@@ -64,6 +67,7 @@ export default function BoardPage() {
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  const [eyeCalibrating, setEyeCalibrating] = useState(false) // Eyedid web's five dots
   // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
   const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
@@ -122,6 +126,8 @@ export default function BoardPage() {
         // The tablet shell first: in a camera mode it claims the camera before this render decides
         // whether the page opens it (native.ts). SETTINGS only arrive after "Click to start".
         reportPointingMode(msg.pointing_mode ?? 'off')
+        // Eyedid web on a laptop, the same way: a gaze mode claims the webcam before this render.
+        eyedidWeb.setMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         break
@@ -154,8 +160,10 @@ export default function BoardPage() {
     }
   }, [connected])
 
-  // Re-render when the tablet shell's tracker starts or stops: it decides who owns the camera.
-  useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
+  // Re-render when an eye tracker (tablet shell or Eyedid web) starts or stops: it owns the camera.
+  useSyncExternalStore(subscribeGazeOwner, gazeOwnsCamera)
+  // Leaving the board gives the webcam back.
+  useEffect(() => () => eyedidWeb.setMode('off'), [])
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
@@ -170,7 +178,7 @@ export default function BoardPage() {
     if (v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
-  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating || eyeCalibrating, margin, pick })
 
   const start = () => {
     unlockSpeech()
@@ -219,11 +227,13 @@ export default function BoardPage() {
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />
       )}
+      {eyeCalibrating && <EyeCalibrationOverlay lang={lang} onClose={() => setEyeCalibrating(false)} />}
       <DevPanel
         voiceSource={voiceSource}
         headRange={range}
         cameraWanted={camera}
         onCalibrate={() => setCalibrating(true)}
+        onCalibrateEyes={() => setEyeCalibrating(true)}
       />
     </div>
   )

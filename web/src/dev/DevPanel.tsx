@@ -9,6 +9,7 @@ import {
   type ShortcutDebug,
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
+import { eyedidWeb } from '../facetrack/eyedidWeb'
 import { gazeConnected, gazeTuning, showCursor } from '../facetrack/stores'
 import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
 import { tracker } from '../facetrack/tracker'
@@ -106,9 +107,12 @@ interface Props {
   cameraWanted: boolean
   /** open the head-range calibration overlay on the board */
   onCalibrate: () => void
+  /** open the Eyedid web eye calibration on the board */
+  onCalibrateEyes: () => void
 }
 
-export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate }: Props) {
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onCalibrateEyes }: Props) {
+  useSyncExternalStore(eyedidWeb.subscribe, eyedidWeb.snapshot)
   const [open, setOpen] = useState(false)
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
@@ -381,6 +385,31 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         </button>
         <span className="text-xs text-zinc-400">{headRange ? 'calibrated' : 'defaults'}</span>
       </div>
+
+      {(pointingMode === 'gaze' || pointingMode === 'auto') && (
+        <div className="mb-3" title="docs/eye-tracking.md, Eyedid web (laptop)">
+          <p className="mb-1 text-xs text-zinc-400">
+            Eyedid web:{' '}
+            <span className={eyedidWeb.state === 'on' ? 'text-emerald-300' : eyedidWeb.state === 'error' ? 'text-rose-300' : 'text-zinc-200'}>
+              {eyedidWeb.state}
+              {eyedidWeb.detail && ` (${eyedidWeb.detail})`}
+            </span>
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className={`${btn} text-xs disabled:opacity-40`}
+              onMouseDown={noFocus}
+              onClick={onCalibrateEyes}
+              disabled={eyedidWeb.state !== 'on'}
+              title={eyedidWeb.state === 'on' ? 'Five dots: look at each until its ring fills' : 'Needs Eyedid web running (Auto or Gaze mode, a key)'}
+            >
+              Calibrate eyes
+            </button>
+            <span className="text-xs text-zinc-400">{eyedidWeb.calibrated ? 'calibrated' : 'not calibrated'}</span>
+          </div>
+        </div>
+      )}
 
       <label className="mb-3 block" title="How far the head's point must be inside a new tile before the highlight moves">
         <span className="flex justify-between text-xs text-zinc-400">

@@ -4,7 +4,7 @@ import type { Send } from '../lib/useSocket'
 import { FaceDebouncer } from './face'
 import { gaze } from './gaze'
 import { gazePointerTuning } from './gazeTuning'
-import { nativeGazeActive } from './native'
+import { gazeOwnsCamera } from './cameraOwner'
 import { chooseSource, fromHead, POINT_SOURCE, type PointSample, type SourceName } from './source'
 import { cursor, dwell, eyesLost, gazeConnected, gazeTuning } from './stores'
 import { DwellTimer, HEAD_TUNING, TilePointer } from './tilePointer'
@@ -60,10 +60,10 @@ export function boardPoints(mode: PointingMode | null): boolean {
 
 /**
  * The head tracker (and so the camera, with its light) runs in this mode: Webcam, Auto. Never while
- * the tablet shell's eye tracker owns the camera (native.ts).
+ * an eye tracker owns the camera (the tablet shell's or Eyedid web, cameraOwner.ts).
  */
 export function headCamera(mode: PointingMode | null): boolean {
-  return (mode === 'webcam' || mode === 'auto') && !nativeGazeActive()
+  return (mode === 'webcam' || mode === 'auto') && !gazeOwnsCamera()
 }
 
 /**
@@ -131,7 +131,7 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
   useEffect(
     () =>
       tracker.subscribeStatus(() => {
-        const source = chooseSource(latest.current.mode, gaze.available(), !nativeGazeActive())
+        const source = chooseSource(latest.current.mode, gaze.available(), !gazeOwnsCamera())
         if (tracker.status.kind !== 'error' || source !== 'head') return
         cursor.set(null)
         if (face.reported !== false) latest.current.send({ type: 'FACE_OK', ok: false })
@@ -156,7 +156,7 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
     }
     const onSample = (s: PointSample) => {
       const { mode, pointing, screen, send, paused, margin, pick } = latest.current
-      if (!pointing || s.source !== chooseSource(mode, gaze.available(s.t), !nativeGazeActive())) return
+      if (!pointing || s.source !== chooseSource(mode, gaze.available(s.t), !gazeOwnsCamera())) return
       const p = pointer.current
       if (active.current !== s.source) {
         active.current = s.source
@@ -220,7 +220,7 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
       gazeConnected.set(live)
       if (live) return
       const { mode } = latest.current
-      if (mode === 'gaze' || (nativeGazeActive() && chooseSource(mode, false, false) === 'gaze')) {
+      if (mode === 'gaze' || (gazeOwnsCamera() && chooseSource(mode, false, false) === 'gaze')) {
         onSample({ source: 'gaze', t: now, found: false, point: null, confidence: 0 })
       }
     }, GAZE_WATCH_MS)

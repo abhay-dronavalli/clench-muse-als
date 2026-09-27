@@ -595,3 +595,26 @@ choices below are Taher's.
   (never the highlighted tile) and locks its settings during a run. Dwell is unchanged: the dwell and
   clench race is left to the Core confirm-window fix on the safety work, and dwell stays off whenever
   the headband is in use.
+
+## 18. Eye tracking on the laptop: Eyedid web
+
+The tablet already points with Eyedid (`kushagra/tablet`, Android only). On the laptop the board now
+runs VisualCamp's browser SDK (npm `seeso` 0.2.4, the pre-rename Eyedid web SDK, engine 2.5.2 from
+cdn.seeso.io) and feeds the same gaze slot. Taher chose it over MediaPipe iris, WebGazer.js and a
+hardware tracker (2026-09-27).
+
+- Runs in Auto and Gaze mode only; Webcam mode stays the head. Needs `VITE_EYEDID_WEB_KEY` in the
+  repo `.env` (Vite's `envDir` is now the repo root; only `VITE_*` names reach the page). Without a
+  key the board behaves exactly as before.
+- It owns the webcam while it runs, and the head tracker stays off, the same rule as the tablet
+  shell (`cameraOwner.ts` now answers for both). Running MediaPipe and Eyedid side by side would
+  double the CPU load for a head fallback that Auto only needs when the eyes are lost.
+- The web dev server now sends COOP / COEP headers: the SDK's engine is threaded WebAssembly and only
+  loads on a cross-origin isolated page. Checked: the board (MediaPipe, the Core socket, audio) works
+  unchanged under isolation.
+- A new internet dependency, optional like the others: the SDK checks the key online and downloads
+  its engine at start. If either fails the camera goes back to the head.
+- Calibration is five points, the SDK's default accuracy, saved in the browser. Gaze only: the SDK's
+  blink, attention and drowsiness signals are off (blinks come from the headband, MNE).
+- The SDK's license says it is granted "solely for commercial purposes"; fine for this prototype,
+  worth reading before anything ships.
