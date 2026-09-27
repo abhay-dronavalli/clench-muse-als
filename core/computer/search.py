@@ -39,13 +39,16 @@ def clean_query(value: object) -> str | None:
     return text
 
 
-def site_for(url: str) -> str:
-    host = urlsplit(url).hostname or ""
+def site_for(url: str) -> str | None:
+    parsed = urlsplit(url)
+    host = parsed.hostname or ""
     if host == "youtube.com" or host.endswith(".youtube.com"):
         return "youtube"
     if host == "open.spotify.com":
         return "spotify"
-    return "google"
+    if host in ("google.com", "www.google.com") and parsed.path in ("", "/", "/search", "/webhp"):
+        return "google"
+    return None
 
 
 def unique_queries(values, policy) -> list[str]:

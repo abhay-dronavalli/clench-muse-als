@@ -20,6 +20,7 @@ from core.rank.score import (
     DEFAULT_HYSTERESIS,
     Candidate,
     Evidence,
+    Use,
     Scored,
     Weights,
     full_order,
@@ -87,6 +88,17 @@ class Ranker:
 
     def hour(self) -> int:
         return self._local_hour(self._clock())
+
+    def order_searches(self, queries: Sequence[str], rows) -> list[str]:
+        """Searches share the existing recency/time score, with evidence scoped by site and language."""
+        evidence = {query.casefold(): Evidence() for query in queries}
+        for row in rows:
+            key = row["query"].casefold()
+            if key in evidence:
+                evidence[key].uses.append(Use(row["t"], row["hour"]))
+        scores = score_all([Candidate(query, evidence[query.casefold()]) for query in queries],
+                           now=self.now(), hour=self.hour(), weights=self.weights)
+        return full_order(queries, {key: value.score for key, value in scores.items()})
 
     # --- history --------------------------------------------------------------
 

@@ -16,7 +16,7 @@ log = logging.getLogger("clench.computer")
 
 class Computer:
     def __init__(self, scheduler, on_exit, echo, on_input, *, start_url="http://127.0.0.1:8000/computer/start",
-                 browser_factory=BrowserWorker, suggester=None):
+                 browser_factory=BrowserWorker, suggester=None, history=None, ranker=None):
         self.policy = Policy.load(start_url)
         self.on_exit, self.echo, self.on_input = on_exit, echo, on_input
         self.browser_factory = browser_factory
@@ -35,6 +35,8 @@ class Computer:
         self.search = None
         self.lang = "es"
         self.suggester = suggester
+        self.history, self.ranker = history, ranker
+        self.learning = True
         self.submit_task = None
 
     def _spawn(self, coro):
@@ -76,10 +78,19 @@ class Computer:
 
     def configure(self, settings):
         self.scan.apply_settings(settings)
+        lang_changed = settings.lang is not None and settings.lang != self.lang
         self.lang = settings.lang or self.lang
+        if settings.learning is not None:
+            self.learning = settings.learning
+            if self.suggester:
+                self.suggester.use_history = settings.learning
         self.long_clench_ms = settings.long_clench_ms or self.long_clench_ms
         if self.active:
-            self._render()
+            if lang_changed and self.search and not self.busy:
+                self.search = SearchPanel(self._queries(), self.lang)
+                self.selection.index = 0
+                self._prefetch(self.search.shown)
+            self._refresh(restart=lang_changed)
 
     def _event(self, event):
         if not self.active:
@@ -224,9 +235,9 @@ class Computer:
             self.busy = True
             self.scan.stop()
             self._render()
-            self.submit_task = self._spawn(self._submit_search(label, self.generation))
+            self.submit_task = self._spawn(self._submit_search(label, self.generation, site_for(self.url or ""), self.lang))
 
-    async def _submit_search(self, query, generation):
+    async def _submit_search(self, query, generation, site, lang):
         try:
             if self.help is not None or not self.active or generation != self.generation:
                 return
@@ -236,6 +247,11 @@ class Computer:
             if result and result.get("error"):
                 self.message = result["error"]
             elif result and result.get("submitted"):
+                if self.history and site:
+                    try:
+                        self.history.log_search(site, query, lang)
+                    except Exception:
+                        log.exception("could not save computer search history")
                 self.search = None
                 self.selection.back_to_bands()
             else:
@@ -249,14 +265,19 @@ class Computer:
                 self._refresh(restart=True)
 
     def _prefetch(self, shown=()):
-        if self.suggester:
-            return self.suggester.search_suggestions(site_for(self.url or ""), self.lang, shown=shown)
+        site = site_for(self.url or "")
+        if self.suggester and site:
+            recent = self.history.recent_searches(site, self.lang) if self.history and self.learning else ()
+            return self.suggester.search_suggestions(site, self.lang, shown=shown, recent_searches=recent)
         return None
 
     def _queries(self, shown=()):
         pending = self._prefetch(shown)
         values = pending.result if pending and pending.done and pending.result else []
-        return unique_queries(values + fallback_queries(site_for(self.url or ""), self.lang), self.policy)
+        site = site_for(self.url or "") or "google"
+        rows = self.history.searches(site, self.lang, self.ranker.now() - 30 * 86400) if self.history and self.ranker and self.learning else []
+        queries = unique_queries(values + fallback_queries(site, self.lang) + [row["query"] for row in rows], self.policy)
+        return self.ranker.order_searches(queries, rows) if self.ranker and self.learning else queries
 
     def set_help(self, seconds):
         self.help = seconds

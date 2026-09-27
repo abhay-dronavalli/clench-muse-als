@@ -728,3 +728,21 @@ redesign now; the immediate request is to retain this feedback for work after Pa
 - Search text is normalized and limited to 40 characters. URL-like text, including domains, paths
   and schemes, is rejected conservatively across provider output and final browser submission.
   Part 1's configured action denylist also filters every displayed query.
+
+## Search history and review fixes (2026-09-27)
+
+- Successful fill-and-Enter acknowledgements write site, query, language, local hour and time to
+  SQLite's separate computer_searches table. Cancelled or failed submissions do not teach it.
+  Searches never enter spoken-message history, communication shortcuts or action metrics.
+- Suggestions reuse core/rank's recency decay and hour weighting with profile weights, scoped by
+  site/language and the same 30-day window. Safe history queries join AI/local candidates. Day 1
+  ignores history for ranking and AI but still records confirmed searches for later learning.
+- The demo seed adds simulated YouTube searches in both languages, including evening Celia Cruz.
+  Reset clears these searches too and says so before deletion. Tests use temporary databases;
+  the shared patient database was not seeded or changed by this work.
+- Review found that generic editors could be mistaken for search. Only editable controls with
+  search semantics (type/role, search form, search label or conventional query name) accept fill
+  and Enter. Comments and other editors show a message instead. The current label and field are
+  rechecked before both fill and Enter. This narrows the text-field behavior to the smart-search goal.
+- EN/ES changes rebuild an idle search panel in the requested language. Local launcher and Google
+  account/mail pages do not trigger AI prefetch; only recognized search sites do.

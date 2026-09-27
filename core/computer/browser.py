@@ -14,6 +14,16 @@ from core.computer.search import clean_query
 log = logging.getLogger("clench.computer")
 ASSETS = Path(__file__).parent
 PROFILE = ASSETS.parents[1] / "data" / "browser-profile"
+FIELD_INFO = """el => {
+  const editable = el.isConnected && !el.readOnly && !el.disabled &&
+    (el.matches('textarea,input[type=search],input[type=text],input:not([type])') || el.isContentEditable);
+  const label = [el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('placeholder'),
+    ...Array.from(el.labels||[]).map(l=>l.textContent)].filter(Boolean).join(' ');
+  const search = el.matches('input[type=search],[role=searchbox]') || el.closest('[role=search]') ||
+    /\\b(search|buscar|búsqueda|busqueda)\\b/i.test(label) ||
+    /^(q|query|search|search_query|search-query)$/i.test(el.name || el.id || '');
+  return {editable:!!editable, search:!!search, label};
+}"""
 
 
 class Browser:
@@ -144,6 +154,8 @@ class Browser:
         if target["text"]:
             self.field = (await self.page.evaluate_handle("id => window.__clench?.field(id)", target_id)).as_element()
             self.field_url = self.page.url
+            if not await self._search_field():
+                return {"error": "Choose a search box. Other text editors are not supported."}
         await self.page.mouse.click(target["x"] + target["width"] / 2,
                                     target["y"] + target["height"] / 2)
         if target["exit"]:
@@ -156,13 +168,19 @@ class Browser:
             return {"error": "Use search words only, without URLs or blocked actions."}
         if not self.field or self.page.url != self.field_url or not self.policy.allows_url(self.page.url):
             return {"error": "The search field changed. Cancel and choose it again."}
-        if not await self.field.evaluate("el => el.isConnected && !el.readOnly && !el.disabled && (el.matches('textarea,input[type=search],input[type=text],input:not([type])') || el.isContentEditable)"):
+        if not await self._search_field():
             return {"error": "This field cannot accept a search. Cancel and choose another."}
         await self.field.fill(text)
-        if self.page.url != self.field_url or not await self.field.evaluate("el => el.isConnected"):
+        if self.page.url != self.field_url or not await self._search_field():
             return {"error": "The page changed before submission. Choose the search field again."}
         await self.field.press("Enter")
         return {"submitted": True}
+
+    async def _search_field(self):
+        if not self.field:
+            return False
+        info = await self.field.evaluate(FIELD_INFO)
+        return info["editable"] and info["search"] and self.policy.allows_label(info["label"])
 
     async def command(self, key):
         if key in ("down", "up"):

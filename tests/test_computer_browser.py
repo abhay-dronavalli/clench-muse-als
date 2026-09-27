@@ -115,6 +115,11 @@ def test_launcher_scan_real_click_discovery_and_policy(launcher, tmp_path):
             assert "error" in await browser.submit("https://google.com")
             assert await browser.submit("Celia Cruz") == {"submitted": True}
             assert await browser.page.evaluate("window.submittedSearch") == {"text": "Celia Cruz", "trusted": True}
+            await browser.page.evaluate("document.querySelector('input').setAttribute('aria-label','Search and buy now')")
+            assert "error" in await browser.submit("boleros")
+            assert await browser.page.locator("input").input_value() == "Celia Cruz"
+            await browser.page.evaluate("document.querySelector('input').setAttribute('aria-label','Write a comment')")
+            assert "error" in await browser.submit("boleros")
             await browser.page.evaluate("document.querySelector('input').remove()")
             assert "error" in await browser.submit("boleros")
             # Final action validation catches a label changed after target discovery.

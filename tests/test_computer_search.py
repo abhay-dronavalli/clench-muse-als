@@ -10,6 +10,9 @@ from core.suggest.fake import FakeProvider
 from core.suggest.provider import SearchSuggestions
 from core.suggest.service import Suggester
 from core.suggest.errors import ProviderError
+from core.db import Db
+from core.rank import Ranker
+from core.contracts import Settings
 
 
 def test_panel_order_and_three_page_loop():
@@ -41,6 +44,7 @@ async def open_panel(browser=SearchBrowser):
     session, clock, sent = make(browser)
     await settle()
     computer = session.computer
+    computer.url = "https://www.youtube.com/"
     computer.pick()
     computer.browser.result = {"text": True}
     computer.pick()
@@ -177,4 +181,77 @@ def test_gemini_search_uses_structured_output_without_tools():
         assert json.loads(calls[0]["contents"])["site"] == "youtube"
         assert calls[0]["config"].automatic_function_calling.disable is True
         assert calls[0]["config"].response_schema.model_fields.keys() == {"queries"}
+    asyncio.run(run())
+
+
+def test_learning_uses_existing_score_with_site_language_and_time():
+    now = 2_000_000_000
+    db = Db(":memory:", clock=lambda: now)
+    db.sync_profile("Luis", "es", [])
+    for _ in range(4):
+        db.log_search("youtube", "Celia Cruz", "es", hour=19)
+    db.log_search("youtube", "boleros", "es", hour=9)
+    ranker = Ranker(db, clock=lambda: now, local_hour=lambda _: 19)
+    rows = db.searches("youtube", "es")
+    assert ranker.order_searches(["boleros", "Celia Cruz", "Miami Heat"], rows)[0] == "Celia Cruz"
+    assert db.searches("spotify", "es") == db.searches("youtube", "en") == []
+    assert db.top_phrases("es", 20) == [] and db.events() == []
+    from core.rank.score import Weights
+    time_ranker = Ranker(db, weights=Weights(use=0, time=1, state=0, ai=0, reject=0),
+                         clock=lambda: now, local_hour=lambda _: 9)
+    assert time_ranker.order_searches(["Celia Cruz", "boleros"], rows)[0] == "boleros"
+    db.clear_history()
+    assert db.searches("youtube", "es") == []
+    db.close()
+
+
+def test_only_successful_search_is_logged_and_day_one_ignores_history():
+    async def run():
+        db = Db(":memory:")
+        db.sync_profile("Luis", "en", [])
+        db.log_search("youtube", "orchids", "en")
+        for fail in (True, False):
+            class Adapter(SearchBrowser):
+                async def submit(self, query):
+                    return {"error": "detached"} if fail else await super().submit(query)
+            session, _, _ = await open_panel(Adapter)
+            c = session.computer
+            c.history, c.ranker = db, Ranker(db)
+            c.configure(Settings(pointing_mode="scan", scan_ms=1000, learning=True))
+            assert c._queries()[0] == "orchids"
+            c.configure(Settings(pointing_mode="scan", scan_ms=1000, learning=False))
+            assert "orchids" not in c._queries()
+            query = c.items()[0][1]
+            before = len(db.searches("youtube", "en"))
+            c.pick()
+            await settle()
+            assert len(db.searches("youtube", "en")) == before + (not fail)
+            if not fail:
+                assert query in db.recent_searches("youtube", "en")
+            await c.aclose()
+            session.stop()
+        db.close()
+    asyncio.run(run())
+
+
+def test_language_change_refreshes_panel_and_launcher_does_not_prefetch():
+    async def run():
+        session, _, _ = await open_panel()
+        c = session.computer
+        provider = FakeProvider()
+        service = Suggester(provider, patient_name="Luis")
+        c.suggester = service
+        c.configure(Settings(pointing_mode="scan", scan_ms=1000, lang="es"))
+        assert c.items()[-3:] == [("other", "Otro..."), ("keyboard", "Teclado"), ("cancel", "Cancelar")]
+        assert c.selection.index == 0
+        await settle()
+        before = len(provider.calls)
+        for url in (c.policy.start_url, "https://accounts.google.com/", "https://mail.google.com/"):
+            c.url = url
+            c._prefetch()
+        await settle()
+        assert len(provider.calls) == before
+        await c.aclose()
+        await service.aclose()
+        session.stop()
     asyncio.run(run())
