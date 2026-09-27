@@ -1,5 +1,6 @@
-"""pull_over: the trip screen's safety action (core/trip.py). A mock: logs and succeeds, like
-room_control. Only ever run after its confirm screen."""
+"""The trip screen's confirmed controls (core/trip.py): pull_over (a safety action) and support (a call
+to rider support). Mocks: they log and succeed, like room_control. Only ever run after their confirm
+screen."""
 
 from __future__ import annotations
 
@@ -21,4 +22,18 @@ class PullOverAction(Action):
             log.info("DRY RUN pull_over: %r", ctx.text)
             return ActionResult(True, "dry run")
         log.info("pull_over (mock): %r", ctx.text)
+        return ActionResult(True, "done (mock)")
+
+
+class SupportCallAction(Action):
+    name = "support"
+
+    def __init__(self, *, dry_run: bool = True) -> None:
+        self.dry_run = dry_run
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        if self.dry_run:
+            log.info("DRY RUN support call: %r", ctx.text)
+            return ActionResult(True, "dry run")
+        log.info("support call (mock): %r", ctx.text)
         return ActionResult(True, "done (mock)")

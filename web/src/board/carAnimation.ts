@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CarActionName } from '../contracts'
+import type { CarActionName, WindowName } from '../contracts'
 
 /**
  * The trip screen's confirm sequence (CAR_ACTION), driven by the event itself:
@@ -10,6 +10,7 @@ import type { CarActionName } from '../contracts'
 
 export interface CarAnim {
   action: CarActionName
+  window: WindowName | null
   ms: number
 }
 
@@ -27,9 +28,9 @@ export function useCarAnimation() {
     timers.current = []
   }
 
-  const start = useCallback((action: CarActionName, ms: number) => {
+  const start = useCallback((action: CarActionName, ms: number, which: WindowName | null = null) => {
     clear()
-    setAnim({ action, ms })
+    setAnim({ action, window: which, ms })
     setPhase('out')
     const later = (fn: () => void, after: number) => timers.current.push(window.setTimeout(fn, after))
     later(() => setPhase('in'), Math.max(ms - FADE_MS, FADE_MS))

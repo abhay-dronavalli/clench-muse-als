@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -19,6 +19,7 @@ import {
   nativeCarAvailable,
   nativeGazeActive,
   playNativeCarEffect,
+  setNativeCarSpeed,
   reportPointingMode,
   showNativeCar,
   subscribeNativeGaze,
@@ -32,7 +33,7 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
-import { PullOverConfirm, TripSpeaking, TripView } from './trip'
+import { TripConfirm, TripSpeaking, TripView } from './trip'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
@@ -79,6 +80,7 @@ export default function BoardPage() {
   // Trip mode (SETTINGS trip) and the trip control animation in progress (CAR_ACTION).
   const [trip, setTrip] = useState(false)
   const car = useCarAnimation()
+  const [carState, setCarState] = useState<CarState | null>(null) // CAR_STATE: the trip telemetry
   const nativeCar = nativeCarAvailable()
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
@@ -126,8 +128,12 @@ export default function BoardPage() {
         break
       case 'CAR_ACTION':
         // The Core has locked input for `ms`; the tiles and the tablet's car play the sequence.
-        car.start(msg.action, msg.ms)
-        playNativeCarEffect(msg.action, msg.ms)
+        car.start(msg.action, msg.ms, msg.window ?? null)
+        playNativeCarEffect(msg.action, msg.ms, msg.window ?? null)
+        break
+      case 'CAR_STATE':
+        setCarState(msg)
+        setNativeCarSpeed(msg.speed_mph)
         break
       case 'SIGNAL':
         break // MusePanel displays sensor telemetry through its console socket.
@@ -243,7 +249,15 @@ export default function BoardPage() {
       )}
       {tripScreen && (
         <>
-          <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} nativeCar={nativeCar} onTap={tapTile} />
+          <TripView
+            screen={tripScreen}
+            car={carState}
+            anim={car.anim}
+            phase={car.phase}
+            tint={car.tint}
+            nativeCar={nativeCar}
+            onTap={tapTile}
+          />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
         </>
@@ -256,14 +270,21 @@ export default function BoardPage() {
           {pointing && <DwellRing />}
         </>
       )}
-      {connected && view.kind === 'confirm' && view.confirm.action === 'pull_over' && (
-        <PullOverConfirm lang={lang} nativeCar={nativeCar} onConfirm={tapConfirm} onCancel={tapCancel} />
+      {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support') && (
+        <TripConfirm
+          action={view.confirm.action}
+          lang={lang}
+          car={carState}
+          nativeCar={nativeCar}
+          onConfirm={tapConfirm}
+          onCancel={tapCancel}
+        />
       )}
-      {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && (
+      {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && (
         <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
       )}
       {connected && view.kind === 'speaking' && trip && (
-        <TripSpeaking lang={lang} text={view.text} nativeCar={nativeCar} tint={car.tint} />
+        <TripSpeaking lang={lang} text={view.text} car={carState} nativeCar={nativeCar} tint={car.tint} />
       )}
       {connected && view.kind === 'speaking' && !trip && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}

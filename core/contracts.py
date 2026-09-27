@@ -21,16 +21,19 @@ ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "trip"]
-ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert", "pull_over"]
+ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert", "pull_over", "support"]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
 # suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options);
-# car = a trip control (core/trip.py).
-TileKind = Literal["branch", "leaf", "suggestion", "other", "car"]
-# The trip screen's controls, in the order they are shown (core/trip.py).
-CarActionName = Literal["window_up", "window_down", "warmer", "cooler", "music", "pull_over"]
+# car = a trip control or a trip menu level (core/trip.py); back = the trip menu's Back tile.
+TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back"]
+# What a trip control does (core/trip.py).
+CarActionName = Literal[
+    "window_up", "window_down", "warmer", "cooler", "louder", "softer", "slow_down", "pull_over", "support"
+]
+WindowName = Literal["front_left", "front_right", "rear_left", "rear_right", "all"]
 
 
 class _Msg(BaseModel):
@@ -267,7 +270,30 @@ class CarAction(_Msg):
 
     type: Literal["CAR_ACTION"] = "CAR_ACTION"
     action: CarActionName
+    window: WindowName | None = None  # which window, for window_up / window_down
     ms: int = Field(gt=0)
+
+
+class WindowsOpen(_Msg):
+    """How far each window is open, 0 (fully up) to 100 (fully down)."""
+
+    front_left: int = Field(ge=0, le=100)
+    front_right: int = Field(ge=0, le=100)
+    rear_left: int = Field(ge=0, le=100)
+    rear_right: int = Field(ge=0, le=100)
+
+
+class CarState(_Msg):
+    """The (mock) car's telemetry for the trip screen: sent when trip mode starts, after every control,
+    and as the ride goes on. The tablet's 3D scene drives at `speed_mph`."""
+
+    type: Literal["CAR_STATE"] = "CAR_STATE"
+    speed_mph: int = Field(ge=0)
+    eta_min: int = Field(ge=0)
+    battery_pct: int = Field(ge=0, le=100)
+    cabin_temp_f: int
+    windows: WindowsOpen
+    volume: int = Field(ge=0, le=10)
 
 
 class ActionResult(_Msg):
@@ -382,6 +408,7 @@ Message = Annotated[
         PlayAudio,
         Click,
         CarAction,
+        CarState,
         ActionResult,
         Metrics,
         ShortcutDebug,

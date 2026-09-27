@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, CAR_STATE, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
@@ -57,6 +57,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | CLICK | Core | Board, Console | Play the short soft click for a picked "Other..." (in order with the echoes) |
 | CAR_ACTION | Core | Board, Console | A trip control acts (or Pull over was confirmed): play its animation, input locked meanwhile |
+| CAR_STATE | Core | Board, Console | The mock car's telemetry for the trip screen (speed, arrival, battery, temperature, windows, volume) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 | SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
@@ -290,7 +291,7 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` | `suggestions` = the sentences for a picked leaf; `trip` = the six car controls (trip mode), no "Other...", `path` empty |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top) |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
 | `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
@@ -307,7 +308,8 @@ Tiles:
 | `branch` | a menu category | opens the next level (the home "Suggested" opens the AI's sentences for right now, then its fixed phrases) |
 | `leaf` | an option that leads to a sentence, from `data/menu.yaml` or made by the AI | opens the suggestions screen, or the CONFIRM screen with the fixed phrase when there is no AI |
 | `suggestion` | a full sentence; `label` is the exact text | opens the CONFIRM screen with exactly that sentence |
-| `car` | a trip control (`trip.window_up`, `.window_down`, `.warmer`, `.cooler`, `.music`, `.pull_over`), trip screen only | a routine control acts at once: CAR_ACTION, input locked for its `ms`; `pull_over` opens the CONFIRM screen (`action: "pull_over"`) |
+| `car` | a trip menu level or control, trip screen only (`trip.windows`, `trip.windows.down.front_left`, `trip.temperature.warmer`, ...; the tree is in `core/trip.py`) | a level opens; a routine control acts at once (CAR_ACTION, input locked for its `ms`, same level after); `pull_over` and `support` open the CONFIRM screen |
+| `back` | the trip menu's Back tile, last on every level below the top | up one level |
 | `other` | always the last tile: "Other..." / "Otro..." | the next page of new options for the same path (AI, else the level's fixed `more` list). After 3 pages, or when there is nothing new (or no AI), the next pick loops back to the level's own options |
 
 `id` is the dotted menu path (`need.pain.back`). The Core's own tile ends in `.other`
@@ -362,7 +364,7 @@ DOUBLE_BLINK cancels (PRD D5).
 | Field | Type | Notes |
 |---|---|---|
 | `text` | string | the exact sentence that will be spoken or sent |
-| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` \| `"pull_over"` | from the action registry (`pull_over`: the trip screen's Pull over, "Pull over here?") |
+| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` \| `"pull_over"` \| `"support"` | from the action registry (`pull_over`: the trip screen's Pull over, "Pull over here?"; `support`: its Support, "Call rider support?") |
 
 ```json
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
@@ -481,21 +483,42 @@ For example `{"center_yaw": 0.5, "center_pitch": -2.0, "left_yaw": -18.0, "right
 
 ### CAR_ACTION
 
-A trip control was picked (window up / down, warmer, cooler, music), or Pull over was confirmed. The
-board plays that control's confirm animation for `ms` (the other tiles fade, the picked one stays and
-grows a little, the tablet's 3D car shows the control's particles; Pull over: a still car and a warm
-tint, no particles). For a routine control the Core locks input for the same `ms`: CLENCH, TAP and
-POINT are ignored, the highlight stays put, and the same screen comes back when it ends. LONG_CLENCH
-still starts the help countdown. Pull over's is sent with its confirm, before the confirmed sentence
-is spoken. The controls are mocks: nothing leaves the laptop for a routine control.
+A trip control acted (Windows > Up / Down > a window, Temperature > Warmer / Cooler, Music > Louder /
+Softer, Slow down), or Pull over was confirmed. The board plays that control's confirm animation for
+`ms` (the other tiles fade, the picked one stays and grows a little, the tablet's 3D car shows the
+control's line particles; Pull over: the drive eases to a stop and the screen takes a warm tint, no
+particles). For a routine control the Core locks input for the same `ms`: CLENCH, TAP and POINT are
+ignored, the highlight stays put, and the same screen comes back when it ends (so a control can be
+repeated). LONG_CLENCH still starts the help countdown. Pull over's is sent with its confirm, before
+the confirmed sentence is spoken. The controls are mocks: nothing leaves the laptop for a routine one.
 
 | Field | Type | Notes |
 |---|---|---|
-| `action` | `"window_up"` \| `"window_down"` \| `"warmer"` \| `"cooler"` \| `"music"` \| `"pull_over"` | which control |
+| `action` | `"window_up"` \| `"window_down"` \| `"warmer"` \| `"cooler"` \| `"louder"` \| `"softer"` \| `"slow_down"` \| `"pull_over"` \| `"support"` | which control (`support` is never sent: it only confirms and calls) |
+| `window` | `"front_left"` \| `"front_right"` \| `"rear_left"` \| `"rear_right"` \| `"all"` \| null | which window, for `window_up` / `window_down`; null otherwise |
 | `ms` | int | how long the animation (and, for routine controls, the input lock) lasts, > 0 |
 
 ```json
-{"type": "CAR_ACTION", "action": "warmer", "ms": 900}
+{"type": "CAR_ACTION", "action": "window_down", "window": "front_left", "ms": 900}
+```
+
+### CAR_STATE
+
+The (mock) car's telemetry for the trip screen's status strip: sent when trip mode starts, after
+every control that changes it, once a minute as the ride goes on (arrival, battery), and to a board
+that connects during a trip. The tablet's 3D scene drives at `speed_mph` (0 after Pull over).
+
+| Field | Type | Notes |
+|---|---|---|
+| `speed_mph` | int | >= 0; Slow down takes 5 off (never below 10), Pull over stops the car |
+| `eta_min` | int | minutes to arrival, >= 0 |
+| `battery_pct` | int | 0 to 100 |
+| `cabin_temp_f` | int | °F, 60 to 85; Warmer / Cooler move it by 1 |
+| `windows` | object | `front_left`, `front_right`, `rear_left`, `rear_right`: % open, 0 (up) to 100 (down), 25 per Up / Down |
+| `volume` | int | music volume 0 to 10; Louder / Softer move it by 1 |
+
+```json
+{"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4}
 ```
 
 ### ACTION_RESULT

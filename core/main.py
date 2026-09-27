@@ -276,6 +276,8 @@ def create_app(
                         view = session.current_view()
                         if view is not None:
                             hub.send_to(client, view)
+                        if session.trip:
+                            hub.send_to(client, session.car.message())  # the trip screen's telemetry
                     else:
                         session.handle(msg)
                 except Exception:

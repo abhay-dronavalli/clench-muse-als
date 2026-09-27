@@ -21,7 +21,7 @@ export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip'
-export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over'
+export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over' | 'support'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
@@ -31,10 +31,20 @@ export type UtteranceKind = 'phrase' | 'echo' | 'system'
  * branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
  * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
-/** car = a trip control (core/trip.py), trip screen only */
-export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car'
-/** The trip screen's controls, in the order they are shown (core/trip.py). */
-export type CarActionName = 'window_up' | 'window_down' | 'warmer' | 'cooler' | 'music' | 'pull_over'
+/** car = a trip menu level or control (core/trip.py); back = the trip menu's Back tile */
+export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car' | 'back'
+/** What a trip control does (core/trip.py). */
+export type CarActionName =
+  | 'window_up'
+  | 'window_down'
+  | 'warmer'
+  | 'cooler'
+  | 'louder'
+  | 'softer'
+  | 'slow_down'
+  | 'pull_over'
+  | 'support'
+export type WindowName = 'front_left' | 'front_right' | 'rear_left' | 'rear_right' | 'all'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 
@@ -257,8 +267,35 @@ export interface Click {
 export interface CarAction {
   type: 'CAR_ACTION'
   action: CarActionName
+  /** which window, for window_up / window_down; null otherwise */
+  window?: WindowName | null
   /** > 0 */
   ms: number
+}
+
+/** How far each window is open, 0 (fully up) to 100 (fully down). */
+export interface WindowsOpen {
+  front_left: number
+  front_right: number
+  rear_left: number
+  rear_right: number
+}
+
+/**
+ * The (mock) car's telemetry for the trip screen: sent when trip mode starts, after every control,
+ * and as the ride goes on. The tablet's 3D scene drives at `speed_mph`.
+ */
+export interface CarState {
+  type: 'CAR_STATE'
+  speed_mph: number
+  eta_min: number
+  /** 0..100 */
+  battery_pct: number
+  /** °F */
+  cabin_temp_f: number
+  windows: WindowsOpen
+  /** 0..10 */
+  volume: number
 }
 
 /** How a confirmed action that leaves the laptop went (message, call, room control). */
@@ -394,6 +431,7 @@ export type Message =
   | PlayAudio
   | Click
   | CarAction
+  | CarState
   | ActionResult
   | Metrics
   | ShortcutDebug

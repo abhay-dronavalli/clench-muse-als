@@ -44,7 +44,14 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "RESET": (contracts.Reset, {"type": "RESET"}),
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
     "TAP": (contracts.Tap, {"type": "TAP", "tile": 3, "seq": 42, "cancel": False, "t": 1727300011.2}),
-    "CAR_ACTION": (contracts.CarAction, {"type": "CAR_ACTION", "action": "warmer", "ms": 900}),
+    "CAR_ACTION": (contracts.CarAction, {"type": "CAR_ACTION", "action": "window_down", "window": "front_left", "ms": 900}),
+    "CAR_STATE": (
+        contracts.CarState,
+        {
+            "type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72,
+            "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4,
+        },
+    ),
     "SETTINGS": (
         contracts.Settings,
         {

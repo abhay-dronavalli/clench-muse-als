@@ -15,7 +15,7 @@ import httpx
 from core.actions.base import Action, ActionContext, ActionRegistry, ActionResult, NotConfigured
 from core.actions.call import TwilioCallAction
 from core.actions.message import TelegramMessageAction
-from core.actions.car import PullOverAction
+from core.actions.car import PullOverAction, SupportCallAction
 from core.actions.room import RoomControlAction
 from core.actions.speak import SpeakAction
 from core.voice import Voice
@@ -46,6 +46,7 @@ def build_registry(
             TwilioCallAction(env, dry_run=dry_run, transport=transport),
             RoomControlAction(dry_run=dry_run),
             PullOverAction(dry_run=dry_run),
+            SupportCallAction(dry_run=dry_run),
         ],
         clock=clock,
     )

@@ -41,8 +41,10 @@ export interface ClenchNativeBridge {
   museDisconnect?(): string
   /** show (true) or hide the 3D car the shell draws behind this page (trip screen) */
   carScene?(on: boolean): void
-  /** play a trip control's effect on the 3D car for `ms` (CAR_ACTION) */
-  carEffect?(action: string, ms: number): void
+  /** play a trip control's effect on the 3D car for `ms` (CAR_ACTION); `window` "" when none */
+  carEffect?(action: string, ms: number, window: string): void
+  /** the car's speed (CAR_STATE): the 3D scene drives at it, 0 = stopped */
+  carSpeed?(mph: number): void
 }
 
 export type NativeEvent =
@@ -129,10 +131,19 @@ export function showNativeCar(on: boolean): void {
 }
 
 /** Play a trip control's effect on the shell's 3D car. No-op in a normal browser. */
-export function playNativeCarEffect(action: string, ms: number): void {
+export function playNativeCarEffect(action: string, ms: number, window: string | null = null): void {
   try {
-    nativeBridge()?.carEffect?.(action, ms)
+    nativeBridge()?.carEffect?.(action, ms, window ?? '')
   } catch (e) {
     console.warn('tablet shell: carEffect failed', e)
+  }
+}
+
+/** Tell the shell's 3D scene how fast the car goes. No-op in a normal browser. */
+export function setNativeCarSpeed(mph: number): void {
+  try {
+    nativeBridge()?.carSpeed?.(mph)
+  } catch (e) {
+    console.warn('tablet shell: carSpeed failed', e)
   }
 }
