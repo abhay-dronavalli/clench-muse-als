@@ -255,3 +255,65 @@ def test_language_change_refreshes_panel_and_launcher_does_not_prefetch():
         await service.aclose()
         session.stop()
     asyncio.run(run())
+
+
+def test_keyboard_done_back_help_and_validation():
+    async def run():
+        session, _, _ = await open_panel()
+        c = session.computer
+        def pick(key):
+            c.selection.index = next(i for i, item in enumerate(c.items()) if item[0] == key)
+            c.pick()
+        pick("keyboard")
+        pick("row:0")
+        pick("key:c")
+        pick("row:0")
+        pick("key:e")
+        assert c.items()[0] == ("complete:0", "Celia")
+        pick("complete:0")
+        assert c.search.keyboard.draft == "Celia "
+        pick("row:5")
+        c.set_help(5)
+        c.pick()
+        c.set_help(None)
+        assert c.search.keyboard.draft == "Celia " and c.search.keyboard.row == 5
+        c.back()
+        assert c.search.mode == "search"
+        pick("keyboard")
+        assert c.search.keyboard.draft == "Celia " and c.search.keyboard.row is None
+        c.search.keyboard.draft = "buy now"
+        pick("row:5")
+        pick("key:done")
+        assert c.search.mode == "keyboard" and not c.busy and c.message
+        c.search.keyboard.draft = "Celia Cruz"
+        pick("key:done")
+        await settle()
+        assert c.search is None and ("submit", "Celia Cruz") in c.browser.clicks
+        await c.aclose()
+        session.stop()
+    asyncio.run(run())
+
+
+def test_slow_overlay_coalesces_to_latest_selection():
+    async def run():
+        session, _, _ = await open_panel()
+        c = session.computer
+        await settle()
+        release = asyncio.Event()
+        original = c.browser.render
+        async def slow(state):
+            await release.wait()
+            await original(state)
+        c.browser.render = slow
+        before = len(c.browser.overlays)
+        c._tick(0)
+        await settle()
+        for index in range(1, 8):
+            c._tick(index)
+        release.set()
+        await settle()
+        assert c.browser.overlays[-1]["selected"] == "cancel"
+        assert len(c.browser.overlays) - before == 2
+        await c.aclose()
+        session.stop()
+    asyncio.run(run())

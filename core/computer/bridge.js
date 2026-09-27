@@ -119,6 +119,13 @@
       .option { padding:10px 16px; margin:6px 0; border:2px solid transparent; border-radius:8px; }
       .panel.search { top:45%; max-height:calc(100vh - 150px); overflow:auto; width:min(760px,calc(100% - 32px)); }
       .search .option { padding:7px 12px; margin:2px 0; font-size:20px; }
+      .draft { padding:10px 14px; margin-bottom:10px; background:#081e2b; border:1px solid #6c8792;
+        border-radius:8px; font:24px/1.4 'Segoe UI',sans-serif; overflow-wrap:anywhere; }
+      .keyboard .option-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; }
+      .keyboard.letters .option-list { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .keyboard .completion { grid-column:1 / -1; border-color:#6c8792; }
+      .keyboard .option { white-space:normal; }
+      @media(max-width:450px) { .keyboard .option-list { grid-template-columns:1fr; } }
       .help { position:fixed; top:12px; left:12px; right:12px; border:3px solid white; padding:18px;
         background:#ae1737; color:white; border-radius:12px; text-align:center; font:700 26px/1.4 'Segoe UI',sans-serif; }
       .message { position:fixed; bottom:120px; left:16px; right:16px; padding:12px 18px;
@@ -136,11 +143,12 @@
     const choices=make('choices'), hint=make('hint','Clench: select  |  Double blink: back  |  Hold: help');
     const chips=Array.from({length:5},()=>make('choice'));
     choices.append(...chips);line.append(title,step);row.append(choices);dock.append(line,row,hint);
-    const panel=make('panel'), panelTitle=make('panel-title'), options=Array.from({length:8},()=>make('option'));
-    panel.append(panelTitle,...options);
+    const panel=make('panel'), panelTitle=make('panel-title'), draft=make('draft'), optionList=make('option-list');
+    const options=Array.from({length:9},()=>make('option'));
+    optionList.append(...options);panel.append(panelTitle,draft,optionList);
     const help=make('help'), message=make('message');
     root.append(style,shade,...peers,outline,dock,panel,message,help);
-    ui={shade,peers,outline,dock,title,step,row,chips,panel,panelTitle,options,help,message};
+    ui={shade,peers,outline,dock,title,step,row,chips,panel,panelTitle,draft,options,help,message,hint};
   };
   const paint = () => {
     frame=null;
@@ -151,7 +159,7 @@
     const band=inTargets?s.band:Number(String(s.selected).split(':')[1]);
     const group=(s.groups?.[band]||[]).map(id=>elements.get(id)).filter(Boolean).map(info).filter(Boolean);
     const region=bounds(group),rect=elements.has(s.selected)&&info(elements.get(s.selected));
-    const active=inTargets?rect&&bounds([rect]):region;
+    const active=inTargets?rect&&bounds([rect]):s.level==='bands'?region:null;
     // Move the dock away from bottom controls, including fixed video controls that
     // scrolling cannot reveal. Target discovery always includes the whole viewport.
     const dockTop=active && active.y > dockHeight()+8 && active.y+active.height > innerHeight-dockHeight();
@@ -175,12 +183,17 @@
     ui.chips.forEach((el,i)=>{const item=bandItems[i];el.style.display=item?'block':'none';
       el.textContent=item?.[1]||'';el.className='choice'+(item?.[0]===s.selected?' chosen':'');});
     const searching=['search','keyboard'].includes(s.level);
-    ui.panel.className='panel'+(searching?' search':'');
+    const keyboard=s.level==='keyboard';
+    ui.panel.className='panel'+(searching?' search':'')+(keyboard?' keyboard':'')+(keyboard&&s.keyboardRow!=null?' letters':'');
     ui.panel.style.display=['menu','text','search','keyboard'].includes(s.level)&&!s.help?'block':'none';
     ui.panelTitle.textContent=s.level==='search'?(s.lang==='es'?'Buscar':'Search'):
-      s.level==='keyboard'?'Keyboard coming next':s.level==='text'?'Search options coming next':'Browser menu';
+      keyboard?(s.lang==='es'?'Teclado':'Keyboard'):s.level==='text'?'Search options coming next':'Browser menu';
+    ui.draft.style.display=keyboard?'block':'none';
+    ui.draft.textContent=s.draft|| (s.lang==='es'?'Escribe tu búsqueda…':'Type your search…');
+    ui.hint.textContent=keyboard?(s.lang==='es'?'Elige fila y luego letra. Doble parpadeo: volver. Mantener: ayuda.':
+      'Choose a row, then a letter. Double blink: search options. Hold: help.'):'Clench: select  |  Double blink: back  |  Hold: help';
     ui.options.forEach((el,i)=>{const item=items[i];el.style.display=item?'block':'none';
-      el.textContent=item?.[1]||'';el.className='option'+(item?.[0]===s.selected?' chosen':'');});
+      el.textContent=item?.[1]||'';el.className='option'+(item?.[0]===s.selected?' chosen':'')+(String(item?.[0]).startsWith('complete:')?' completion':'');});
     if(searching) ui.options[index]?.scrollIntoView({block:'nearest'});
     ui.help.style.display=s.help!=null?'block':'none';ui.help.textContent=`Help / Ayuda: ${s.help}     Double blink to cancel`;
     ui.message.style.display=s.message?'block':'none';ui.message.textContent=s.message||'';

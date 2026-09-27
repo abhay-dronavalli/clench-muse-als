@@ -746,3 +746,18 @@ redesign now; the immediate request is to retain this feedback for work after Pa
   rechecked before both fill and Enter. This narrows the text-field behavior to the smart-search goal.
 - EN/ES changes rebuild an idle search panel in the requested language. Local launcher and Google
   account/mail pages do not trigger AI prefetch; only recognized search sites do.
+
+## Scanning search keyboard (2026-09-27)
+
+- The keyboard scans six rows, then the keys in the chosen row: a-z, ñ and a controls row with
+  Space, Delete and Done. Each edit returns to row scanning. Done submits the visible draft through
+  the same validated field adapter as a suggestion; an empty or unsafe draft stays in the keyboard.
+- Up to three matching word completions appear before the rows, from the current suggestions and
+  safe search history. A completion replaces only the current word and adds a space when it fits.
+  Drafts are limited to 40 characters. Completion choices stay fixed while a row is being scanned.
+- Back at either keyboard level returns directly to the search panel, as requested. Reopening the
+  keyboard retains the draft; cancelling the entire search discards it. Help preserves both draft
+  and row selection. The internal overlay state needs no new board WebSocket messages.
+- Overlay updates are serialized and coalesced to the newest state so rapid edits or scans cannot
+  leave a queue of stale highlights. The local Chromium test waits for the rendered frame before
+  capturing the suggestion and keyboard panels.

@@ -327,3 +327,65 @@ def test_youtube_network(launcher, tmp_path):
         finally:
             await browser.close()
     asyncio.run(run())
+
+
+def test_search_keyboard_scan_to_real_fill_enter_and_cancel(launcher, tmp_path):
+    from functools import partial
+    from core.clock import ManualScheduler
+    from core.computer.service import Computer
+    from core.contracts import Settings
+    async def run():
+        clock, echoes = ManualScheduler(), []
+        c = Computer(clock, lambda: None, echoes.append, lambda _: None, start_url=launcher,
+                     browser_factory=partial(Browser, headless=True, profile=tmp_path / "search-profile"))
+        async def pick(key):
+            for _ in range(20):
+                if c.items()[c.selection.index][0] == key:
+                    c.pick()
+                    await asyncio.sleep(.02)
+                    await until(lambda: c.render_task is None)
+                    await c.browser.page.evaluate("() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))")
+                    return
+                clock.advance(.5)
+            raise AssertionError(f"scan did not reach {key}")
+        try:
+            c.start(Settings(pointing_mode="scan", scan_ms=500, lang="en"))
+            await until(lambda: c.ready)
+            await c.browser.page.set_viewport_size({"width": 1000, "height": 700})
+            await c.browser.page.evaluate("""() => {
+              const field=document.createElement('input');field.type='search';field.id='search-field';
+              field.setAttribute('aria-label','Search videos');
+              Object.assign(field.style,{position:'fixed',left:'50px',top:'30px',width:'500px',height:'50px'});
+              field.addEventListener('keydown', e=>{if(e.key==='Enter') {e.preventDefault();window.query=field.value;}});
+              document.body.append(field);window.__clench.discover();
+            }""")
+            await until(lambda: any(t.label == "Search videos" for targets in c.selection.bands.values() for t in targets))
+            async def open_search():
+                band, field = next((band,t) for band, targets in c.selection.bands.items() for t in targets if t.label == "Search videos")
+                await pick(f"band:{band}")
+                await pick(field.id)
+                await until(lambda: c.search is not None)
+            await open_search()
+            first = c.items()[0][1]
+            await c.browser.page.screenshot(path=str(tmp_path / "search-panel.png"))
+            await pick("query:0")
+            await until(lambda: c.search is None and not c.busy)
+            assert await c.browser.page.evaluate("window.query") == first
+            await open_search()
+            await pick("keyboard")
+            for key in ("row:0", "key:c", "row:0", "key:e"):
+                await pick(key)
+            assert c.items()[0] == ("complete:0", "Celia")
+            await c.browser.page.screenshot(path=str(tmp_path / "search-keyboard.png"))
+            await pick("complete:0")
+            await pick("row:5")
+            await pick("key:done")
+            await until(lambda: c.search is None and not c.busy)
+            assert await c.browser.page.evaluate("window.query") == "Celia"
+            assert "Celia" in echoes
+            await open_search()
+            await pick("cancel")
+            assert c.search is None and await c.browser.page.evaluate("window.query") == "Celia"
+        finally:
+            await c.aclose()
+    asyncio.run(run())

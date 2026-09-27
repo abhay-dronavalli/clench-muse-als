@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import yaml
+from core.computer.keyboard import Keyboard
 
 MAX_QUERY = 40
 
@@ -67,6 +68,7 @@ class SearchPanel:
         self.pages = [queries[:5]]
         self.page = 0
         self.mode = "search"
+        self.keyboard = Keyboard(queries, lang)
 
     def label(self, en: str, es: str) -> str:
         return es if self.lang == "es" else en
@@ -77,7 +79,7 @@ class SearchPanel:
 
     def items(self) -> list[tuple[str, str]]:
         if self.mode == "keyboard":
-            return [("cancel", self.label("Back", "Volver"))]
+            return self.keyboard.items()
         return [(f"query:{i}", text) for i, text in enumerate(self.pages[self.page])] + [
             ("other", self.label("Other...", "Otro...")),
             ("keyboard", self.label("Keyboard", "Teclado")),

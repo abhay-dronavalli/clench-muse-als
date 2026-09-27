@@ -7,7 +7,7 @@ import logging
 from core.computer.browser import BrowserWorker
 from core.computer.model import MENU, Selection, Target
 from core.computer.policy import Policy
-from core.computer.search import SearchPanel, unique_queries, fallback_queries, site_for
+from core.computer.search import SearchPanel, unique_queries, fallback_queries, site_for, clean_query
 from core.contracts import Clench, DoubleBlink, LongClench
 from core.pointer.scan import ScanPointer
 
@@ -38,6 +38,8 @@ class Computer:
         self.history, self.ranker = history, ranker
         self.learning = True
         self.submit_task = None
+        self.render_task = None
+        self.pending_render = None
 
     def _spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -149,11 +151,28 @@ class Computer:
         items = self.items()
         state = dict(level=self.search.mode if self.search else self.selection.level,
                      lang=self.lang, searchPage=self.search.page if self.search else 0,
+                     draft=self.search.keyboard.draft if self.search else "",
+                     keyboardRow=self.search.keyboard.row if self.search else None,
                      band=self.selection.band, bands=list(self.selection.bands),
                      groups=self.selection.groups(), page=self.selection.page, busy=self.busy,
                      items=items, selected=items[self.selection.index][0], help=self.help,
                      message=self.message, blockedWords=self.policy.blocked_words, longClenchMs=self.long_clench_ms)
-        self._spawn(self.browser.render(state))
+        self.pending_render = (self.browser, state)
+        if self.render_task is None:
+            self.render_task = self._spawn(self._render_latest())
+
+    async def _render_latest(self):
+        # A quick sequence of edits must not queue stale highlights behind the live selection.
+        try:
+            while self.pending_render:
+                browser, state = self.pending_render
+                self.pending_render = None
+                if browser is self.browser and self.active:
+                    await browser.render(state)
+        except Exception:
+            log.debug("computer overlay render interrupted", exc_info=True)
+        finally:
+            self.render_task = None
 
     def pick(self):
         if not self.active or not self.ready or self.busy or self.help is not None:
@@ -217,6 +236,16 @@ class Computer:
 
     def _pick_search(self):
         key, label = self.items()[self.selection.index]
+        self.message = ""
+        if self.search.mode == "keyboard":
+            query = self.search.keyboard.pick(key)
+            self.selection.index = 0
+            if query is not None:
+                self._begin_search(query)
+            else:
+                self.echo(label)
+                self._refresh(restart=True)
+            return
         self.echo(label)
         if key == "cancel":
             self.back()
@@ -229,13 +258,25 @@ class Computer:
             self._refresh(restart=True)
         elif key == "keyboard":
             self.search.mode = "keyboard"
+            self.search.keyboard.row = None
+            self.search.keyboard.candidates = unique_queries(list(self.search.shown) + self._queries(), self.policy)
             self.selection.index = 0
             self._refresh(restart=True)
         elif key.startswith("query:"):
-            self.busy = True
-            self.scan.stop()
-            self._render()
-            self.submit_task = self._spawn(self._submit_search(label, self.generation, site_for(self.url or ""), self.lang))
+            self._begin_search(label, echo=False)
+
+    def _begin_search(self, query, *, echo=True):
+        query = clean_query(query)
+        if not query or not self.policy.allows_label(query):
+            self.message = "Usa palabras de búsqueda, sin enlaces ni acciones bloqueadas." if self.lang == "es" else "Use search words, without links or blocked actions."
+            self._refresh(restart=True)
+            return
+        if echo:
+            self.echo(query)
+        self.busy = True
+        self.scan.stop()
+        self._render()
+        self.submit_task = self._spawn(self._submit_search(query, self.generation, site_for(self.url or ""), self.lang))
 
     async def _submit_search(self, query, generation, site, lang):
         try:
@@ -289,6 +330,7 @@ class Computer:
         if not self.active:
             return
         self.active = self.ready = self.busy = False
+        self.pending_render = None
         self.search = None
         if self.submit_task and not self.submit_task.done():
             self.submit_task.cancel()
