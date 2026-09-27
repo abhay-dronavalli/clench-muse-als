@@ -423,6 +423,13 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QApplication(sys.argv[:1])
     app.setQuitOnLastWindowClosed(False)
+    # Ctrl+C: Qt's loop would otherwise swallow it inside a frame. Quitting the loop runs agent.stop(),
+    # which lets go of a held drag and stops the Eyedid worker.
+    import signal
+
+    for name in ("SIGINT", "SIGBREAK"):  # Ctrl+C, and Ctrl+Break on Windows
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), lambda *_: app.quit())
     agent = Agent(args)
     agent.start()
     try:
