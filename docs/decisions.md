@@ -741,3 +741,15 @@ choices below are Taher's.
   bare `calibrate(...)` call resolved to the bridge method itself, so it re-posted itself to the main
   thread forever. It now calls the activity's method explicitly.
 
+## 23. Tablet layout controls and onboarding entry readability
+
+- The Kotlin board shell renders Car / Split / Map and the startup screen from the web app, so
+  these visual changes live in `web/src/board/`. Layout labels grow from 20 px to 30 px semibold,
+  with buttons at least 72 px tall and more space between them. The existing sidebar width stays
+  288 px to preserve the native car framing. Telemetry scrolls independently on short screens so
+  the three layout buttons stay visible. Selected state is also exposed with `aria-pressed`.
+- The startup screen uses onboarding's light gradient, white rounded card and teal palette. Its
+  explicit "Click to start" button uses dark teal for readable white text, with hover, pressed and
+  keyboard focus states. It still unlocks speech and opens the existing setup flow on a deliberate
+  click; clicking the surrounding background no longer starts setup.
+

@@ -186,14 +186,18 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
 
 export function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onStart}
-      className="fixed inset-0 z-40 flex cursor-pointer flex-col items-center justify-center gap-8 bg-black text-white"
-    >
-      <span className="text-8xl font-bold tracking-tight">Clench</span>
-      <span className="rounded-3xl px-12 py-6 text-5xl font-semibold ring-8 ring-yellow-300">Click to start</span>
-      <span className="text-2xl text-zinc-400">Turns on speech. Haga clic para empezar.</span>
-    </button>
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-[linear-gradient(160deg,#eaf6f4_0%,#f6f8f8_45%,#e3eef7_100%)] p-6 text-zinc-900">
+      <div className="flex w-full max-w-3xl flex-col items-center gap-8 rounded-[2.5rem] bg-white px-8 py-12 text-center shadow-2xl shadow-black/10 sm:px-16 sm:py-16">
+        <h1 className="text-6xl font-bold tracking-tight text-[#007a72] sm:text-8xl">Clench</h1>
+        <button
+          type="button"
+          onClick={onStart}
+          className="w-full rounded-3xl bg-[#007a72] px-8 py-6 text-3xl font-bold text-white shadow-lg shadow-[#00a99d]/30 transition-colors hover:bg-[#00665f] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#007a72] active:bg-[#00564f] sm:text-5xl"
+        >
+          Click to start
+        </button>
+        <p className="text-2xl text-zinc-600">Turns on speech. Haga clic para empezar.</p>
+      </div>
+    </div>
   )
 }
