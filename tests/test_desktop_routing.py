@@ -191,16 +191,28 @@ def test_a_muse_clench_reaches_the_agent_with_no_board_open(client):
         assert event["accepted"] is True and event["source"] == "muse"
 
 
-def test_without_an_agent_desktop_gestures_are_refused(client):
-    with client.websocket_connect("/ws/board") as board, \
-         client.websocket_connect("/ws/console") as console, \
-         client.websocket_connect("/ws/sensor") as sensor:
+def test_without_an_agent_the_core_keeps_the_board(client):
+    """Gestures sent to no agent would strand the person, so the switch itself is refused."""
+    with client.websocket_connect("/ws/board") as board,          client.websocket_connect("/ws/console") as console,          client.websocket_connect("/ws/sensor") as sensor:
         board.send_json({"type": "READY"})
-        set_settings(console, input_target="desktop", muse_enabled=True)
+        assert set_settings(console, input_target="desktop", muse_enabled=True)["input_target"] == "board"
         sensor.send_json(signal())
         sensor.send_json({"type": "DOUBLE_BLINK", "t": time.time()})
-        event = drain(console, "INPUT_EVENT")
-        assert event["accepted"] is False and event["reason"] == "no desktop agent is connected"
+        assert drain(console, "INPUT_EVENT")["accepted"] is True  # the board still acts on it
+
+
+def test_a_gesture_in_desktop_mode_with_no_agent_is_refused():
+    """The race the refusal above leaves: the agent is gone but the target has not flipped yet."""
+    from types import SimpleNamespace
+
+    from core.contracts import Signal
+    from core.main import refuse_reason
+
+    session = SimpleNamespace(muse_enabled=True, input_target="desktop")
+    hub = SimpleNamespace(count=lambda role: 1 if role == "board" else 0)
+    state = SimpleNamespace(sensor_signal=Signal(t=time.time(), ch=[], connected=True), sensor_seen=time.monotonic())
+    msg = DoubleBlink(t=time.time())
+    assert refuse_reason(session, hub, state, msg) == "no desktop agent is connected"
 
 
 def test_the_agent_s_stand_in_keys_are_logged_as_dev_input(client):
@@ -248,3 +260,28 @@ def test_closing_the_board_keeps_muse_on_while_the_agent_is_in_charge(client):
         health = client.get("/health").json()
         assert health["muse_enabled"] is True and health["desktop_agents"] == 1
     assert client.get("/health").json()["muse_enabled"] is False  # nobody left to act on a gesture
+
+
+# --- the Computer tile (Room > Computer) ------------------------------------------------------------
+
+
+def computer(session, sched, sent):
+    pick(session, sched, sent, "room")
+    pick(session, sched, sent, "computer")
+
+
+def test_the_computer_tile_hands_the_gestures_to_the_agent(session, sched, sent):
+    session.desktop_available = True
+    computer(session, sched, sent)
+    assert session.input_target == "desktop"
+    assert screens(sent)[-1].path == []  # home, scanning stopped
+    assert not any(isinstance(m, Confirm) for m in sent)  # nothing said or sent: no confirm step
+    session.handle(Clench(t=50.0, strength=1.0))
+    assert desktop_inputs(sent) == [("CLENCH", 50.0)]
+
+
+def test_without_an_agent_the_computer_tile_says_so_and_stays(session, sched, sent):
+    computer(session, sched, sent)
+    assert session.input_target == "board"
+    assert any(isinstance(m, Speak) and m.text == "The computer is not connected." for m in sent)
+    assert screens(sent)[-1].path == ["Room"]  # still there, still scanning

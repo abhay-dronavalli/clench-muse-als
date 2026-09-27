@@ -235,6 +235,8 @@ def create_app(
         await ws.accept()
         client = Client(ws, role)
         hub.add(client)
+        if role == "desktop":
+            app.state.session.desktop_available = True
         writer = asyncio.create_task(client.pump())
         session: Session = app.state.session
         hub.send_to(client, session.settings())
@@ -280,6 +282,10 @@ def create_app(
                             continue
                     if role in ('input', 'desktop') and msg.type in GESTURES:
                         hub.broadcast(input_event(msg, 'dev', None))
+                    if isinstance(msg, Settings) and msg.input_target == "desktop" and not hub.count("desktop"):
+                        # Gestures sent to no agent would strand the person: keep the board.
+                        log.warning("input_target desktop refused: no desktop agent is connected")
+                        msg = msg.model_copy(update={"input_target": None})
                     if isinstance(msg, Ready):
                         view = session.current_view()
                         if view is not None:
@@ -293,6 +299,8 @@ def create_app(
         finally:
             hub.remove(client)
             writer.cancel()
+            if role == "desktop":
+                session.desktop_available = hub.count("desktop") > 0
             if role == 'sensor':
                 app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False,
                     profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')

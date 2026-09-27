@@ -132,6 +132,7 @@ LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
 OTHER_PAGES = 3  # "Other..." pages in a row before the next pick loops back to the level's own options
 TRAIL_S = 2.0  # how much highlight history the clench look-back keeps
 
+NO_COMPUTER: dict[Lang, str] = {"en": "The computer is not connected.", "es": "La computadora no está conectada."}
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
 HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
@@ -313,6 +314,9 @@ class Session:
         self.long_clench_ms = profile.long_clench_ms
         self.muse_enabled = False
         self.input_target: InputTarget = "board"  # session-only: every Core starts on the board
+        # A desktop agent is connected (the app sets it). Without one the Computer tile says so and
+        # stays on the board: gestures sent to nobody would leave the person stranded.
+        self.desktop_available = False
         self.tile_switch_margin = profile.tile_switch_margin
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
         self.jev = jev  # None = no Jev: the AI prior is 0
@@ -589,6 +593,10 @@ class Session:
             return
         item = frame.items[index]
         self._record(item)
+        if item.node is not None and item.node.switch == "desktop":
+            self._echo(item.label(self.lang))
+            self._use_computer()
+            return
         if item.kind == "suggestion":
             self._confirm(item)  # no echo: the confirm step speaks the whole sentence
             return
@@ -609,6 +617,15 @@ class Session:
             self._wait(self._leaf_request(item), lambda sentences: self._open_suggestions(item, sentences))
         else:
             self._confirm(item)  # no AI: straight to the fixed phrase, as before
+
+    def _use_computer(self) -> None:
+        """The Computer tile: hand CLENCH and DOUBLE_BLINK to the desktop agent. Nothing is said or
+        sent, so no confirm step. The agent's palette ("Clench board") hands them back."""
+        if not self.desktop_available:
+            log.warning("Computer picked but no desktop agent is connected: staying on the board")
+            self._voice.speak(NO_COMPUTER[self.lang], self.lang, "system")
+            return
+        self._apply_settings(self.settings().model_copy(update={"input_target": "desktop"}))
 
     def _pick_other(self, frame: Frame) -> None:
         self._log_event(node_id=_join(frame.prefix, "other"), path=self._crumbs() + [OTHER_WORD[self.lang]], action=None)

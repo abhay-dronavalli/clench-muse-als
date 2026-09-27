@@ -5,6 +5,8 @@
 #   - a branch: `children` (1 to 5 nodes), or `from_contacts: true` (children are built from
 #     data/contacts.yaml: one branch per contact with Call / Text / Say out loud), or
 #   - a leaf: phrase_en, phrase_es and action (speak | send_message | place_call | room_control).
+#   - a switch: `switch: desktop` and nothing else; picking it hands the gestures to the desktop agent
+#     (docs/desktop-control.md). Nothing is said or sent, so it needs no confirm step.
 # Any node may say `urgent: true` (pain, bathroom, help): when the body state is elevated it moves
 # up (PRD D10: body state only reorders, never acts). A branch counts as urgent if anything in it is.
 # The session adds "Other..." as the sixth tile on every level (PRD D8: at most 6 tiles). It asks the
@@ -339,6 +341,13 @@ home:
             phrase_en: "Please close the blinds."
             phrase_es: "Por favor, cierra las persianas."
             action: room_control
+      # Hands the gestures to the desktop agent: eyes point and the jaw clicks in all of Windows
+      # (docs/desktop-control.md). Nothing is said or sent. Back to the board from the agent's
+      # "Clench" tab > Clench board. Without a connected agent it says so and stays here.
+      - id: computer
+        label_en: Computer
+        label_es: Computadora
+        switch: desktop
 
 # Home "Other..." when the AI has nothing (the old "Say something" phrases).
 more:

@@ -692,3 +692,18 @@ Muse gestures to control all of Windows, not only the board tab.
 desktop agent's overlay start in English. Spanish stays one tap away (dev panel EN/ES, SETTINGS
 `lang`). `test_profile_loads` reads the file, so it expects `en`; the Spanish help-alert test now asks
 for Spanish explicitly instead of relying on the profile.
+
+## 22. Desktop control, chunk 5: the board and the agent together (branch desktop-control)
+
+- **Room > Computer** (`switch: desktop` in `data/menu.yaml`, a new node kind: no phrase, action or
+  children). Picking it hands CLENCH and DOUBLE_BLINK to the desktop agent. Nothing is said or sent,
+  so it has no confirm step. The agent's palette ("Clench board") hands them back. Room had four
+  items, so it fits without moving anything.
+- The Core refuses `input_target: desktop` while no agent is connected (the SETTINGS is applied
+  without it), and the Computer tile says "The computer is not connected." and stays on the board:
+  gestures routed to nobody would leave the person with no way back but a caregiver.
+  `test_without_an_agent_desktop_gestures_are_refused` tested the old state (desktop with no
+  agent), which can no longer be reached; it now checks the refusal, and the gate's "no desktop
+  agent is connected" reason (still possible in a race) is tested on `refuse_reason` directly.
+- `test_every_level_has_at_most_five_items` treated every non-leaf as a branch; a switch tile is
+  neither, so it now checks every node with children. The rule itself is unchanged.

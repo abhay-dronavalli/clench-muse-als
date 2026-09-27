@@ -40,7 +40,7 @@ def test_home_level(menu):
 def test_every_level_has_at_most_five_items(menu):
     assert MAX_ITEMS == 5  # the session adds "Other..." as the sixth tile (PRD D8)
     for node in all_nodes_and_more(menu.root):
-        if not node.is_leaf:
+        if node.children is not None:  # a branch (leaves and switch tiles hold no level)
             assert 1 <= len(node.children) <= MAX_ITEMS, node.id
             assert node.more is None or 1 <= len(node.more) <= MAX_ITEMS, node.id
 
@@ -128,3 +128,13 @@ def test_unreadable_yaml_fails_loudly(tmp_path: Path):
     path.write_text("home: [unclosed", encoding="utf-8")
     with pytest.raises(MenuError):
         load_menu(path, CONTACTS_PATH)
+
+
+def test_a_switch_tile_has_nothing_else(menu):
+    from core.menu import MenuNode
+
+    computer = find(menu.root, "room", "computer")
+    assert computer.switch == "desktop" and not computer.is_leaf and computer.leaves() == []
+    assert find(menu.root, "room").inherited() == ("room_control", None)  # the switch does not dilute it
+    with pytest.raises(ValueError):
+        MenuNode(id="x", label_en="X", label_es="X", switch="desktop", phrase_en="a", phrase_es="a", action="speak")

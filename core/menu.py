@@ -54,13 +54,19 @@ class MenuNode(BaseModel):
     contact: str | None = None  # contact id, for People leaves
     # Pain, bathroom, help: moves up when the body state is elevated (PRD D10, only reorders).
     urgent: bool = False
+    # A switch tile: picking it hands the gestures to the desktop agent (docs/desktop-control.md).
+    # Nothing is said or sent, so there is no confirm step; it has no phrase, action or children.
+    switch: Literal["desktop"] | None = None
 
     @model_validator(mode="after")
     def _branch_or_leaf(self) -> MenuNode:
         if self.id in RESERVED_IDS:
             raise ValueError(f"node id '{self.id}' is reserved for the session's own tiles")
         leaf_fields = (self.phrase_en, self.phrase_es, self.action)
-        if self.children is not None or self.from_contacts:
+        if self.switch is not None:
+            if self.children is not None or self.from_contacts or self.more is not None or self.ai_now                     or any(f is not None for f in leaf_fields):
+                raise ValueError(f"switch '{self.id}' cannot have children, a phrase, an action, `more` or `ai_now`")
+        elif self.children is not None or self.from_contacts:
             if any(f is not None for f in leaf_fields):
                 raise ValueError(f"node '{self.id}' has children, so it cannot have a phrase or action")
             if self.children is not None:
@@ -82,7 +88,8 @@ class MenuNode(BaseModel):
 
     @property
     def is_leaf(self) -> bool:
-        return self.children is None
+        """An option that leads to a sentence (a switch tile is neither a leaf nor a branch)."""
+        return self.children is None and self.switch is None
 
     def label(self, lang: Lang) -> str:
         return self.label_es if lang == "es" else self.label_en
@@ -95,6 +102,8 @@ class MenuNode(BaseModel):
         """Every leaf under this node (children and `more`), or itself for a leaf."""
         if self.is_leaf:
             return [self]
+        if self.switch is not None:
+            return []
         return [leaf for c in (self.children or []) + (self.more or []) for leaf in c.leaves()]
 
     @property
