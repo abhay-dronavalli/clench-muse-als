@@ -1,4 +1,10 @@
-"""Gaze on the desktop: samples, the One Euro filter, freshness, and the look-back trail. Pure.
+"""Gaze on the desktop: samples, the smoothing filters, freshness, and the look-back trail. Pure.
+
+Smoothing is Savitzky-Golay, then One Euro. Raw webcam gaze jitters by tens of pixels from frame to
+frame, and One Euro alone reads that jitter as speed and lets it through. Savitzky-Golay fits a
+low-order polynomial to the last few hundred milliseconds and takes its value: jitter averages out,
+while a real jump (a saccade) keeps its shape better than under a moving average. One Euro then
+steadies what is left while the eyes rest.
 
 Points are screen pixels (physical, the agent is per-monitor DPI aware); time is seconds on the
 Unix clock, the same clock the headband's gestures carry, so a CLENCH at `t` can look back at the
@@ -93,6 +99,68 @@ class OneEuro:
         return fx * self.w, fy * self.h
 
 
+class SavitzkyGolay:
+    """Causal Savitzky-Golay smoothing over time, for one 2D point stream.
+
+    Keeps the samples of the last `window_s` seconds, fits x(t) and y(t) with a polynomial of
+    `order` (least squares, so an uneven frame rate is fine: Eyedid runs at 15 to 30 fps), and
+    returns the fit `lag_s` before the newest sample. Evaluating a little behind the newest sample
+    smooths much more than evaluating at it (a fit is least certain at its end) for a small delay.
+    A gap longer than RESET_S starts over, as One Euro does.
+    """
+
+    def __init__(self, window_s: float = 0.5, order: int = 2, lag_s: float = 0.08) -> None:
+        if order not in (1, 2, 3):
+            raise ValueError("order must be 1, 2 or 3")
+        self.window_s, self.order, self.lag_s = window_s, order, lag_s
+        self.reset()
+
+    def reset(self) -> None:
+        self._pts: deque[tuple[float, float, float]] = deque()
+
+    def __call__(self, x: float, y: float, t: float) -> tuple[float, float]:
+        if self._pts and t - self._pts[-1][0] > RESET_S:
+            self.reset()
+        self._pts.append((t, x, y))
+        while self._pts[0][0] < t - self.window_s:
+            self._pts.popleft()
+        n = len(self._pts)
+        order = min(self.order, n - 2)  # need more points than coefficients, or it just repeats them
+        if order < 1:
+            return x, y
+        at = t - min(self.lag_s, t - self._pts[0][0])  # never evaluate before the oldest sample
+        return _fit_at(self._pts, at, order, 1), _fit_at(self._pts, at, order, 2)
+
+
+def _fit_at(pts: "deque[tuple[float, float, float]]", at: float, order: int, col: int) -> float:
+    """Least-squares polynomial of `order` through (t, pts[col]), evaluated at `at`. Time is taken
+    relative to `at`, so the answer is the constant term."""
+    k = order + 1
+    moments = [0.0] * (2 * k - 1)  # sum of dt^j
+    rhs = [0.0] * k  # sum of value * dt^j
+    for p in pts:
+        dt = p[0] - at
+        v = p[col]
+        power = 1.0
+        for j in range(2 * k - 1):
+            moments[j] += power
+            if j < k:
+                rhs[j] += v * power
+            power *= dt
+    a = [[moments[i + j] for j in range(k)] + [rhs[i]] for i in range(k)]
+    for c in range(k):  # Gaussian elimination with partial pivoting
+        pivot = max(range(c, k), key=lambda r: abs(a[r][c]))
+        if abs(a[pivot][c]) < 1e-12:
+            return pts[-1][col]  # all samples at one instant: nothing to fit
+        a[c], a[pivot] = a[pivot], a[c]
+        for r in range(k):
+            if r != c:
+                f = a[r][c] / a[c][c]
+                for j in range(c, k + 1):
+                    a[r][j] -= f * a[c][j]
+    return a[0][k] / a[0][0]
+
+
 T = TypeVar("T")
 
 
@@ -125,9 +193,11 @@ class Trail(Generic[T]):
 class Gaze:
     """The current gaze: filtered point, when the eyes were last seen, and the last raw state."""
 
-    def __init__(self, width: float, height: float, left: float = 0, top: float = 0) -> None:
+    def __init__(self, width: float, height: float, left: float = 0, top: float = 0,
+                 sg: SavitzkyGolay | None = None, one_euro: bool = True) -> None:
         self.left, self.top, self.width, self.height = left, top, width, height
-        self.filter = OneEuro(width, height)
+        self.sg = sg  # None = no Savitzky-Golay
+        self.filter = OneEuro(width, height) if one_euro else None
         self.point: tuple[float, float] | None = None
         self.seen_at = float("-inf")
         self.state = "none"
@@ -142,7 +212,11 @@ class Gaze:
         # Keep the point on the screen: the eyes on the bezel still mean the nearest edge.
         x = min(max(s.x, self.left), self.left + self.width - 1)
         y = min(max(s.y, self.top), self.top + self.height - 1)
-        self.point = self.filter(x, y, s.t)
+        if self.sg is not None:
+            x, y = self.sg(x, y, s.t)
+        if self.filter is not None:
+            x, y = self.filter(x, y, s.t)
+        self.point = (x, y)
         self.seen_at = s.t
 
     def fresh(self, now: float) -> bool:

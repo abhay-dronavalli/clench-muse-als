@@ -299,3 +299,67 @@ def test_palette_tiles_fit_the_screen_and_do_not_overlap(ctl):
         assert SCREEN.encloses(a.rect)
         assert not any(a.rect.intersects(b.rect) for b in tiles[i + 1:])
     assert math.isclose(ctl.menu_tab.rect.right, 1920)
+
+
+# --- Savitzky-Golay ----------------------------------------------------------------------------------
+
+import random  # noqa: E402
+import statistics  # noqa: E402
+
+from desktop.agent.gaze import SavitzkyGolay  # noqa: E402
+
+
+def feed(chain, points):
+    out = None
+    for x, y, t in points:
+        out = (x, y)
+        for f in chain:
+            out = f(*out, t)
+    return out
+
+
+def noisy_rest_then_jump(chain, fps=30, sigma=30.0, seed=1):
+    """Jitter left at rest (std of x, px) and how long a 600 px jump takes to get 90% there (s)."""
+    rng = random.Random(seed)
+    t, rest = 0.0, []
+    for i in range(3 * fps):
+        out = feed(chain, [(500 + rng.gauss(0, sigma), 500 + rng.gauss(0, sigma), t)])
+        if i > fps:
+            rest.append(out[0])
+        t += 1 / fps
+    for i in range(2 * fps):
+        out = feed(chain, [(1100 + rng.gauss(0, sigma), 500 + rng.gauss(0, sigma), t)])
+        t += 1 / fps
+        if out[0] >= 1040:
+            return statistics.pstdev(rest), (i + 1) / fps
+    return statistics.pstdev(rest), float("inf")
+
+
+def test_savitzky_golay_follows_a_smooth_path_exactly():
+    sg = SavitzkyGolay(window_s=0.5, order=2, lag_s=0.08)
+    path = [(3 + 40 * t - 7 * t * t, 5 * t, t) for t in [i / 30 for i in range(40)]]
+    x, y = feed([sg], path)
+    at = path[-1][2] - 0.08  # it reads the fit 80 ms back: exactly the path there, no noise to remove
+    assert (x, y) == pytest.approx((3 + 40 * at - 7 * at * at, 5 * at), abs=1e-6)
+
+
+def test_savitzky_golay_handles_an_uneven_frame_rate_and_starts_over_after_a_gap():
+    sg = SavitzkyGolay()
+    times = [0.0, 0.03, 0.09, 0.1, 0.17, 0.25, 0.26, 0.34]
+    x, _ = feed([sg], [(100 + 10 * t, 0, t) for t in times])
+    assert x == pytest.approx(100 + 10 * (0.34 - 0.08))
+    assert sg(900, 900, 5.0) == (900, 900)  # eyes back after 4.7 s: no pull toward the old spot
+
+
+def test_savitzky_golay_then_one_euro_halves_the_jitter_and_still_follows_a_jump():
+    euro_jitter, euro_reach = noisy_rest_then_jump([OneEuro(1920, 1080)])
+    both_jitter, both_reach = noisy_rest_then_jump([SavitzkyGolay(), OneEuro(1920, 1080)])
+    assert both_jitter < euro_jitter * 0.6  # 13 px -> 7 px on 30 px noise at 30 fps
+    assert both_reach <= 0.3  # a jump across a third of the screen still lands within 300 ms
+
+
+def test_gaze_smooths_with_savitzky_golay_then_one_euro():
+    g = Gaze(1920, 1080, sg=SavitzkyGolay())
+    for i in range(20):
+        g.feed(Sample(i / 30, 500 + (30 if i % 2 else -30), 500))
+    assert abs(g.point[0] - 500) < 15  # +/- 30 px alternating jitter mostly gone

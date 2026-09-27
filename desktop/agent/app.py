@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from desktop.agent import calibration, winput
-from desktop.agent.gaze import Gaze
+from desktop.agent.gaze import Gaze, SavitzkyGolay
 from desktop.agent.hotkeys import Key, KeyboardHook, StandIn
 from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Controller, Effect, FocusBoard, Keys,
                                        SetTarget, ZoomShot)
@@ -47,7 +47,9 @@ class Agent:
         d = self.display
         self.screen = Rect(0, 0, d.width_px, d.height_px)
         self.ctl = Controller(self.screen, d.px_per_mm, lookback_s=args.lookback_ms / 1000)
-        self.gaze = Gaze(d.width_px, d.height_px)
+        sg = None if args.sg_window_ms <= 0 else SavitzkyGolay(
+            args.sg_window_ms / 1000, args.sg_order, args.sg_lag_ms / 1000)
+        self.gaze = Gaze(d.width_px, d.height_px, sg=sg, one_euro=not args.no_one_euro)
         self.gaze_point: tuple[float, float] | None = None
         self.inbox: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.keys: queue.Queue[Key] = queue.Queue()
@@ -85,6 +87,9 @@ class Agent:
         self.timer.start(16)
         log.info("desktop agent: screen %dx%d px, %.0fx%.0f mm, gaze from %s, Core %s", self.display.width_px,
                  self.display.height_px, self.display.width_mm, self.display.height_mm, self.source_kind, self.args.url)
+        a = self.args
+        log.info("smoothing: %s%s", f"Savitzky-Golay {a.sg_window_ms} ms order {a.sg_order} lag {a.sg_lag_ms} ms"
+                 if a.sg_window_ms > 0 else "no Savitzky-Golay", "" if a.no_one_euro else ", then One Euro")
 
     def stop(self) -> None:
         if isinstance(self.source, EyedidSource):
@@ -300,6 +305,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--face-cm", type=int, default=50, help="about how far the eyes are from the camera")
     parser.add_argument("--lookback-ms", type=int, default=250, help="a clench uses the highlight from this long before")
     parser.add_argument("--no-take", action="store_true", help="start with the board as the input target")
+    smooth = parser.add_argument_group("smoothing (Savitzky-Golay, then One Euro)")
+    smooth.add_argument("--sg-window-ms", type=int, default=500, help="Savitzky-Golay window; 0 turns it off")
+    smooth.add_argument("--sg-order", type=int, default=2, choices=(1, 2, 3), help="polynomial order")
+    smooth.add_argument("--sg-lag-ms", type=int, default=80,
+                        help="read the fit this far behind the newest sample (more = smoother, slower)")
+    smooth.add_argument("--no-one-euro", action="store_true", help="Savitzky-Golay only")
     args = parser.parse_args(argv)
     logging.basicConfig(format="%(asctime)s %(levelname)-7s %(name)s: %(message)s", level=logging.INFO)
     calibration.path_for(args.person)  # a bad name fails here, not after a calibration

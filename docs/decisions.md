@@ -679,3 +679,9 @@ Muse gestures to control all of Windows, not only the board tab.
   corners of the area it is given, so calibrating over the whole screen drew four dots mostly off
   the screen. The agent now calibrates over the screen inset 14 mm on every side (78 px on the demo
   laptop), which keeps each dot and its 12 mm settle ring visible and the corners near the edges.
+- Smoothing (Taher, 2026-09-27: "way too jittery"): gaze now goes through a causal Savitzky-Golay
+  filter before One Euro: a quadratic least-squares fit over the last 500 ms (time-based, so Eyedid's
+  15 to 30 fps does not matter), read 80 ms behind the newest sample. In simulation (30 px noise,
+  30 fps) jitter at rest drops from 13 px (One Euro alone) to 7 px, and a 600 px jump arrives 90% in
+  about 230 ms instead of 70 ms. Flags: --sg-window-ms (0 = off), --sg-order, --sg-lag-ms,
+  --no-one-euro.

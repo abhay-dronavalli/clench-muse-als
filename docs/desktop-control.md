@@ -32,6 +32,10 @@ or the chair. Close the agent with Ctrl+C in its terminal.
 | F10 | pause / resume clicks |
 | Ctrl+F8 | switch the input target: desktop <-> Clench board (brings the board window forward) |
 
+Smoothing: Savitzky-Golay (a quadratic fit over the last 500 ms, read 80 ms back), then One Euro.
+Steadier: `--sg-window-ms 600 --sg-lag-ms 100`. Faster: `--sg-window-ms 300 --sg-lag-ms 40`. Off:
+`--sg-window-ms 0`.
+
 The headband works the same once Muse input is enabled (Muse panel on the board or console): in
 desktop mode its gestures need the agent connected, not a board.
 
@@ -55,7 +59,7 @@ agent keys (F8 / F9) ─► Core /ws/desktop
                      /ws/desktop: DESKTOP_INPUT (CLENCH, DOUBLE_BLINK), SCREEN, SETTINGS
                                         │
                         desktop/agent (Python, one process, Qt thread at 60 fps)
-   gaze ─► One Euro filter ─► highlight trail (clench look-back 250 ms)
+   gaze ─► Savitzky-Golay (500 ms, order 2) ─► One Euro ─► highlight trail (clench look-back 250 ms)
    UI Automation (own thread): clickable elements near the gaze ─► snap, or zoom when unsure
    SendInput: left / right / double click, Alt+Left
    overlay: PySide6, full screen, topmost, click-through, never focused
