@@ -753,3 +753,38 @@ choices below are Taher's.
   keyboard focus states. It still unlocks speech and opens the existing setup flow on a deliberate
   click; clicking the surrounding background no longer starts setup.
 
+## 24. Timed eye onboarding, blink selection, and complete scan fallback
+
+- Requested follow-up: launch shows an 8 s countdown and Start now. Setup then progresses through
+  welcome (6 s), eyes (up to 45 s), headband (up to 30 s), test clench (up to 20 s when the headband
+  passed), and completion (6 s). Each step shows its countdown/progress. Touch or a deliberate
+  double blink can advance sooner; successful calibration, 2 s of clean signal, and a verified
+  clench advance their steps early. Timers pause while disconnected, during help, or when hidden.
+  Expiry skips unavailable hardware; it never declares calibration successful or enables Muse.
+  Without a compatible native eye tracker, the eye introduction lasts 6 s instead of waiting 45 s.
+- Eye setup shows the existing Jaguar I-Pace model from the tablet's 3D scene at the centre. The
+  parked car stays upright: horizontal gaze turns the camera at up to 30 degrees/s with eased
+  acceleration, fixed radius and fixed height. Centre gaze stops it; lost gaze eases to a stop.
+  Native calibration targets appear over the car and report progress to the web page. Native
+  bridge additions and compatibility behavior are in `docs/eye-tracking.md`.
+- Setup options scan every 2.2 s until gaze is available. Live gaze holds the highlight and can
+  select an option after 250 ms looking inside its button. Two bilateral blinks 100-750 ms apart
+  activate the same option; the highlight holds for 800 ms during the pair, and selection has a
+  1.2 s cooldown. A pair cannot cross steps or options, and requires eyes seen within 1.5 s.
+  Blinks select setup options only, never patient messages, calls, or safety confirmations.
+- SETTINGS gains optional `onboarding`. The Core ignores ordinary picks during setup, including
+  test clenches and taps on a hidden confirm. LONG_CLENCH and help cancellation remain available.
+  The gate clears when the last board leaves. Muse remains paused until a verified test clench and
+  fresh, unblocked contact on all four channels; the timer cannot turn it on. The keyboard stand-in
+  stays mounted for the emergency fallback.
+- Both Auto and explicit Gaze now scan before eye detection and after 3 s without tracking. Gaze
+  still accepts only gaze points. While scanning, Car layout and the six top-level trip controls
+  are shown. Split/Map remain the preference and return when pointing resumes, at the current menu
+  depth. Changes preserve the highlighted control by id and invalidate stale points/taps with seq.
+- The Android shell supplies native TTS without a browser gesture. A normal browser can auto-open
+  setup visually but still requires a tap to unlock speech; Start and setup touch interaction do
+  that. With no native shell, the preview explains that the 3D car requires the updated tablet app.
+- Tests that expected explicit Gaze never to scan, or Split to scan only three tiles, were updated
+  to the requested fallback behavior; new tests cover the loss/recovery path and stale selection.
+  Exact SETTINGS fixtures now include the announced `onboarding: false` value.
+

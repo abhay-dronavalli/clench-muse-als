@@ -13,6 +13,8 @@
 export interface ClenchNativeBridge {
   /** the shell's eye tracker is running (or starting) and owns the front camera */
   gazeActive(): boolean
+  /** Ready to calibrate (active alone also includes SDK initialization). */
+  gazeReady?(): boolean
   /**
    * The page's pointing mode, or "off" (not started, or a page that does not point). The shell runs
    * its tracker only in camera modes (auto, webcam, gaze) and claims the camera before returning.
@@ -22,6 +24,10 @@ export interface ClenchNativeBridge {
   calibrate(person: string): void
   /** the page's onboarding is running: the shell skips its own startup calibration prompt */
   setOnboarding?(on: boolean): void
+  /** Setup-only parked car, camera orbit controlled horizontally by the native gaze. */
+  carPreview?(on: boolean): void
+  /** Stop calibration and remove its targets (including when setup times out). */
+  cancelCalibration?(): void
   /** whose calibration is loaded ("" = none) */
   person(): string
   /** the SDK's own gaze filter (on by default) */
@@ -52,6 +58,7 @@ export interface ClenchNativeBridge {
 }
 
 export type NativeEvent =
+  | { type: 'calibration_progress'; progress: number }
   | { type: 'blink'; t: number; left: boolean; right: boolean }
   | { type: 'tracker'; state: 'starting' | 'on' | 'off' | 'error'; detail?: string }
   | {

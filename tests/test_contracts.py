@@ -56,7 +56,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.Settings,
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
-            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None, "trip": None, "trip_layout": None,
+            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None, "onboarding": None, "trip": None, "trip_layout": None,
         },
     ),
     "SCREEN": (

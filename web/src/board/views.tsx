@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
+import { LAUNCH_MS, SetupCountdown } from './onboardingFlow'
 
 export function Breadcrumb({ screen }: { screen: Screen }) {
   const parts = [STRINGS[screen.lang].home, ...screen.path]
@@ -184,19 +185,35 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
   )
 }
 
-export function StartOverlay({ onStart }: { onStart: () => void }) {
+export function StartOverlay({ onStart }: { onStart: (gesture?: boolean) => void }) {
+  const [left, setLeft] = useState(LAUNCH_MS / 1000)
+  const startRef = useRef(onStart)
+  useLayoutEffect(() => { startRef.current = onStart })
+  useEffect(() => {
+    const countdown = new SetupCountdown(LAUNCH_MS, performance.now())
+    const timer = window.setInterval(() => {
+      const remaining = countdown.tick(performance.now(), document.hidden)
+      setLeft(Math.max(0, Math.ceil(remaining / 1000)))
+      if (remaining <= 0) { window.clearInterval(timer); startRef.current(false) }
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [])
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-[linear-gradient(160deg,#eaf6f4_0%,#f6f8f8_45%,#e3eef7_100%)] p-6 text-zinc-900">
       <div className="flex w-full max-w-3xl flex-col items-center gap-8 rounded-[2.5rem] bg-white px-8 py-12 text-center shadow-2xl shadow-black/10 sm:px-16 sm:py-16">
         <h1 className="text-6xl font-bold tracking-tight text-[#007a72] sm:text-8xl">Clench</h1>
         <button
           type="button"
-          onClick={onStart}
+          onClick={() => onStart(true)}
           className="w-full rounded-3xl bg-[#007a72] px-8 py-6 text-3xl font-bold text-white shadow-lg shadow-[#00a99d]/30 transition-colors hover:bg-[#00665f] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#007a72] active:bg-[#00564f] sm:text-5xl"
         >
           Click to start
         </button>
-        <p className="text-2xl text-zinc-600">Turns on speech. Haga clic para empezar.</p>
+        <p className="text-2xl text-zinc-600">Setup starts in {left}s · La configuración empieza en {left}s</p>
+        <div role="progressbar" aria-label="Setup starts" aria-valuemin={0} aria-valuemax={8} aria-valuenow={8 - left} className="h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className="h-full bg-[#007a72] transition-[width]" style={{ width: `${(1 - left / 8) * 100}%` }} />
+        </div>
+        <p className="text-lg text-zinc-500">Tap to begin now and enable sound. Toca para empezar con sonido.</p>
       </div>
     </div>
   )

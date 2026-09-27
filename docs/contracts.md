@@ -277,9 +277,15 @@ included). Screens show these values instead of assuming defaults.
 | `trip` | bool (optional) | trip mode (`core/trip.py`): the board shows the trip screen (car controls, SCREEN `screen: "trip"`) instead of the menus. Session-only, default false; the dev panel's Start trip / End trip. A change while scanning switches at once, on the first tile |
 | `trip_layout` | `"car"` \| `"split"` \| `"map"` (optional) | the trip screen's layout: the 3D car; the route map on the left half with the car and the tiles on the right (the trip menu's top level then shows only Windows, Pull over and Support); or the map above the tiles. Session-only, default `"car"`; the board's Car / Split / Map switch sends it on `/ws/board` |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
+| `onboarding` | bool (optional) | setup owns ordinary input: CLENCH, TAP and DOUBLE_BLINK cannot operate the hidden board. LONG_CLENCH remains available and DOUBLE_BLINK can still cancel help. Default false; cleared when the last board disconnects. Omit to keep it |
+
+`trip_layout` is the preferred layout. While SCREEN `pointer` is `"scan"`, the trip uses the Car
+layout and all six top-level controls, including when the preference is Split or Map. The Core
+expands the actual tile list, preserves the highlighted control by id, and advances `seq` when the
+tiles change. Once pointing resumes, the preferred layout returns at the current menu depth.
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "trip": false, "trip_layout": "car"}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "onboarding": false, "trip": false, "trip_layout": "car"}
 ```
 
 ## Core -> Board
@@ -300,7 +306,7 @@ pointing mode change), and once a second during the help countdown.
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
 | `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
 | `loading` | bool | optional, default false. True while the Core waits for AI options after a pick (at most 4 s); scanning is paused and the board shows "Finding options..." / "Buscando opciones..." |
-| `pointer` | `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
+| `pointer` | `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto, Gaze or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
 
 Tiles:
 
@@ -349,7 +355,7 @@ para cancelar." (kind `system`). System lines never change the session state.
 |---|---|---|
 | `scan` | the Core's scan timer, one tile every `scan_ms` | `"scan"` |
 | `webcam` | the board's POINT messages (head turns); no timer. On new tiles the highlight stays at the same index until the board's POINT for the new `seq` arrives | `"webcam"` |
-| `gaze` | the board's POINT messages from an eye tracker (`docs/eye-tracking.md`); otherwise like `webcam` | `"gaze"` |
+| `gaze` | starts scanning, follows only gaze POINTs once FACE_OK is true; returns to scanning after 3 s without eyes | `"gaze"` or `"scan"` |
 | `auto` | starts scanning; follows the board when FACE_OK is true and a POINT arrives; back to scanning after 3 s without a face. The board sends gaze POINTs while an eye tracker sees the eyes, head (webcam) POINTs otherwise: gaze if available, else head, else scan | `"scan"`, `"gaze"` or `"webcam"` |
 | `headtilt` | not built yet (needs the headband motion data): scans, and logs that it does | `"scan"` |
 

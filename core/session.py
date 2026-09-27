@@ -312,6 +312,7 @@ class Session:
         self.learning = profile.learning if learning is None else learning
         self.long_clench_ms = profile.long_clench_ms
         self.muse_enabled = False
+        self.onboarding = False
         self.trip = False  # trip mode: the trip screen instead of the menus (core/trip.py)
         self.trip_layout: TripLayout = "car"  # car / split (map beside the car: fewer top tiles) / map
         self._trip_path: list[TripNode] = [TRIP_ROOT]  # the trip menu levels, top first
@@ -410,12 +411,17 @@ class Session:
             learning=self.learning,
             long_clench_ms=self.long_clench_ms,
             muse_enabled=self.muse_enabled,
+            onboarding=self.onboarding,
             tile_switch_margin=self.tile_switch_margin,
             trip=self.trip,
             trip_layout=self.trip_layout,
         )
 
     def handle(self, msg: Message) -> None:
+        if self.onboarding and isinstance(msg, (Clench, Tap, DoubleBlink)):
+            if not (isinstance(msg, DoubleBlink) and self.state is SessionState.HELP_COUNTDOWN):
+                log.info("%s ignored: onboarding owns ordinary input", msg.type)
+                return
         if isinstance(msg, (Clench, DoubleBlink, LongClench, Tap)):
             self._moves += 1
         match msg:
@@ -821,7 +827,7 @@ class Session:
     def _trip_children(self) -> list[TripNode]:
         """The trip level's controls; at the top of the split layout only the most important ones."""
         level = self._trip_path[-1]
-        if self.trip_layout == "split" and len(self._trip_path) == 1:
+        if self.trip_layout == "split" and self.pointer.source != "scan" and len(self._trip_path) == 1:
             return [n for n in level.children if n.key in SPLIT_TOP]
         return list(level.children)
 
@@ -1423,6 +1429,8 @@ class Session:
             self.long_clench_ms = s.long_clench_ms
         if s.muse_enabled is not None:
             self.muse_enabled = s.muse_enabled
+        if s.onboarding is not None:
+            self.onboarding = s.onboarding
         if s.tile_switch_margin is not None:
             self.tile_switch_margin = s.tile_switch_margin
         trip_changed = s.trip is not None and s.trip != self.trip
@@ -1535,6 +1543,13 @@ class Session:
             tiles.append(self._other_tile(frame))
         key = tuple((t.id, t.label, t.kind) for t in tiles)
         if key != self._tiles_key:  # new tiles: a new seq, so a POINT for the old ones is ignored
+            if self.trip:
+                # Preserve controls by id when loss of gaze expands Split to six tiles.
+                old = self._tiles_key or ()
+                index = self.pointer.highlight
+                selected = old[index][0] if 0 <= index < len(old) else None
+                ids = [t.id for t in tiles]
+                self.pointer.place(len(tiles), ids.index(selected) if selected in ids else 0)
             self._tiles_key = key
             self._seq += 1
         highlight = self.pointer.highlight

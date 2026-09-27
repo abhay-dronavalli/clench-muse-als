@@ -342,6 +342,27 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             onboarding = on
         }
 
+        @JavascriptInterface fun gazeReady(): Boolean = gaze.state == EyedidGaze.State.ON
+
+        @JavascriptInterface fun cancelCalibration() {
+            main.post {
+                if (!destroyed) {
+                    cancelTrackerScreens()
+                    dropTrackerScreens() // also hides a failure prompt if the SDK never answers
+                }
+            }
+        }
+
+        @JavascriptInterface fun carPreview(on: Boolean) {
+            main.post {
+                if (!destroyed) {
+                    car.setPreview(on)
+                    car.show(on)
+                    gazeOverlay.onboardingCar = on
+                }
+            }
+        }
+
         // Android's voice for the page's "browser speech" (web/src/board/nativeSpeech.ts).
         @JavascriptInterface fun speak(id: String, text: String, lang: String, volume: Double): Boolean =
             speech.speak(id, text, lang, volume.toFloat())
@@ -398,7 +419,8 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             calPoint = null
             validation = null
             if (who != null) calibrationEvent("canceled", who)
-            if (busy || gazeOverlay.visibility == android.view.View.VISIBLE) {
+            if (onboarding) gazeOverlay.hide()
+            else if (busy || gazeOverlay.visibility == android.view.View.VISIBLE) {
                 gazeOverlay.prompt("The eye tracker stopped: $detail", "OK" to { gazeOverlay.hide() })
             }
             return
@@ -416,10 +438,12 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     override fun onGaze(x: Float, y: Float, state: TrackingState) {
         val found = state == TrackingState.SUCCESS
+        if (onboarding) car.look(GazeMath.toFraction(x, y, webRect()).x, found)
         val v = validation
         if (v != null || calibratingFor != null) {
             if (v != null && v.collecting && found) v.samples += GazeMath.toFraction(x, y, gazeOverlay.screenRect())
-            js(GazeMath.feedJs(Frac(0.5f, 0.5f), false, "CALIBRATING")) // the board holds still meanwhile
+            // Setup can still select its own Skip button; the page pauses all board pointing.
+            js(GazeMath.feedJs(GazeMath.toFraction(x, y, webRect()), onboarding && found, "CALIBRATING"))
             return
         }
         js(GazeMath.feedJs(GazeMath.toFraction(x, y, webRect()), found, state.name))
@@ -436,7 +460,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     private fun calibrate(who: String) {
         if (gaze.state != EyedidGaze.State.ON) {
-            gazeOverlay.prompt("The eye tracker is not running (${gaze.state}).", "OK" to { gazeOverlay.hide() })
+            if (!onboarding) gazeOverlay.prompt("The eye tracker is not running (${gaze.state}).", "OK" to { gazeOverlay.hide() })
             calibrationEvent("canceled", who)
             return
         }
@@ -455,7 +479,8 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         Log.i(TAG, "calibration for $who: ${if (inset) "inset area" else if (started) "whole screen (inset refused)" else "refused"}")
         if (!started) {
             calibratingFor = null
-            gazeOverlay.prompt("Calibration could not start.", "OK" to { gazeOverlay.hide() })
+            if (onboarding) gazeOverlay.hide()
+            else gazeOverlay.prompt("Calibration could not start.", "OK" to { gazeOverlay.hide() })
             calibrationEvent("canceled", who)
             return
         }
@@ -463,6 +488,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     }
 
     override fun onCalibrationPoint(x: Float, y: Float) {
+        if (calibratingFor == null) return // a queued SDK callback after timeout/cancel
         calPoint = x to y
         gazeOverlay.showDot(x, y, 0f, calText, CAL_STEP)
         val session = calSession
@@ -470,7 +496,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     }
 
     override fun onCalibrationProgress(progress: Float) {
+        if (calibratingFor == null) return
         calPoint?.let { (x, y) -> gazeOverlay.showDot(x, y, progress, calText, CAL_STEP) }
+        if (calibratingFor != null) event("calibration_progress", "progress" to progress.coerceIn(0f, 1f).toString())
     }
 
     override fun onCalibrationFinished(data: DoubleArray) {

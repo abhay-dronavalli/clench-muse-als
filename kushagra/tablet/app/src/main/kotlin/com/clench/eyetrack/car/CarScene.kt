@@ -48,6 +48,10 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private var seconds = 0f // scene time, for the clouds' own drift
     private var shift = 0f // horizontal lens shift: the car in the right half in the split layout
     private var shiftTarget = CAR_SHIFT
+    private var preview = false
+    private val lookOrbit = LookOrbit()
+    private var lookX = 0.5f
+    private var lookSeenAt = 0L
 
     private class Effect(
         val action: String,
@@ -87,6 +91,19 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
      */
     fun setLayout(mode: String) {
         shiftTarget = if (mode == "split") SPLIT_SHIFT else CAR_SHIFT
+    }
+
+    fun setPreview(on: Boolean) {
+        preview = on
+        lookSeenAt = 0L
+        if (on) clearEffect()
+    }
+
+    fun look(x: Float, found: Boolean) {
+        if (found && x.isFinite()) {
+            lookX = x
+            lookSeenAt = System.nanoTime()
+        } else lookSeenAt = 0L
     }
 
     /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
@@ -169,6 +186,14 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         if (!shown) return
         val dt = if (lastNanos == 0L) 0f else ((nanos - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = nanos
+        if (preview) {
+            val angle = lookOrbit.update(lookX, nanos - lookSeenAt < 500_000_000L, dt)
+            val (x, y, z) = CarMotion.orbit(angle, 1.9f, 0.45f)
+            view.cameraNode.setShift(0.0, 0.0)
+            view.cameraNode.position = Float3(x, y, z)
+            view.cameraNode.lookAt(Float3(0f, CAR_LIFT, 0f))
+            return // parked world, upright model; only camera yaw changes during setup
+        }
         // Cruising, or stopped for Pull over; always eased, never a jolt.
         val target = if (nanos < stillUntilNanos) 0f else 1f
         drive += (target - drive) * (1f - exp(-dt / DRIVE_EASE_S))

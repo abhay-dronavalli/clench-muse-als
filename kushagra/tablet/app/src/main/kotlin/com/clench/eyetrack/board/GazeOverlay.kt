@@ -27,6 +27,8 @@ import android.widget.TextView
 @SuppressLint("ViewConstructor")
 class GazeOverlay(context: Context) : FrameLayout(context) {
 
+    var onboardingCar = false
+
     private val dot = DotView(context, ::dpf)
     private val panel = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -84,9 +86,10 @@ class GazeOverlay(context: Context) : FrameLayout(context) {
 
     /** A target at screen point (x, y); `progress` 0..1 fills its ring. A card of text at the top, optional. */
     fun showDot(x: Float, y: Float, progress: Float, text: String = "", stepText: String = "") {
+        setBackgroundColor(if (onboardingCar) Color.TRANSPARENT else BACKDROP)
         val r = screenRect()
         visibility = VISIBLE
-        panel.visibility = if (text.isEmpty()) GONE else VISIBLE
+        panel.visibility = if (text.isEmpty() || onboardingCar) GONE else VISIBLE
         step.visibility = if (stepText.isEmpty()) GONE else VISIBLE
         step.text = stepText.uppercase()
         message.text = text
@@ -97,6 +100,7 @@ class GazeOverlay(context: Context) : FrameLayout(context) {
 
     /** A question with buttons; the board stays covered until one is chosen. The first is the main one. */
     fun prompt(text: String, vararg choices: Pair<String, () -> Unit>) {
+        setBackgroundColor(BACKDROP)
         visibility = VISIBLE
         dot.clear()
         panel.visibility = VISIBLE
