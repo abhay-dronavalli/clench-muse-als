@@ -47,7 +47,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private val seed = System.nanoTime() // a different world every time the app starts
     private var seconds = 0f // scene time, for the clouds' own drift
     private var shift = 0f // horizontal lens shift: the car in the right half in the split layout
-    private var shiftTarget = 0f
+    private var shiftTarget = CAR_SHIFT
 
     private class Effect(
         val action: String,
@@ -81,11 +81,12 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     }
 
     /**
-     * The page's trip layout: "car" (the car centred), "split" (the map on the left: the car slides into
-     * the right half), "map" (the map covers the car's area; the scene still shows below it).
+     * The page's trip layout. The page has a telemetry column on its left, so the car is always centred
+     * in what is to the right of it: "car" and "map" (the map covers the car's area then) a little right
+     * of the screen's middle, "split" in the right half (the route map has the left half).
      */
     fun setLayout(mode: String) {
-        shiftTarget = if (mode == "split") SPLIT_SHIFT else 0f
+        shiftTarget = if (mode == "split") SPLIT_SHIFT else CAR_SHIFT
     }
 
     /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
@@ -241,7 +242,9 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         private const val SPEED_EASE_S = 1.2f // how gently the scenery follows a new speed
         private const val CRUISE_MPH = 32f // the scenery's DRIVE_SPEED is this speed
         private const val CAR_LIFT = 0.006f // tyres on the road's surface (its top is ~0.0045 above ground)
-        private const val SPLIT_SHIFT = 0.3f // lens shift that centres the car in the right half (measured on the tablet)
+        // Lens shifts (measured on the tablet: 0.3 moves the car a quarter of the screen's width).
+        private const val CAR_SHIFT = 0.06f // past the page's 288 px telemetry column
+        private const val SPLIT_SHIFT = 0.33f // the middle of the right half beside the column and the map
         private const val LAYOUT_EASE_S = 0.4f
         // The camera circles a little above the car, looking gently down at LOOK_Y below it: a band of
         // sky at the top, the horizon near 15% down, and the car at about 17-35% down the screen, above
