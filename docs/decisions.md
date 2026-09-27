@@ -619,3 +619,14 @@ choices below are Taher's.
 - The Bluetooth link and the Core link are independent: a Core restart does not drop the headband.
   The Core still accepts one sensor, so the laptop's Connect headband and the tablet cannot both run;
   the second one is refused and retries.
+- Follow-up: the tablet's sensor no longer starts with the app. The Muse panel's Connect headband
+  starts it (and asks for Bluetooth the first time); Disconnect releases the headband. In a build with
+  `MUSE_PROFILE` the panel's Connect / Disconnect / status go to the tablet (`ClenchNative.muse*`)
+  instead of the Core's `/api/sensor`, so the laptop's Python sensor cannot be started from the
+  tablet by mistake. Without a headband the board works exactly as before.
+- The tablet speaks with Android's text-to-speech wherever the board would use browser speech:
+  Android's WebView has no `speechSynthesis`, so the tablet was silent for every browser-speech line
+  (no ElevenLabs key, an uncached picked word, ElevenLabs slow or failing). `ClenchNative.speak`
+  answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
+  sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
+  unchanged and still preferred.

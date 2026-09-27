@@ -105,7 +105,10 @@ The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns 
 
 - Page to shell: `window.ClenchNative` (an Android `JavascriptInterface`, `web/src/facetrack/native.ts`):
   `gazeActive()`, `setPointingMode(mode)`, `calibrate(person)`, `person()`, `gazeFilter()`,
-  `setGazeFilter(on)`.
+  `setGazeFilter(on)`. Also, not about gaze: `speak(id, text, lang, volume)` / `stopSpeaking()`
+  (Android's voice for the board's browser speech, answered by a `speech` event), and
+  `museAvailable()`, `museStatus()`, `museConnect()`, `museDisconnect()` (the tablet's own Muse
+  sensor behind the Muse panel's Connect headband, in the `/api/sensor` status shape).
 - The tracker runs only while the page asks for it: the board calls `setPointingMode` with the Core's
   pointing mode whenever SETTINGS arrive (so never before "Click to start"), and `/gaze-test` calls
   it with `gaze` for the gaze source and `off` otherwise. Auto, Webcam and Gaze start the tracker;

@@ -93,9 +93,12 @@ clenches to the Core, in place of the laptop's `python -m sensor.main`. Same det
    MUSE_MOTION_LIMIT=30.0       # gyroscope degrees/s above which clenches are blocked
    ```
 
-3. Run `run-tablet.bat`, allow Bluetooth ("Nearby devices") on the tablet, and turn the Muse on.
-   Do not press Connect headband on the laptop: the Core accepts one sensor.
-4. On the board, enable Muse clenches (Muse panel) once it shows connected.
+3. Run `run-tablet.bat`. The board works as before: nothing touches Bluetooth until you ask.
+4. Turn the Muse on, open the Muse panel on the tablet (the "Muse ," tab on the left edge) and press
+   **Connect headband**. The first time, allow Bluetooth ("Nearby devices"). The panel's output shows
+   the search and the connection; Disconnect releases the headband. In a tablet build the panel's
+   Connect runs the tablet's sensor, never the laptop's, so the two cannot fight over the Core.
+5. Enable Muse input in the same panel once the live signal shows.
 
 `adb logcat -s MuseSensor MuseBle` shows the search, the connection, the clock offset to the Core,
 and every gesture sent. Pure logic lives in `EmgFilter`, `ClenchInput`, `MuseWindow`, `SensorLoop`
