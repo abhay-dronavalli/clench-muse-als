@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CarMotionTest {
     private val box = CarMotion.Box(halfLength = 0.5f, halfWidth = 0.2f, halfHeight = 0.15f)
-    private val routine = listOf("window_up", "window_down", "warmer", "cooler", "music")
+    private val routine = listOf("window_up", "window_down", "warmer", "cooler", "louder", "softer")
 
     private fun alive(action: String, p: Float) = CarMotion.lines(action, p, box).filter { it.length > 1e-4f }
 
@@ -29,7 +29,25 @@ class CarMotionTest {
         val down = heights("window_down")
         assertTrue(up.zipWithNext().all { (a, b) -> b >= a })
         assertTrue(down.zipWithNext().all { (a, b) -> b <= a })
-        assertTrue(CarMotion.lines("window_up", 0.3f, box).all { it.z > box.halfWidth }) // outside the door
+        assertTrue(CarMotion.lines("window_up", 0.3f, box).all { kotlin.math.abs(it.z) > box.halfWidth }) // outside the doors
+    }
+
+    @Test
+    fun eachWindowTracesItsOwnDoor() {
+        fun lines(w: String) = CarMotion.lines("window_down", 0.5f, box, w)
+        assertTrue(lines("front_left").all { it.x > 0 && it.z < 0 })
+        assertTrue(lines("front_right").all { it.x > 0 && it.z > 0 })
+        assertTrue(lines("rear_left").all { it.x < 0 && it.z < 0 })
+        assertTrue(lines("rear_right").all { it.x < 0 && it.z > 0 })
+        assertTrue(lines("all").any { it.z < 0 } && lines("all").any { it.z > 0 })
+    }
+
+    @Test
+    fun louderPushesOutSofterPullsIn() {
+        fun radius(action: String, p: Float) = CarMotion.lines(action, p, box)[0].let { kotlin.math.hypot(it.x, it.z / 0.7f) }
+        // Mid-beat (the first beat's peak is at a sixth of the sequence).
+        assertTrue(radius("louder", 1f / 6) > radius("louder", 0.01f))
+        assertTrue(radius("softer", 1f / 6) < radius("softer", 0.01f))
     }
 
     @Test
@@ -45,7 +63,7 @@ class CarMotionTest {
 
     @Test
     fun musicPulsesInBeatsRatherThanFloating() {
-        val lengths = (0..60).map { CarMotion.lines("music", it / 60f, box)[0].length }
+        val lengths = (0..60).map { CarMotion.lines("louder", it / 60f, box)[0].length }
         // Rises and falls several times: count local maxima.
         val peaks = lengths.windowed(3).count { (a, b, c) -> b > a && b >= c }
         assertEquals(3, peaks)

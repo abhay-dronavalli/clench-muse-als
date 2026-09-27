@@ -345,8 +345,12 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             main.post { if (!destroyed) car.show(on) }
         }
 
-        @JavascriptInterface fun carEffect(action: String, ms: Int) {
-            main.post { if (!destroyed) car.play(action, ms.coerceIn(100, 5_000)) }
+        @JavascriptInterface fun carEffect(action: String, ms: Int, window: String) {
+            main.post { if (!destroyed) car.play(action, ms.coerceIn(100, 5_000), window) }
+        }
+
+        @JavascriptInterface fun carSpeed(mph: Int) {
+            main.post { if (!destroyed) car.setSpeed(mph) }
         }
 
         @JavascriptInterface fun museAvailable(): Boolean = BuildConfig.MUSE_PROFILE.isNotEmpty()

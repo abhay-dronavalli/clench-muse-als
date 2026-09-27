@@ -65,13 +65,18 @@ object CarMotion {
         0.14f * sin(PI.toFloat() * progress.coerceIn(0f, 1f))
     }
 
-    /** The lines for `action` at `progress` 0..1 of its sequence. Pull over has none on purpose. */
-    fun lines(action: String, progress: Float, box: Box): List<Line> = when (action) {
-        "window_up" -> doorLines(progress, box, up = true)
-        "window_down" -> doorLines(progress, box, up = false)
+    /**
+     * The lines for `action` at `progress` 0..1 of its sequence; `window` picks the door for the window
+     * controls (front_left, front_right, rear_left, rear_right, all). Pull over, Slow down and Support
+     * have none on purpose (the drive itself slows or stops).
+     */
+    fun lines(action: String, progress: Float, box: Box, window: String = "all"): List<Line> = when (action) {
+        "window_up" -> doorLines(progress, box, up = true, window = window)
+        "window_down" -> doorLines(progress, box, up = false, window = window)
         "warmer" -> ventLines(progress, box, warm = true)
         "cooler" -> ventLines(progress, box, warm = false)
-        "music" -> musicLines(progress, box)
+        "louder", "music" -> musicLines(progress, box, louder = true)
+        "softer" -> musicLines(progress, box, louder = false)
         else -> emptyList()
     }
 
@@ -84,21 +89,37 @@ object CarMotion {
     /** A fixed, even spread in -1..1 for line `i` (no randomness: the same every time). */
     private fun spread(i: Int, n: Int): Float = if (n <= 1) 0f else -1f + 2f * i / (n - 1)
 
-    /** Windows: lines trace the side of the car, rising (up) or falling (down) along the door glass. */
-    private fun doorLines(progress: Float, box: Box, up: Boolean): List<Line> {
-        val n = 6
+    /**
+     * Windows: lines trace that window's door glass, rising (up) or falling (down). The car faces +x
+     * with +z on its right, so front = +x, left = -z. "all" traces both sides along the whole cabin.
+     */
+    private fun doorLines(progress: Float, box: Box, up: Boolean, window: String): List<Line> {
         val bottom = 0.05f * box.halfHeight
         val top = 0.95f * box.halfHeight
-        return (0 until n).map { i ->
-            val u = local(progress, i, n)
-            val travel = smooth(u)
-            val y = if (up) bottom + (top - bottom) * travel else top - (top - bottom) * travel
-            Line(
-                x = 0.55f * box.halfLength * spread(i, n),
-                y = y,
-                z = box.halfWidth * 1.06f, // just outside the door facing the camera
-                length = LINE_LENGTH * bump(u),
-            )
+        // (x range as a share of halfLength, side) for each door this window control covers.
+        val doors = when (window) {
+            "front_left" -> listOf(0.05f to 0.45f to -1f)
+            "front_right" -> listOf(0.05f to 0.45f to 1f)
+            "rear_left" -> listOf(-0.45f to -0.05f to -1f)
+            "rear_right" -> listOf(-0.45f to -0.05f to 1f)
+            else -> listOf(-0.5f to 0.5f to -1f, -0.5f to 0.5f to 1f)
+        }
+        val perDoor = if (doors.size == 1) 5 else 4
+        val n = perDoor * doors.size
+        return doors.flatMapIndexed { d, (range, side) ->
+            (0 until perDoor).map { k ->
+                val i = d * perDoor + k
+                val u = local(progress, i, n)
+                val travel = smooth(u)
+                val y = if (up) bottom + (top - bottom) * travel else top - (top - bottom) * travel
+                val (from, to) = range
+                Line(
+                    x = box.halfLength * (from + (to - from) * (k + 0.5f) / perDoor),
+                    y = y,
+                    z = side * box.halfWidth * 1.06f, // just outside that door
+                    length = LINE_LENGTH * bump(u),
+                )
+            }
         }
     }
 
@@ -122,15 +143,15 @@ object CarMotion {
         }
     }
 
-    /** Music: a ring of short lines above the car pushing outward in three soft beats. */
-    private fun musicLines(progress: Float, box: Box): List<Line> {
+    /** Music: a ring of short lines above the car pulsing in three soft beats, out (louder) or in (softer). */
+    private fun musicLines(progress: Float, box: Box, louder: Boolean): List<Line> {
         val n = 12
         val beats = 3
         val beat = (progress.coerceIn(0f, 1f) * beats).let { it - it.toInt() }
         val pulse = bump(beat) // one smooth swell per beat
         // The whole ring grows in over the first fifth and shrinks away over the last (from and to nothing).
         val envelope = smooth(progress / 0.2f) * smooth((1f - progress) / 0.2f)
-        val radius = 0.32f + 0.1f * pulse
+        val radius = if (louder) 0.32f + 0.12f * pulse else 0.36f - 0.12f * pulse
         return (0 until n).map { i ->
             val angle = 2 * PI.toFloat() * i / n
             Line(
