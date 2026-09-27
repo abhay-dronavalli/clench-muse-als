@@ -49,7 +49,7 @@ from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
 from core.rank.jev import JevRanker, build_jev
 from core.sensor_service import SensorService
-from core.session import Session, voice_lines
+from core.session import Session, SessionState, voice_lines
 from core.suggest import build_provider
 from core.suggest.provider import LLMProvider
 from core.suggest.service import Suggester
@@ -398,6 +398,23 @@ def create_app(
         if session.muse_enabled:
             session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
         return status
+
+    @app.post("/api/reset")
+    async def reset_app() -> dict[str, object]:
+        """Reset the app to its first run: the headband stopped, the history (every pick and confirmed
+        sentence, so also a loaded demo week) and the calibrated head range deleted, and the session back
+        to its first settings at Home. The ElevenLabs audio cache is kept (it costs credits to make).
+        The board then clears its own browser settings and the tablet's eye calibration, and reloads.
+        409 during a help countdown: a reset never cancels a call for help."""
+        session: Session = app.state.session
+        if session.state is SessionState.HELP_COUNTDOWN:
+            raise HTTPException(status_code=409, detail="a help countdown is running")
+        app.state.sensor_service.stop()
+        events, phrases = app.state.db.clear_history()
+        app.state.db.clear_head_range()
+        session.factory_reset()
+        log.warning("app reset: %d events and %d phrases deleted, head range forgotten", events, phrases)
+        return {"events_deleted": events, "phrases_deleted": phrases}
 
     @app.get("/health")
     async def health() -> dict[str, object]:

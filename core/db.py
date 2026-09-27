@@ -135,6 +135,11 @@ class Db:
         row = self._conn.execute("SELECT head_range_json FROM profile WHERE id = ?", (PROFILE_ID,)).fetchone()
         return json.loads(row["head_range_json"]) if row and row["head_range_json"] else None
 
+    def clear_head_range(self) -> None:
+        """Forget the calibrated head range (POST /api/reset): the board uses its defaults again."""
+        with self._conn:
+            self._conn.execute("UPDATE profile SET head_range_json = NULL WHERE id = ?", (PROFILE_ID,))
+
     def set_head_range(self, head_range: dict[str, float]) -> None:
         """Save the head range from the calibration overlay. sync_profile must have run first."""
         with self._conn:

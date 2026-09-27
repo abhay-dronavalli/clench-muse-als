@@ -122,3 +122,57 @@ def test_scan_keeps_running_after_a_tap_elsewhere(session, sched, sent):
     before = last_screen(sent).highlight
     sched.advance(SCAN_S)
     assert last_screen(sent).highlight != before
+
+
+# --- the Back button (TAP cancel) and the app reset --------------------------------------------------
+
+
+def back() -> Tap:
+    return Tap(tile=None, seq=None, cancel=True, t=0.0)
+
+
+def test_the_back_button_goes_up_one_level_at_once_without_a_prompt(session, sched, sent):
+    for tile in ["need", "pain"]:
+        settle(sched)
+        session.handle(tap(sent, tile))
+    assert last_screen(sent).path == ["I need", "Pain"]
+    session.handle(back())
+    assert last_screen(sent).path == ["I need"]
+    assert not [m for m in sent if isinstance(m, BackPrompt)]  # no "Go back?": a touch is deliberate
+    session.handle(back())
+    assert last_screen(sent).path == []
+    session.handle(back())  # at Home: nothing to go back to
+    assert last_screen(sent).path == [] and session.state is SessionState.SCANNING
+
+
+def test_the_back_button_leaves_other_pages_with_their_level(session, sched, sent):
+    settle(sched)
+    session.handle(tap(sent, "need"))
+    settle(sched)
+    session.handle(tap(sent, "other"))
+    session.handle(back())
+    assert last_screen(sent).path == []  # I need › Other... belongs to I need: Back goes Home
+
+
+def test_the_back_button_cancels_a_confirm_screen_and_never_help(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        settle(sched)
+        session.handle(tap(sent, tile))
+    assert session.state is SessionState.CONFIRMING
+    session.handle(back())
+    assert session.state is SessionState.SCANNING and spoken(sent) == []
+    assert last_screen(sent).path == ["I need", "Pain", "Back"]  # where the leaf was picked
+    session.handle(LongClench(t=0.0, duration=2.5))
+    assert session.state is SessionState.HELP_COUNTDOWN
+    assert session.factory_reset() is False  # a reset never cancels a call for help
+    assert session.state is SessionState.HELP_COUNTDOWN
+
+
+def test_factory_reset_goes_back_to_the_first_settings_and_home(session, sched, sent):
+    first = session.settings()
+    session.handle(first.model_copy(update={"lang": "es", "trip": True, "learning": False, "pointing_mode": "scan"}))
+    assert session.trip is True
+    assert session.factory_reset() is True
+    assert session.settings() == first
+    screen = last_screen(sent)
+    assert screen.screen == "menu" and screen.path == [] and screen.highlight == 0 and screen.lang == "en"

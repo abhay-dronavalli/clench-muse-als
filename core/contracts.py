@@ -152,9 +152,11 @@ class AudioDone(_Msg):
 class Tap(_Msg):
     """A touch or mouse press on the board (a caregiver, or testing without a headband). On a tile:
     pick tile `tile` of the SCREEN numbered `seq`, as a CLENCH would with that tile highlighted. On the
-    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would; with `cancel`, a Cancel
-    button there: cancel the confirm screen at once. The Core ignores a TAP for an older screen, one
-    while the go-back prompt is open, and one on the help countdown."""
+    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would. With `cancel` (tile and seq
+    None), a Cancel / Back button: cancels the confirm screen, cancels the help countdown, closes the
+    go-back prompt (Stay here), or on a menu or trip level below the top goes up one level at once. The
+    Core ignores a TAP for an older screen, a tile TAP while the go-back prompt is open, and one on the
+    help countdown."""
 
     type: Literal["TAP"] = "TAP"
     tile: int | None = Field(ge=0)

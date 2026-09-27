@@ -468,7 +468,10 @@ export interface Tap {
   tile: number | null
   /** the SCREEN `seq` the tile belongs to; null with a null `tile` */
   seq: number | null
-  /** the Cancel button of the confirm screen (tile and seq null) */
+  /**
+   * a Cancel / Back button (tile and seq null): cancels the confirm screen or the help countdown, closes
+   * the go-back prompt (Stay here), or on a menu or trip level below the top goes up one level at once
+   */
   cancel?: boolean
   t: number
 }

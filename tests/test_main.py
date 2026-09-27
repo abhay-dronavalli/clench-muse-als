@@ -228,3 +228,36 @@ def test_setup_gate_is_released_when_the_last_board_disconnects():
             assert app.state.session.onboarding
         assert app.state.session.onboarding is False
         assert app.state.session.muse_enabled is False
+
+
+
+def test_reset_forgets_history_and_head_range_and_goes_back_to_the_first_settings():
+    head = {"center_yaw": 0, "center_pitch": 0, "left_yaw": -20, "right_yaw": 20, "up_pitch": -10, "down_pitch": 10}
+    with TestClient(create_app(scheduler=AsyncioScheduler(), scan_ms=600_000, lang="en")) as client:
+        session = client.app.state.session
+        first = session.settings()
+        assert client.put("/api/head-range", json=head).status_code == 200
+        with client.websocket_connect("/ws/board") as board:
+            board.receive_json()  # SETTINGS
+            board.send_json({**first.model_dump(), "trip": True, "lang": "es"})
+            while not ((m := board.receive_json())["type"] == "SETTINGS" and m["trip"]):
+                pass
+            res = client.post("/api/reset")
+            assert res.status_code == 200 and set(res.json()) == {"events_deleted", "phrases_deleted"}
+            while not ((m := board.receive_json())["type"] == "SCREEN" and m["screen"] == "menu"):
+                pass
+            assert m["path"] == [] and m["highlight"] == 0 and m["lang"] == "en"
+        assert client.get("/api/head-range").json() is None
+        assert session.settings() == first
+
+
+def test_reset_is_refused_during_a_help_countdown():
+    clock = FakeClock()
+    with make_client(clock) as client:
+        with client.websocket_connect("/ws/board") as board, client.websocket_connect("/ws/input") as inp:
+            board.receive_json()
+            inp.send_json({"type": "LONG_CLENCH", "t": clock.t, "duration": 2.5})
+            while not ((m := board.receive_json())["type"] == "SCREEN" and m["screen"] == "help_countdown"):
+                pass
+            assert client.post("/api/reset").status_code == 409
+            assert client.app.state.session.state.value == "HELP_COUNTDOWN"

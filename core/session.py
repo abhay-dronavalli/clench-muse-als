@@ -403,6 +403,7 @@ class Session:
         self._lookback_s = profile.clench_lookback_ms / 1000
         self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
+        self._first_settings = self.settings()  # what factory_reset() goes back to
 
     # --- public ---------------------------------------------------------------
 
@@ -431,6 +432,18 @@ class Session:
     def start(self) -> None:
         """Show home and start scanning."""
         self._go_home()
+
+    def factory_reset(self) -> bool:
+        """Back to how the Core starts (POST /api/reset): the first settings (no trip, no onboarding,
+        headband off, the profile's language), then Home from its first tile. Refused (False) during a
+        help countdown: a reset must never cancel a call for help."""
+        if self.state is SessionState.HELP_COUNTDOWN:
+            log.warning("factory reset refused: a help countdown is running")
+            return False
+        log.info("factory reset: first settings, home")
+        self._apply_settings(self._first_settings)
+        self._reset()
+        return True
 
     def stop(self) -> None:
         self.pointer.close()
@@ -545,8 +558,13 @@ class Session:
             if self.state is SessionState.CONFIRMING:
                 log.info("TAP on Cancel: the confirm screen is cancelled")
                 self._cancel_confirm()
+            elif self.state is SessionState.SCANNING and self._question is None and self._depth() > 1:
+                # The board's Back button: a deliberate touch, so no "Go back?" prompt (that one is
+                # for blinks, which can be accidental).
+                log.info("TAP on Back: up one level")
+                self._up_one_level()
             else:
-                log.info("TAP on Cancel ignored while %s", self.state.value)
+                log.info("TAP on Cancel / Back ignored while %s", self.state.value)
             return
         if msg.tile is None:
             if self.state is SessionState.CONFIRMING:

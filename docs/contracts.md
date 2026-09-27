@@ -226,20 +226,26 @@ matching AUDIO_DONE wins and later ones are ignored.
 A touch or mouse press on the board: a caregiver helping, or testing without a headband (the tablet
 has no keyboard for the stand-in). On a tile it picks that tile, exactly as a CLENCH would with that
 tile highlighted (no clench look-back: the finger says which tile). On the "Say this?" sentence it
-confirms, exactly as a CLENCH would; with `cancel` (a Cancel button on that screen, e.g. Pull over's)
-it cancels the confirm screen at once. Everything else about a CLENCH applies (the 300 ms debounce,
+confirms, exactly as a CLENCH would. Everything else about a CLENCH applies (the 300 ms debounce,
 the confirm step: a tap on a tile never speaks or sends).
 
+With `cancel` (tile and seq null) it is a deliberate button, never a tile: the Cancel button of a
+confirm screen cancels it, the help countdown's Cancel cancels the call, the go-back prompt's "Stay
+here" closes the prompt, and the board's Back button (every menu, suggestions and trip level below the
+top) goes up one level at once, with no "Go back?" prompt (that prompt is for blinks, which can be
+accidental). At the top level, or while a Support question or "Finding options..." shows, Back does
+nothing.
+
 The Core ignores a TAP whose `seq` is not the current screen's, a tile TAP when the board is not
-scanning, a card TAP when nothing is waiting for confirmation, and any TAP while the go-back prompt
-is open or the help countdown runs (a stray touch can neither answer the prompt nor stop a call for
-help).
+scanning, a card TAP when nothing is waiting for confirmation, and a tile or card TAP while the go-back
+prompt is open or the help countdown runs (a stray touch on a tile can neither answer the prompt nor
+stop a call for help; only their own buttons do).
 
 | Field | Type | Notes |
 |---|---|---|
 | `tile` | int or null | 0-based tile index on SCREEN `seq`; null = the "Say this?" card |
 | `seq` | int or null | the SCREEN `seq` the tile belongs to; null with a null `tile` (both or neither) |
-| `cancel` | bool | the Cancel button of the confirm screen (tile and seq null); default false |
+| `cancel` | bool | a Cancel / Stay here / Back button (tile and seq null), see above; default false |
 | `t` | float | epoch seconds when tapped |
 
 ```json
