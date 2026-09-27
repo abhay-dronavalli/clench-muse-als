@@ -19,6 +19,7 @@ import {
   nativeCarAvailable,
   nativeGazeActive,
   playNativeCarEffect,
+  setNativeCarLayout,
   setNativeCarSpeed,
   reportPointingMode,
   showNativeCar,
@@ -34,6 +35,7 @@ import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
+import { tripLayout } from './tripLayout'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
@@ -193,8 +195,8 @@ export default function BoardPage() {
   const tapCancel = () => send({ type: 'TAP', tile: null, seq: null, cancel: true, t: Date.now() / 1000 })
   const tripScreen = screen?.screen === 'trip' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
-  const tripLayout = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
-  const seeThrough = tripLayout && nativeCar
+  const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
+  const seeThrough = tripShown && nativeCar
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
@@ -214,10 +216,15 @@ export default function BoardPage() {
     setStarted(true)
   }
 
-  // The tablet shell draws the car behind the page while the trip layout shows.
+  // The tablet shell draws the car behind the page while the trip screen shows, framed for the
+  // layout (car / split / map).
+  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
   useEffect(() => {
-    showNativeCar(tripLayout)
-  }, [tripLayout])
+    showNativeCar(tripShown)
+  }, [tripShown])
+  useEffect(() => {
+    setNativeCarLayout(layout)
+  }, [layout])
   useEffect(() => () => showNativeCar(false), [])
 
   // See-through only where the shell draws behind (index.css paints the page black otherwise).

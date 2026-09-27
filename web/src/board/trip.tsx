@@ -1,14 +1,17 @@
-import type { ReactNode } from 'react'
+import { useSyncExternalStore, type ReactNode } from 'react'
 import type { CarState, Lang, Screen, WindowsOpen } from '../contracts'
 import type { CarAnim } from './carAnimation'
+import { RouteMap } from './RouteMap'
 import { STRINGS } from './strings'
+import { TRIP_LAYOUTS, tripLayout, type TripLayout } from './tripLayout'
 
 /**
  * The trip screen (SCREEN `screen: "trip"`, core/trip.py): a telemetry strip (CAR_STATE), the 3D car
  * in the upper part, and the trip menu's tiles in the middle of the screen (gaze is least accurate at
- * the edges) on a translucent panel that rises from the bottom to just below the car. The car and its
- * world are drawn by the tablet shell behind this page (SceneView, see native.ts); in a normal browser
- * a soft sky-to-grass backdrop takes their place.
+ * the edges) on a darker translucent panel that rises from the bottom to just below the car. The car
+ * and its world are drawn by the tablet shell behind this page (SceneView, see native.ts); in a normal
+ * browser a soft sky-to-grass backdrop takes their place. The upper part shows the car, the route map
+ * and the car side by side, or the map alone (tripLayout.ts); the tiles stay where they are.
  *
  * A control that acts (CAR_ACTION) plays one calm sequence while the Core locks input for `ms`: the
  * other tiles fade out, the picked one stays and grows a little (the rider's eyes keep an anchor), then
@@ -48,19 +51,57 @@ function Telemetry({ lang, car }: { lang: Lang; car: CarState | null }) {
         </span>,
       )}
       {item(s.volume, car ? `${car.volume}/10` : dash)}
+      <LayoutSwitch lang={lang} />
     </div>
   )
 }
 
-/** The upper part: empty (the tablet draws the car behind it), or a placeholder label in a browser. */
-function CarArea({ nativeCar, lang }: { nativeCar: boolean; lang: Lang }) {
+/** Car / Split / Map: a caregiver's (or a tap's) choice for the upper part. */
+function LayoutSwitch({ lang }: { lang: Lang }) {
+  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
+  const names = STRINGS[lang].trip.layout
   return (
-    <div className="relative flex min-h-0 flex-[4] items-center justify-center">
-      {!nativeCar && (
-        <span className="rounded-full bg-white/70 px-4 py-1 text-lg text-zinc-600">{STRINGS[lang].trip.carHere}</span>
-      )}
-    </div>
+    <span className="flex overflow-hidden rounded-full bg-zinc-100 p-1 ring-1 ring-black/10">
+      {TRIP_LAYOUTS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => tripLayout.set(l)}
+          className={`rounded-full px-4 py-1 text-lg ${l === layout ? 'bg-zinc-900 font-semibold text-white' : 'text-zinc-600'}`}
+        >
+          {names[l]}
+        </button>
+      ))}
+    </span>
   )
+}
+
+/**
+ * The upper part, by layout: the car alone (empty here: the tablet draws it behind the page), the map
+ * on the left with the car on the right, or the map alone. In a browser a label stands in for the car.
+ */
+function CarArea({ nativeCar, lang, car, layout }: { nativeCar: boolean; lang: Lang; car: CarState | null; layout: TripLayout }) {
+  const carSpot = nativeCar ? null : (
+    <span className="rounded-full bg-white/70 px-4 py-1 text-lg text-zinc-600">{STRINGS[lang].trip.carHere}</span>
+  )
+  if (layout === 'map') {
+    return (
+      <div className="relative min-h-0 flex-[4] px-8 pb-[5vh] pt-4">
+        <RouteMap car={car} lang={lang} />
+      </div>
+    )
+  }
+  if (layout === 'split') {
+    return (
+      <div className="relative grid min-h-0 flex-[4] grid-cols-2">
+        <div className="min-h-0 pb-[5vh] pl-8 pr-4 pt-4">
+          <RouteMap car={car} lang={lang} />
+        </div>
+        <div className="flex items-center justify-center">{carSpot}</div>
+      </div>
+    )
+  }
+  return <div className="relative flex min-h-0 flex-[4] items-center justify-center">{carSpot}</div>
 }
 
 /**
@@ -80,6 +121,7 @@ function TripShell({
   tint: boolean
   children: ReactNode
 }) {
+  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
   return (
     <div className={`relative flex min-h-0 flex-1 flex-col ${nativeCar ? '' : BROWSER_BACKDROP}`}>
       <div
@@ -88,12 +130,12 @@ function TripShell({
         style={{ background: COPPER, opacity: tint ? 1 : 0 }}
       />
       <Telemetry lang={lang} car={car} />
-      <CarArea nativeCar={nativeCar} lang={lang} />
+      <CarArea nativeCar={nativeCar} lang={lang} car={car} layout={layout} />
       <div className="relative z-10 flex min-h-0 flex-[6] flex-col items-center justify-center px-8 pb-8 pt-4">
         {/* Starts a little above this section, right below the car, and runs to the bottom edge. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-[4vh] bottom-0 rounded-t-[3rem] border-t border-white/70 bg-white/45"
+          className="pointer-events-none absolute inset-x-0 -top-[4vh] bottom-0 rounded-t-[3rem] border-t border-white/15 bg-zinc-950/45"
         />
         <div className="relative flex h-full w-full flex-col items-center justify-center">{children}</div>
       </div>
@@ -130,7 +172,7 @@ export function TripView({
   return (
     <TripShell lang={screen.lang} car={car} nativeCar={nativeCar} tint={tint}>
       {screen.path.length > 0 && (
-        <p className="mb-4 text-2xl font-semibold text-zinc-700">{screen.path.join('  ›  ')}</p>
+        <p className="mb-4 text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
       )}
       <div className="grid w-full max-w-6xl flex-1 auto-rows-fr grid-cols-3 gap-8 portrait:grid-cols-2">
         {screen.tiles.map((tile, i) => {

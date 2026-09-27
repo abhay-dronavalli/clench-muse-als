@@ -45,6 +45,8 @@ export interface ClenchNativeBridge {
   carEffect?(action: string, ms: number, window: string): void
   /** the car's speed (CAR_STATE): the 3D scene drives at it, 0 = stopped */
   carSpeed?(mph: number): void
+  /** the trip screen's layout ("car", "split", "map"): the 3D car recentres in the right half for split */
+  carLayout?(mode: string): void
 }
 
 export type NativeEvent =
@@ -145,5 +147,14 @@ export function setNativeCarSpeed(mph: number): void {
     nativeBridge()?.carSpeed?.(mph)
   } catch (e) {
     console.warn('tablet shell: carSpeed failed', e)
+  }
+}
+
+/** Tell the shell's 3D scene the trip layout (the car moves into the right half for "split"). */
+export function setNativeCarLayout(mode: string): void {
+  try {
+    nativeBridge()?.carLayout?.(mode)
+  } catch (e) {
+    console.warn('tablet shell: carLayout failed', e)
   }
 }
