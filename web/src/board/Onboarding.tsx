@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { GazeCheck, type GazeCheckResult } from './GazeCheck'
 import type { Lang, Signal } from '../contracts'
 import { nativeBridge, nativeEvents } from '../facetrack/native'
 import { useSocket } from '../lib/useSocket'
@@ -31,7 +32,10 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
   const done = useRef(false)
   const goodSince = useRef<number | null>(null)
   const hasEyes = typeof native?.calibrate === 'function' && typeof native?.cancelCalibration === 'function'
-  const preview = step === 'eyes' && typeof native?.carPreview === 'function' && !paused
+  // One look: onboarding never shows the car (car visuals only in Car mode). The calibration dots are
+  // drawn by the tablet's native overlay above this page, so the page stays opaque.
+  const preview = false
+  const [check, setCheck] = useState<GazeCheckResult | null>(null) // after calibration: does the gaze land?
 
   useSocket('/ws/console', {
     onMessage: (msg) => {
@@ -63,6 +67,7 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
     attempted.current = true
     setProgress(0)
     setEyes('calibrating')
+    setCheck(null)
     try { native?.calibrate('patient') } catch { setEyes('failed') }
   }, [hasEyes, trackerReady, eyes, native])
   const actions = useRef({ advance, go, calibrate })
@@ -83,17 +88,13 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
     return () => window.clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    if (!preview) return
-    native?.carPreview?.(true)
-    return () => { native?.cancelCalibration?.(); native?.carPreview?.(false) }
-  }, [preview, native])
+  useEffect(() => () => native?.cancelCalibration?.(), [native])
 
   useEffect(() => nativeEvents.subscribe((e) => {
     if (e.type === 'tracker') setTrackerReady(e.state === 'on')
     if (latest.current.phase.step !== 'eyes') return
     if (e.type === 'calibration_progress') setProgress(Math.min(1, Math.max(0, e.progress)))
-    if (e.type === 'calibration' && e.state === 'finished') { setEyes('finished'); setProgress(1) }
+    if (e.type === 'calibration' && e.state === 'finished') { setEyes('finished'); setProgress(1); setCheck('checking') }
     if (e.type === 'calibration' && e.state === 'canceled') setEyes('failed')
     if (e.type === 'tracker' && e.state === 'error') setEyes('failed')
   }), [])
@@ -126,15 +127,18 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
         goodSince.current ??= now
       }
     }
-    const next = nextSetupStep(step, now >= phase.until, eyes === 'finished',
+    const next = nextSetupStep(step, now >= phase.until && !(step === 'eyes' && eyes === 'finished' && check === 'checking'), eyes === 'finished' && check === 'passed',
       goodSince.current === null ? 0 : now - goodSince.current, clenched && good)
     if (next === 'exit') actions.current.advance()
     else if (next) actions.current.go(next)
-  }, [now, phase.until, step, paused, eyes, good, clenched, hasEyes, trackerReady])
+  }, [now, phase.until, step, paused, eyes, good, clenched, hasEyes, trackerReady, check])
 
   const options: SetupOption[] = step === 'eyes' ? [
-    ...(hasEyes && trackerReady && eyes !== 'calibrating' ? [{ id: 'calibrate', label: eyes === 'failed' ? s.tryAgain : s.eyesStart, act: () => calibrate() }] : []),
-    { id: 'skip-eyes', label: s.skip, act: () => go('band') },
+    ...(hasEyes && trackerReady && eyes !== 'calibrating' && eyes !== 'finished' ? [{ id: 'calibrate', label: eyes === 'failed' ? s.tryAgain : s.eyesStart, act: () => calibrate() }] : []),
+    ...(eyes === 'finished' && check === 'failed' ? [
+      { id: 'redo', label: lang === 'es' ? 'Repetir calibración' : 'Redo calibration', act: () => { attempted.current = false; setEyes('idle'); calibrate() } },
+      { id: 'continue-eyes', label: lang === 'es' ? 'Seguir igual' : 'Continue anyway', act: () => go('band') },
+    ] : [{ id: 'skip-eyes', label: s.skip, act: () => go('band') }]),
   ] : step === 'band' ? [
     ...(bandError ? [{ id: 'retry', label: s.tryAgain, act: () => setRetry((v) => v + 1) }] : []),
     { id: 'skip-band', label: s.skipBand, act: () => go('done') },
@@ -160,7 +164,14 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
         <p className="mt-3 text-xl text-zinc-600 sm:text-2xl">{text}</p>
       </header>
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 py-4 text-center">
-        {step === 'eyes' && !preview && <div className="rounded-3xl bg-white/95 px-8 py-6 text-2xl text-[#007a72]">{s.previewUnavailable}</div>}
+        {step === 'eyes' && eyes !== 'finished' && <div className="max-w-3xl rounded-3xl bg-white/95 px-8 py-6 text-left text-2xl leading-snug text-zinc-800 shadow-sm">
+          <ol className="list-decimal space-y-2 pl-8">
+            <li>{lang === 'es' ? 'Siéntate cómodo y mantén la cabeza quieta.' : 'Sit comfortably and keep your head still.'}</li>
+            <li>{lang === 'es' ? 'Sigue el punto con los ojos hasta que desaparezca.' : 'Follow the dot with your eyes until it disappears.'}</li>
+            <li>{lang === 'es' ? 'Luego mira los dos objetivos verdes para comprobarlo.' : 'Then look at the two green targets to check it.'}</li>
+          </ol>
+        </div>}
+        {step === 'eyes' && eyes === 'finished' && <GazeCheck lang={lang} onResult={setCheck} />}
         {step === 'band' && <div className="rounded-3xl bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-wrap justify-center gap-3">{['TP9', 'AF7', 'AF8', 'TP10'].map((name, i) => {
             const value = signal?.ch[i]
@@ -171,7 +182,11 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
         </div>}
         {step === 'clench' && <div className="w-full max-w-xl rounded-3xl bg-white p-8">
           <p className="mb-5 text-2xl">{clenched ? s.clenchWorked : s.clenchWaiting}</p>
-          <Meter label={s.stepClench} value={Math.min(1, (signal?.emg ?? 0) / ((signal?.threshold ?? 1) * 2))} />
+          <div className="relative">
+            <Meter label={s.stepClench} value={Math.min(1, (signal?.emg ?? 0) / ((signal?.threshold ?? 1) * 2))} />
+            <div className="absolute -top-2 left-1/2 h-7 w-1 -translate-x-1/2 rounded bg-zinc-900" aria-hidden />
+          </div>
+          <p className="mt-2 text-lg text-zinc-600">{lang === 'es' ? 'Aprieta hasta pasar la línea negra (el umbral).' : 'Clench until the bar passes the black line (the threshold).'}</p>
         </div>}
       </main>
       <footer className="mx-auto w-full max-w-5xl shrink-0 rounded-3xl bg-white/95 px-8 py-5 text-center shadow-lg">

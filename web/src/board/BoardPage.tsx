@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { ActivePointer, CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, TripLayout } from '../contracts'
+import type { ActivePointer, CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, Tile, TripLayout } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -222,7 +222,7 @@ export default function BoardPage() {
   const tripScreen = screen?.screen === 'trip' || screen?.screen === 'support_question' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
   const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
-  const seeThrough = (tripShown && nativeCar) || (onboarding && typeof nativeBridge()?.carPreview === 'function')
+  const seeThrough = tripShown && nativeCar // the car only in Car mode, never in onboarding (decisions #27)
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
@@ -243,8 +243,8 @@ export default function BoardPage() {
     nativeBridge()?.setOnboarding?.(on)
     setOnboarding(on)
     const current = lastSettings.current
-    // Finishing setup starts the ride: the trip screen (3D car, map, car controls), not the menus.
-    if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse, ...(on ? {} : { trip: true }) })
+    // Finishing setup opens the Home board; Car mode is entered from its corner button (decisions #27).
+    if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse })
   }
   const start = (gesture = true) => {
     if (gesture) unlockSpeech()
@@ -287,6 +287,9 @@ export default function BoardPage() {
         {started && <GazeNotice lang={lang} mode={mode} />}
       </div>
 
+      {screen?.corner && !onboarding && (
+        <CornerButton tile={screen.corner} index={screen.tiles.length} highlighted={screen.highlight === screen.tiles.length} onTap={tapTile} />
+      )}
       {/* Never show a stale highlight while disconnected: the Core may have moved on. */}
       {(!connected || view.kind === 'waiting') && (
         <div className="flex flex-1 items-center justify-center text-4xl text-zinc-400">
@@ -337,6 +340,34 @@ export default function BoardPage() {
           onCalibrate={() => setCalibrating(true)}
       />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The corner button outside the six-tile grid (SCREEN.corner, tile index tiles.length): "Car mode" on
+ * Home, "Home" in Car mode. Gaze or the head highlights it like a tile, the scan reaches it last, a
+ * clench picks it. "Home" is large and set apart from the car controls so it is not picked by accident.
+ */
+function CornerButton({ tile, index, highlighted, onTap }: { tile: Tile; index: number; highlighted: boolean; onTap: (i: number) => void }) {
+  const home = tile.id === 'corner.home'
+  return (
+    <div
+      data-tile-index={index} // pointing measures it with the tiles (facetrack/)
+      aria-current={highlighted}
+      onClick={() => onTap(index)}
+      className={[
+        'fixed left-4 top-4 z-40 flex cursor-pointer select-none items-center justify-center rounded-3xl text-center font-bold',
+        'transition-[transform,box-shadow] duration-200',
+        home ? 'h-32 w-56 text-4xl' : 'h-28 w-52 text-3xl',
+        highlighted
+          ? 'scale-105 bg-white text-zinc-900 ring-[10px] ring-amber-500 shadow-2xl'
+          : home
+            ? 'bg-zinc-800/95 text-white ring-4 ring-white/70 shadow-xl'
+            : 'bg-sky-700/95 text-white ring-4 ring-sky-300/70 shadow-xl',
+      ].join(' ')}
+    >
+      {home ? `‹ ${tile.label}` : tile.label}
     </div>
   )
 }

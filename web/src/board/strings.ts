@@ -51,6 +51,7 @@ export const STRINGS = {
       dropoff: 'Drop off here?',
       route: 'Take this route?',
       support_answer: 'Send this answer?',
+      car_mode: 'Start Car mode?',
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Calling for help',
@@ -74,6 +75,7 @@ export const STRINGS = {
         dropoff: () => 'Drop-off sent to the car',
         route: () => 'Route sent to the car',
         support_answer: () => 'Answer sent to Support',
+        car_mode: () => 'Car mode',
       } satisfies ToastText,
       demo: {
         speak: () => '(demo mode) would say it',
@@ -86,6 +88,7 @@ export const STRINGS = {
         dropoff: () => '(demo mode) would send the drop-off',
         route: () => '(demo mode) would send the route',
         support_answer: () => '(demo mode) would send the answer',
+        car_mode: () => 'Car mode',
       } satisfies ToastText,
       failed: "Couldn't send",
     },
@@ -209,6 +212,7 @@ export const STRINGS = {
       dropoff: '¿Bajar aquí?',
       route: '¿Tomar esta ruta?',
       support_answer: '¿Enviar esta respuesta?',
+      car_mode: '¿Iniciar el modo auto?',
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Pidiendo ayuda',
@@ -232,6 +236,7 @@ export const STRINGS = {
         dropoff: () => 'Punto de bajada enviado al auto',
         route: () => 'Ruta enviada al auto',
         support_answer: () => 'Respuesta enviada a soporte',
+        car_mode: () => 'Modo auto',
       } satisfies ToastText,
       demo: {
         speak: () => '(modo demo) lo diría',
@@ -244,6 +249,7 @@ export const STRINGS = {
         dropoff: () => '(modo demo) enviaría el punto de bajada',
         route: () => '(modo demo) enviaría la ruta',
         support_answer: () => '(modo demo) enviaría la respuesta',
+        car_mode: () => 'Modo auto',
       } satisfies ToastText,
       failed: 'No se pudo enviar',
     },

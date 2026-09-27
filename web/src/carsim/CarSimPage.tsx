@@ -20,6 +20,7 @@ export default function CarSimPage() {
   const [log, setLog] = useState<CarLog[]>([])
   const [last, setLast] = useState<CarResult | null>(null)
   const [custom, setCustom] = useState('')
+  const [address, setAddress] = useState('')
   const { status, send } = useSocket('/ws/car-sim', {
     onOpen: (s) => s({ type: 'READY' }),
     onMessage: (msg: Message) => {
@@ -91,6 +92,28 @@ export default function CarSimPage() {
             <Button type="submit">Ask</Button>
           </form>
           <p className="text-xs text-zinc-500">The rider sees Yes / No / Not sure and confirms the answer. No answer in 30 s is sent as "no response".</p>
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
+          <h2 className="font-semibold">Plan a trip to any address</h2>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (address.trim()) send({ type: 'CAR_SIM', command: 'plan', text: address.trim() })
+            }}
+          >
+            <input
+              className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5"
+              placeholder="e.g. Baptist Hospital of Miami, 8900 N Kendall Dr, Miami, FL"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+            <Button type="submit">Plan</Button>
+          </form>
+          <p className="text-xs text-zinc-500">
+            From the pickup, computed live from open map data (up to 20 s). If it is slower or the services fail, the rider is told and the demo trip stays.
+          </p>
         </section>
 
         {last && (
