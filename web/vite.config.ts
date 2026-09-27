@@ -9,6 +9,9 @@ const core = process.env.CORE_URL ?? 'http://127.0.0.1:8000'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // One .env for the whole repository: the page gets only the VITE_-prefixed values (the Google Maps
+  // key and the trip's origin and destination), never the Core's secrets.
+  envDir: '..',
   server: {
     port: 5173,
     strictPort: true,

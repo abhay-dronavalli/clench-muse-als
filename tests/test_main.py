@@ -136,7 +136,7 @@ def test_settings_are_announced_on_connect_and_after_every_change():
         ):
             current = {
                 "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True,
-                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": False, "trip": False,
+                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": False, "trip": False, "trip_layout": "car",
             }
             for ws in (board, console, inp):
                 assert ws.receive_json() == current

@@ -88,6 +88,9 @@ ROOT = TripNode(
     ),
 )
 BACK_LABEL: dict[Lang, str] = {"en": "Back", "es": "Atrás"}
+# In the split layout (the route map beside the car) the top level shows only these, the most
+# important controls, so the tiles stay big in half the screen.
+SPLIT_TOP = ("windows", "pull_over", "support")
 
 # What is said once the rider confirms (the confirm screen asks "Pull over here?" / "Call support?").
 CONFIRM_PHRASE: dict[str, dict[Lang, str]] = {

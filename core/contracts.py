@@ -34,6 +34,7 @@ CarActionName = Literal[
     "window_up", "window_down", "warmer", "cooler", "louder", "softer", "slow_down", "pull_over", "support"
 ]
 WindowName = Literal["front_left", "front_right", "rear_left", "rear_right", "all"]
+TripLayout = Literal["car", "split", "map"]
 
 
 class _Msg(BaseModel):
@@ -181,6 +182,10 @@ class Settings(_Msg):
     # Trip mode: the board shows the trip screen (car controls) instead of the menus. Session-only;
     # omit to keep it.
     trip: bool | None = None
+    # How the trip screen uses the tablet (core/trip.py): the 3D car, the route map beside the car
+    # (the trip menu's top level drops to its three most important controls), or the map alone.
+    # Session-only; omit to keep it.
+    trip_layout: TripLayout | None = None
 
 
 # --- Core -> Board ------------------------------------------------------------

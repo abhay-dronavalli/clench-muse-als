@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, CAR_STATE, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP, SETTINGS (the trip layout switch) | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, CAR_STATE, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
@@ -275,10 +275,11 @@ included). Screens show these values instead of assuming defaults.
 | `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
 | `tile_switch_margin` | float (optional) | webcam / gaze pointing: how far the point must be inside a new tile before the highlight moves there, as a share of that tile's width / height, 0 to 0.2; omit to keep the current value; default from `data/profile.yaml` (0.05). The board applies it; the dev panel has a slider |
 | `trip` | bool (optional) | trip mode (`core/trip.py`): the board shows the trip screen (car controls, SCREEN `screen: "trip"`) instead of the menus. Session-only, default false; the dev panel's Start trip / End trip. A change while scanning switches at once, on the first tile |
+| `trip_layout` | `"car"` \| `"split"` \| `"map"` (optional) | the trip screen's layout: the 3D car; the route map on the left half with the car and the tiles on the right (the trip menu's top level then shows only Windows, Pull over and Support); or the map above the tiles. Session-only, default `"car"`; the board's Car / Split / Map switch sends it on `/ws/board` |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "trip": false}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "trip": false, "trip_layout": "car"}
 ```
 
 ## Core -> Board

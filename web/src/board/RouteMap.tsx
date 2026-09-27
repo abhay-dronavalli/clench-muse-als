@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CarState, Lang } from '../contracts'
+import { GoogleRouteMap } from './GoogleRouteMap'
+import { MAPS_KEY } from './googleMaps'
+import { useRideProgress } from './rideProgress'
 import { STRINGS } from './strings'
 
 /**
- * The trip's route map: where the car is on its way to the destination.
+ * The trip's route map: where the car is on its way to the destination. With a Google Maps key
+ * (VITE_GOOGLE_MAPS_API_KEY) it is a real Google map (GoogleRouteMap); without one, or if Google
+ * refuses the key or cannot route, it is the drawn map below.
  *
- * For now a drawn, offline map (no key, no network): a city of streets, parks and a river, the route,
+ * The drawn map: an offline one (no key, no network): a city of streets, parks and a river, the route,
  * the part already driven, the car and the destination. Like a navigation app it follows the car: the
  * view stays centred on it and takes the shape of its box (half the upper area in Split, all of it in
  * Map). The car moves along the route as the ride goes on (CAR_STATE: arrival counting down, smoothed
  * between updates while the car moves).
  *
- * Google Maps later: keep this component's props (`car`, `lang`) and swap the SVG for a Google map
- * (e.g. @vis.gl/react-google-maps with a DirectionsRenderer) when VITE_GOOGLE_MAPS_API_KEY is set; the
- * route and the car's position would then come from the ride's real origin, destination and location.
  */
 
 // The drawn city, in SVG units.
@@ -71,31 +73,6 @@ function along(share: number) {
 
 const pts = (list: [number, number][]) => list.map(([x, y]) => `${x},${y}`).join(' ')
 
-/** How far along the ride is (0..1): arrival counted down from the first CAR_STATE of the trip. */
-function useProgress(car: CarState | null): number {
-  const [progress, setProgress] = useState(0)
-  // start: arrival minutes when the trip began; lastAt: when the last CAR_STATE arrived (ms).
-  const ride = useRef<{ start: number | null; lastAt: number; car: CarState | null }>({ start: null, lastAt: 0, car: null })
-  useEffect(() => {
-    if (!car) return
-    const r = ride.current
-    r.car = car
-    r.lastAt = Date.now()
-    if (r.start === null || car.eta_min > r.start) r.start = Math.max(car.eta_min, 1)
-  }, [car])
-  useEffect(() => {
-    // Twice a second: the arrival count, plus how far into the current minute the moving car is.
-    const timer = window.setInterval(() => {
-      const { start, lastAt, car: c } = ride.current
-      if (!c || start === null) return
-      const minuteShare = c.speed_mph > 0 ? Math.min(1, (Date.now() - lastAt) / 60_000) : 0
-      setProgress(Math.min(1, (start - c.eta_min + minuteShare) / start))
-    }, 500)
-    return () => window.clearInterval(timer)
-  }, [])
-  return progress
-}
-
 /** The box's width / height, so the view takes its shape (Split is about 2.7:1, Map about 5:1). */
 function useAspect(el: React.RefObject<HTMLDivElement | null>): number {
   const [aspect, setAspect] = useState(2.5)
@@ -112,11 +89,11 @@ function useAspect(el: React.RefObject<HTMLDivElement | null>): number {
   return aspect
 }
 
-export function RouteMap({ car, lang }: { car: CarState | null; lang: Lang }) {
+function DrawnRouteMap({ car, lang }: { car: CarState | null; lang: Lang }) {
   const s = STRINGS[lang].trip
   const box = useRef<HTMLDivElement | null>(null)
   const aspect = useAspect(box)
-  const progress = useProgress(car)
+  const progress = useRideProgress(car)
   const { p, heading, driven } = along(progress)
   const end = ROUTE[ROUTE.length - 1]
   // On each axis: if the whole route fits, frame all of it; otherwise follow the car, leading a little
@@ -171,4 +148,17 @@ export function RouteMap({ car, lang }: { car: CarState | null; lang: Lang }) {
       <div className="absolute bottom-3 right-4 rounded-full bg-white/80 px-3 py-0.5 text-sm text-zinc-500">{s.mapPreview}</div>
     </div>
   )
+}
+
+/** Google's map when a key is set and works; the drawn map otherwise (or after Google fails). */
+export function RouteMap({ car, lang }: { car: CarState | null; lang: Lang }) {
+  const [failed, setFailed] = useState<string | null>(null)
+  if (MAPS_KEY && !failed) {
+    const fail = (why: string) => {
+      console.warn('Google map unavailable, using the drawn map:', why)
+      setFailed(why)
+    }
+    return <GoogleRouteMap car={car} lang={lang} apiKey={MAPS_KEY} onFail={fail} />
+  }
+  return <DrawnRouteMap car={car} lang={lang} />
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, TripLayout } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -35,7 +35,6 @@ import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
-import { tripLayout } from './tripLayout'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
@@ -83,6 +82,8 @@ export default function BoardPage() {
   const [trip, setTrip] = useState(false)
   const car = useCarAnimation()
   const [carState, setCarState] = useState<CarState | null>(null) // CAR_STATE: the trip telemetry
+  const [layout, setLayout] = useState<TripLayout>('car') // SETTINGS trip_layout
+  const lastSettings = useRef<Settings | null>(null) // the layout switch sends it back with the new layout
   const nativeCar = nativeCarAvailable()
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
@@ -151,6 +152,8 @@ export default function BoardPage() {
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         if (msg.trip != null) setTrip(msg.trip)
+        if (msg.trip_layout != null) setLayout(msg.trip_layout)
+        lastSettings.current = msg
         break
       default:
         console.warn('board ignored', msg.type)
@@ -193,6 +196,12 @@ export default function BoardPage() {
   }
   const tapConfirm = () => send({ type: 'TAP', tile: null, seq: null, t: Date.now() / 1000 })
   const tapCancel = () => send({ type: 'TAP', tile: null, seq: null, cancel: true, t: Date.now() / 1000 })
+  // The trip layout switch: the Core owns the layout (it changes which tiles there are).
+  const changeLayout = (next: TripLayout) => {
+    const cur = lastSettings.current
+    if (cur) send({ type: 'SETTINGS', pointing_mode: cur.pointing_mode, scan_ms: cur.scan_ms, trip_layout: next })
+  }
+  const tripShared = { car: carState, nativeCar, layout, onLayout: changeLayout }
   const tripScreen = screen?.screen === 'trip' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
   const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
@@ -218,7 +227,6 @@ export default function BoardPage() {
 
   // The tablet shell draws the car behind the page while the trip screen shows, framed for the
   // layout (car / split / map).
-  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
   useEffect(() => {
     showNativeCar(tripShown)
   }, [tripShown])
@@ -256,15 +264,7 @@ export default function BoardPage() {
       )}
       {tripScreen && (
         <>
-          <TripView
-            screen={tripScreen}
-            car={carState}
-            anim={car.anim}
-            phase={car.phase}
-            tint={car.tint}
-            nativeCar={nativeCar}
-            onTap={tapTile}
-          />
+          <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} onTap={tapTile} {...tripShared} />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
         </>
@@ -278,20 +278,13 @@ export default function BoardPage() {
         </>
       )}
       {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support') && (
-        <TripConfirm
-          action={view.confirm.action}
-          lang={lang}
-          car={carState}
-          nativeCar={nativeCar}
-          onConfirm={tapConfirm}
-          onCancel={tapCancel}
-        />
+        <TripConfirm action={view.confirm.action} lang={lang} onConfirm={tapConfirm} onCancel={tapCancel} {...tripShared} />
       )}
       {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && (
         <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
       )}
       {connected && view.kind === 'speaking' && trip && (
-        <TripSpeaking lang={lang} text={view.text} car={carState} nativeCar={nativeCar} tint={car.tint} />
+        <TripSpeaking lang={lang} text={view.text} tint={car.tint} {...tripShared} />
       )}
       {connected && view.kind === 'speaking' && !trip && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}

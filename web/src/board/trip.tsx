@@ -1,17 +1,21 @@
-import { useSyncExternalStore, type ReactNode } from 'react'
-import type { CarState, Lang, Screen, WindowsOpen } from '../contracts'
+import type { ReactNode } from 'react'
+import type { CarState, Lang, Screen, TripLayout, WindowsOpen } from '../contracts'
 import type { CarAnim } from './carAnimation'
 import { RouteMap } from './RouteMap'
 import { STRINGS } from './strings'
-import { TRIP_LAYOUTS, tripLayout, type TripLayout } from './tripLayout'
 
 /**
- * The trip screen (SCREEN `screen: "trip"`, core/trip.py): a telemetry strip (CAR_STATE), the 3D car
- * in the upper part, and the trip menu's tiles in the middle of the screen (gaze is least accurate at
- * the edges) on a darker translucent panel that rises from the bottom to just below the car. The car
+ * The trip screen (SCREEN `screen: "trip"`, core/trip.py). A telemetry column on the left (CAR_STATE),
+ * and beside it, by layout (SETTINGS `trip_layout`, the Car / Split / Map switch at the column's foot):
+ *
+ *   car    the 3D car above, the trip menu's tiles below
+ *   split  the route map on the left half; the car above three tiles on the right half (the Core
+ *          sends only Windows, Pull over and Support at the top level here)
+ *   map    the route map above, the tiles below
+ *
+ * The tiles sit on a dark translucent panel that rises from the bottom to just below the car. The car
  * and its world are drawn by the tablet shell behind this page (SceneView, see native.ts); in a normal
- * browser a soft sky-to-grass backdrop takes their place. The upper part shows the car, the route map
- * and the car side by side, or the map alone (tripLayout.ts); the tiles stay where they are.
+ * browser a soft sky-to-grass backdrop takes their place.
  *
  * A control that acts (CAR_ACTION) plays one calm sequence while the Core locks input for `ms`: the
  * other tiles fade out, the picked one stays and grows a little (the rider's eyes keep an anchor), then
@@ -19,126 +23,141 @@ import { TRIP_LAYOUTS, tripLayout, type TripLayout } from './tripLayout'
  * eases to a stop. No flashing anywhere: every change is a slow opacity or scale transition.
  */
 
+const TRIP_LAYOUTS: TripLayout[] = ['car', 'split', 'map']
 const COPPER = 'rgba(192, 90, 44, 0.16)' // the pull-over tint: warm rust, low contrast
 // In a browser (no 3D scene behind the page): a soft sky-to-grass backdrop in its place.
 const BROWSER_BACKDROP = 'bg-[linear-gradient(to_bottom,#b9d9f4_0%,#e4f1fb_30%,#d3ebc8_45%,#a4d18f_100%)]'
 const WINDOW_ORDER: (keyof WindowsOpen)[] = ['front_left', 'front_right', 'rear_left', 'rear_right']
 
-function Telemetry({ lang, car }: { lang: Lang; car: CarState | null }) {
+/** The ride's numbers, top to bottom, and the layout switch at the foot. */
+function Telemetry({
+  lang,
+  car,
+  layout,
+  onLayout,
+}: {
+  lang: Lang
+  car: CarState | null
+  layout: TripLayout
+  onLayout: (l: TripLayout) => void
+}) {
   const s = STRINGS[lang].trip
-  const item = (label: string, value: ReactNode) => (
-    <span className="flex items-baseline gap-2 whitespace-nowrap">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-semibold tabular-nums text-zinc-900">{value}</span>
-    </span>
-  )
   const dash = '–'
+  const item = (label: string, value: ReactNode) => (
+    <div className="flex flex-col">
+      <span className="text-lg text-zinc-500">{label}</span>
+      <span className="text-3xl font-semibold tabular-nums text-zinc-900">{value}</span>
+    </div>
+  )
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-10 gap-y-1 border-b border-black/5 bg-white/85 px-6 py-2 text-xl shadow-sm">
+    <aside className="relative z-30 flex w-72 shrink-0 flex-col gap-6 border-r border-black/5 bg-white/85 px-6 py-6 shadow-md">
       {item(s.speed, car ? `${car.speed_mph} ${s.mph}` : dash)}
       {item(s.eta, car ? `${car.eta_min} ${s.min}` : dash)}
       {item(s.battery, car ? `${car.battery_pct}%` : dash)}
       {item(s.temp, car ? `${car.cabin_temp_f}°F` : dash)}
-      {item(
-        s.windows,
-        <span className="flex gap-3">
+      <div className="flex flex-col">
+        <span className="text-lg text-zinc-500">{s.windows}</span>
+        <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
           {WINDOW_ORDER.map((w) => (
-            <span key={w} className="flex items-baseline gap-1">
-              <span className="text-base font-normal text-zinc-500">{s.windowShort[w]}</span>
-              {car ? `${car.windows[w]}%` : dash}
+            <span key={w} className="flex items-baseline gap-2">
+              <span className="text-base text-zinc-500">{s.windowShort[w]}</span>
+              <span className="text-2xl font-semibold tabular-nums text-zinc-900">{car ? `${car.windows[w]}%` : dash}</span>
             </span>
           ))}
-        </span>,
-      )}
+        </div>
+      </div>
       {item(s.volume, car ? `${car.volume}/10` : dash)}
-      <LayoutSwitch lang={lang} />
+      <div className="mt-auto flex flex-col gap-2">
+        {TRIP_LAYOUTS.map((l) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => onLayout(l)}
+            className={`rounded-2xl px-4 py-2 text-xl ${l === layout ? 'bg-zinc-900 font-semibold text-white' : 'bg-zinc-100 text-zinc-600 ring-1 ring-black/10'}`}
+          >
+            {s.layout[l]}
+          </button>
+        ))}
+      </div>
+    </aside>
+  )
+}
+
+/** Where the car shows: empty here (the tablet draws it behind the page), or a label in a browser. */
+function CarSpot({ nativeCar, lang }: { nativeCar: boolean; lang: Lang }) {
+  return (
+    <div className="relative flex min-h-0 flex-[4] items-center justify-center">
+      {!nativeCar && <span className="rounded-full bg-white/70 px-4 py-1 text-lg text-zinc-600">{STRINGS[lang].trip.carHere}</span>}
     </div>
   )
 }
 
-/** Car / Split / Map: a caregiver's (or a tap's) choice for the upper part. */
-function LayoutSwitch({ lang }: { lang: Lang }) {
-  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
-  const names = STRINGS[lang].trip.layout
+/** The tiles' panel: dark smoked glass from just below the car (or the map) to the bottom edge. */
+function Panel({ children }: { children: ReactNode }) {
   return (
-    <span className="flex overflow-hidden rounded-full bg-zinc-100 p-1 ring-1 ring-black/10">
-      {TRIP_LAYOUTS.map((l) => (
-        <button
-          key={l}
-          type="button"
-          onClick={() => tripLayout.set(l)}
-          className={`rounded-full px-4 py-1 text-lg ${l === layout ? 'bg-zinc-900 font-semibold text-white' : 'text-zinc-600'}`}
-        >
-          {names[l]}
-        </button>
-      ))}
-    </span>
+    <div className="relative z-10 flex min-h-0 flex-[6] flex-col items-center justify-center px-8 pb-8 pt-4">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-[4vh] bottom-0 rounded-t-[3rem] border-t border-white/15 bg-zinc-950/45"
+      />
+      <div className="relative flex h-full w-full flex-col items-center justify-center">{children}</div>
+    </div>
   )
 }
 
-/**
- * The upper part, by layout: the car alone (empty here: the tablet draws it behind the page), the map
- * on the left with the car on the right, or the map alone. In a browser a label stands in for the car.
- */
-function CarArea({ nativeCar, lang, car, layout }: { nativeCar: boolean; lang: Lang; car: CarState | null; layout: TripLayout }) {
-  const carSpot = nativeCar ? null : (
-    <span className="rounded-full bg-white/70 px-4 py-1 text-lg text-zinc-600">{STRINGS[lang].trip.carHere}</span>
-  )
-  if (layout === 'map') {
-    return (
-      <div className="relative min-h-0 flex-[4] px-8 pb-[5vh] pt-4">
-        <RouteMap car={car} lang={lang} />
-      </div>
-    )
-  }
-  if (layout === 'split') {
-    return (
-      <div className="relative grid min-h-0 flex-[4] grid-cols-2">
-        <div className="min-h-0 pb-[5vh] pl-8 pr-4 pt-4">
-          <RouteMap car={car} lang={lang} />
-        </div>
-        <div className="flex items-center justify-center">{carSpot}</div>
-      </div>
-    )
-  }
-  return <div className="relative flex min-h-0 flex-[4] items-center justify-center">{carSpot}</div>
-}
-
-/**
- * Telemetry, car area, and the panel below with whatever goes on it (the tiles, a confirm screen, a
- * spoken line). The panel is translucent white from the bottom of the screen to just below the car.
- */
 function TripShell({
   lang,
   car,
   nativeCar,
   tint,
+  layout,
+  onLayout,
   children,
 }: {
   lang: Lang
   car: CarState | null
   nativeCar: boolean
   tint: boolean
+  layout: TripLayout
+  onLayout: (l: TripLayout) => void
   children: ReactNode
 }) {
-  const layout = useSyncExternalStore(tripLayout.subscribe, tripLayout.get)
+  let main: ReactNode
+  if (layout === 'split') {
+    main = (
+      <div className="flex min-h-0 flex-1">
+        <div className="relative z-10 min-h-0 flex-1 p-6">
+          <RouteMap car={car} lang={lang} />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <CarSpot nativeCar={nativeCar} lang={lang} />
+          <Panel>{children}</Panel>
+        </div>
+      </div>
+    )
+  } else {
+    main = (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {layout === 'map' ? (
+          <div className="relative z-10 min-h-0 flex-[4] px-8 pb-[5vh] pt-6">
+            <RouteMap car={car} lang={lang} />
+          </div>
+        ) : (
+          <CarSpot nativeCar={nativeCar} lang={lang} />
+        )}
+        <Panel>{children}</Panel>
+      </div>
+    )
+  }
   return (
-    <div className={`relative flex min-h-0 flex-1 flex-col ${nativeCar ? '' : BROWSER_BACKDROP}`}>
+    <div className={`relative flex min-h-0 flex-1 ${nativeCar ? '' : BROWSER_BACKDROP}`}>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-20 transition-opacity duration-700 ease-out"
         style={{ background: COPPER, opacity: tint ? 1 : 0 }}
       />
-      <Telemetry lang={lang} car={car} />
-      <CarArea nativeCar={nativeCar} lang={lang} car={car} layout={layout} />
-      <div className="relative z-10 flex min-h-0 flex-[6] flex-col items-center justify-center px-8 pb-8 pt-4">
-        {/* Starts a little above this section, right below the car, and runs to the bottom edge. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-[4vh] bottom-0 rounded-t-[3rem] border-t border-white/15 bg-zinc-950/45"
-        />
-        <div className="relative flex h-full w-full flex-col items-center justify-center">{children}</div>
-      </div>
+      <Telemetry lang={lang} car={car} layout={layout} onLayout={onLayout} />
+      {main}
     </div>
   )
 }
@@ -150,31 +169,38 @@ function pickedTile(screen: Screen, anim: CarAnim | null): number {
   return screen.tiles.findIndex((t) => t.id.endsWith(`.${key}`))
 }
 
+interface Shared {
+  car: CarState | null
+  nativeCar: boolean
+  layout: TripLayout
+  onLayout: (l: TripLayout) => void
+}
+
 export function TripView({
   screen,
-  car,
   anim,
   phase,
   tint,
-  nativeCar,
   onTap,
-}: {
+  ...shared
+}: Shared & {
   screen: Screen
-  car: CarState | null
   anim: CarAnim | null
   phase: 'in' | 'out'
   tint: boolean
-  nativeCar: boolean
   onTap: (tile: number) => void
 }) {
   const picked = pickedTile(screen, anim)
   const locked = anim !== null
+  // Half the width in the split layout: one column for three tiles, two for more.
+  const cols =
+    shared.layout === 'split' ? (screen.tiles.length <= 3 ? 'grid-cols-1' : 'grid-cols-2') : 'grid-cols-3 portrait:grid-cols-2'
   return (
-    <TripShell lang={screen.lang} car={car} nativeCar={nativeCar} tint={tint}>
+    <TripShell lang={screen.lang} tint={tint} {...shared}>
       {screen.path.length > 0 && (
         <p className="mb-4 text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
       )}
-      <div className="grid w-full max-w-6xl flex-1 auto-rows-fr grid-cols-3 gap-8 portrait:grid-cols-2">
+      <div className={`grid w-full max-w-6xl flex-1 auto-rows-fr gap-6 ${cols}`}>
         {screen.tiles.map((tile, i) => {
           const on = !locked && i === screen.highlight
           const isPicked = i === picked
@@ -222,64 +248,50 @@ export function TripView({
 export function TripConfirm({
   action,
   lang,
-  car,
-  nativeCar,
   onConfirm,
   onCancel,
-}: {
+  ...shared
+}: Shared & {
   action: 'pull_over' | 'support'
   lang: Lang
-  car: CarState | null
-  nativeCar: boolean
   onConfirm: () => void
   onCancel: () => void
 }) {
   const s = STRINGS[lang].trip
   const pull = action === 'pull_over'
+  const narrow = shared.layout === 'split'
   return (
-    <TripShell lang={lang} car={car} nativeCar={nativeCar} tint={pull}>
-      <div className="flex flex-col items-center rounded-[2.5rem] bg-white/95 px-16 py-12 shadow-2xl shadow-black/15">
-        <p className={`mb-10 text-6xl font-bold ${pull ? 'text-[#7a2e0e]' : 'text-zinc-900'}`}>
+    <TripShell lang={lang} tint={pull} {...shared}>
+      <div className="flex flex-col items-center rounded-[2.5rem] bg-white/95 px-12 py-10 shadow-2xl shadow-black/15">
+        <p className={`mb-8 text-center text-6xl font-bold ${pull ? 'text-[#7a2e0e]' : 'text-zinc-900'}`}>
           {pull ? s.pullOver : s.support}
         </p>
-        <div className="flex gap-10">
+        <div className={`flex gap-8 ${narrow ? 'flex-col' : ''}`}>
           <button
             type="button"
             onClick={onConfirm}
-            className={`min-w-72 rounded-3xl px-12 py-10 text-5xl font-bold text-white shadow-lg ${pull ? 'bg-[#c05a2c]' : 'bg-sky-700'}`}
+            className={`min-w-72 rounded-3xl px-12 py-8 text-5xl font-bold text-white shadow-lg ${pull ? 'bg-[#c05a2c]' : 'bg-sky-700'}`}
           >
             {s.confirm}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="min-w-72 rounded-3xl bg-white px-12 py-10 text-5xl font-bold text-zinc-900 ring-2 ring-zinc-300"
+            className="min-w-72 rounded-3xl bg-white px-12 py-8 text-5xl font-bold text-zinc-900 ring-2 ring-zinc-300"
           >
             {s.cancel}
           </button>
         </div>
-        <p className="mt-10 text-2xl text-zinc-500">{s.how}</p>
+        <p className="mt-8 text-center text-2xl text-zinc-500">{s.how}</p>
       </div>
     </TripShell>
   )
 }
 
 /** A spoken line during the trip (a confirmed sentence): same layout, the car stays in view. */
-export function TripSpeaking({
-  lang,
-  text,
-  car,
-  nativeCar,
-  tint,
-}: {
-  lang: Lang
-  text: string
-  car: CarState | null
-  nativeCar: boolean
-  tint: boolean
-}) {
+export function TripSpeaking({ lang, text, tint, ...shared }: Shared & { lang: Lang; text: string; tint: boolean }) {
   return (
-    <TripShell lang={lang} car={car} nativeCar={nativeCar} tint={tint}>
+    <TripShell lang={lang} tint={tint} {...shared}>
       <p className="max-w-5xl rounded-[2.5rem] bg-white/95 px-14 py-10 text-center text-5xl font-bold leading-tight text-zinc-900 shadow-2xl shadow-black/15">
         {text}
       </p>

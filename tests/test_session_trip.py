@@ -258,3 +258,23 @@ def test_a_scan_covers_every_tile_of_a_level_back_included(in_trip, sched, sent)
     assert last_screen(sent).highlight == 2  # Back
     sched.advance(SCAN_S)
     assert last_screen(sent).highlight == 0
+
+
+def test_the_split_layout_keeps_only_the_three_most_important_controls(in_trip, sched, sent):
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
+    assert labels(sent) == ["Windows", "Pull over", "Support"]
+    assert in_trip.settings().trip_layout == "split"
+    tap_label(in_trip, sched, sent, "Windows")  # the levels below are whole
+    assert labels(sent) == ["Up", "Down", "Back"]
+    tap_label(in_trip, sched, sent, "Back")
+    assert labels(sent) == ["Windows", "Pull over", "Support"]
+    sched.advance(3 * SCAN_S)
+    assert last_screen(sent).highlight == 0  # the scan wraps after three tiles
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="car"))
+    assert labels(sent) == TOP
+
+
+def test_pull_over_from_the_split_layout_still_confirms(in_trip, sched, sent):
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
+    tap_label(in_trip, sched, sent, "Pull over")
+    assert sent[-1] == Confirm(text="Please pull over here.", action="pull_over")

@@ -45,6 +45,8 @@ export type CarActionName =
   | 'pull_over'
   | 'support'
 export type WindowName = 'front_left' | 'front_right' | 'rear_left' | 'rear_right' | 'all'
+/** car = the 3D car; split = the route map beside the car (three top-level tiles); map = the map above the tiles */
+export type TripLayout = 'car' | 'split' | 'map'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 
@@ -169,6 +171,8 @@ export interface Settings {
   muse_enabled?: boolean
   /** trip mode: the trip screen (car controls) instead of the menus; omit to keep it */
   trip?: boolean | null
+  /** the trip screen's layout; omit to keep it */
+  trip_layout?: TripLayout | null
 }
 
 // --- Core -> Board ---

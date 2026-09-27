@@ -84,6 +84,7 @@ from core.contracts import (
     BackPrompt,
     CarAction,
     CarActionName,
+    TripLayout,
     WindowName,
     DoubleBlink,
     FaceOk,
@@ -109,7 +110,7 @@ from core.menu import MAX_ITEMS, Menu, MenuNode
 from core.metrics import Tracker, day1_cost
 from core.pointer import DEFAULT_SCAN_MS, make_pointer
 from core.profile import Profile
-from core.trip import BACK_LABEL, CONFIRM_PHRASE, PULL_OVER_S, ROOT as TRIP_ROOT, ROUTINE_S, Car, TripNode
+from core.trip import BACK_LABEL, CONFIRM_PHRASE, SPLIT_TOP, PULL_OVER_S, ROOT as TRIP_ROOT, ROUTINE_S, Car, TripNode
 from core.rank import Entry, Ranker
 from core.rank.history import Sentence, leaf_path
 from core.rank.jev import JevAnswer, JevRanker
@@ -312,6 +313,7 @@ class Session:
         self.long_clench_ms = profile.long_clench_ms
         self.muse_enabled = False
         self.trip = False  # trip mode: the trip screen instead of the menus (core/trip.py)
+        self.trip_layout: TripLayout = "car"  # car / split (map beside the car: fewer top tiles) / map
         self._trip_path: list[TripNode] = [TRIP_ROOT]  # the trip menu levels, top first
         self.car = Car()  # the mock car the trip controls act on
         self._acting_timer: TimerHandle | None = None
@@ -410,6 +412,7 @@ class Session:
             muse_enabled=self.muse_enabled,
             tile_switch_margin=self.tile_switch_margin,
             trip=self.trip,
+            trip_layout=self.trip_layout,
         )
 
     def handle(self, msg: Message) -> None:
@@ -717,9 +720,8 @@ class Session:
 
     def _trip_tiles(self) -> list[Tile]:
         """The trip menu level's tiles, then Back below the top level."""
-        level = self._trip_path[-1]
         prefix = self._trip_prefix()
-        tiles = [Tile(id=f"{prefix}.{n.key}", label=n.label(self.lang), kind="car") for n in level.children]
+        tiles = [Tile(id=f"{prefix}.{n.key}", label=n.label(self.lang), kind="car") for n in self._trip_children()]
         if len(self._trip_path) > 1:
             tiles.append(Tile(id=f"{prefix}.back", label=BACK_LABEL[self.lang], kind="back"))
         return tiles
@@ -727,16 +729,16 @@ class Session:
     def _pick_trip(self, index: int) -> None:
         """A trip tile: a level opens, Back goes up, a routine control acts at once behind a short input
         lock (and the level stays, so it can be repeated), Pull over and Support confirm first."""
-        level = self._trip_path[-1]
-        if len(self._trip_path) > 1 and index == len(level.children):
+        children = self._trip_children()
+        if len(self._trip_path) > 1 and index == len(children):
             self._echo(BACK_LABEL[self.lang])
             self._trip_path.pop()
             self._enter_frame()
             return
-        if not 0 <= index < len(level.children):
+        if not 0 <= index < len(children):
             log.warning("trip pick %d outside %d tiles", index, self._tile_count())
             return
-        node = level.children[index]
+        node = children[index]
         node_id = f"{self._trip_prefix()}.{node.key}"
         label = node.label(self.lang)
         self._echo(label)
@@ -813,8 +815,15 @@ class Session:
     def _tile_count(self) -> int:
         """Tiles on the current screen: the trip level's (Back included), or the frame's items plus "Other..."."""
         if self.trip:
-            return len(self._trip_path[-1].children) + (1 if len(self._trip_path) > 1 else 0)
+            return len(self._trip_children()) + (1 if len(self._trip_path) > 1 else 0)
         return len(self.frame.items) + 1
+
+    def _trip_children(self) -> list[TripNode]:
+        """The trip level's controls; at the top of the split layout only the most important ones."""
+        level = self._trip_path[-1]
+        if self.trip_layout == "split" and len(self._trip_path) == 1:
+            return [n for n in level.children if n.key in SPLIT_TOP]
+        return list(level.children)
 
     def _depth(self) -> int:
         """How deep the person is: 1 at home (or the top of the trip menu)."""
@@ -1419,6 +1428,9 @@ class Session:
         trip_changed = s.trip is not None and s.trip != self.trip
         if s.trip is not None:
             self.trip = s.trip
+        layout_changed = s.trip_layout is not None and s.trip_layout != self.trip_layout
+        if s.trip_layout is not None:
+            self.trip_layout = s.trip_layout
         self.pointer.apply_settings(s)
         lang_changed = s.lang is not None and s.lang != self.lang
         if s.lang is not None:
@@ -1430,6 +1442,8 @@ class Session:
         self._emit(self.settings())  # every client sees the real values, whoever changed them
         if trip_changed:
             self._change_trip()
+        elif layout_changed and self.trip and self.state is SessionState.SCANNING:
+            self._enter_frame()  # the top level's tiles change with the layout
         elif learning_changed:
             self._change_learning()
         elif lang_changed:

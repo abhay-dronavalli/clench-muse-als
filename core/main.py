@@ -57,7 +57,8 @@ log = logging.getLogger("clench.core")
 
 # Which message types each route accepts. Anything else is logged and ignored.
 ACCEPTS: dict[Role, frozenset[str]] = {
-    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK", "TAP"}),
+    # SETTINGS: the trip screen's layout switch (Car / Split / Map) sits on the board.
+    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK", "TAP", "SETTINGS"}),
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
