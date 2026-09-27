@@ -34,7 +34,8 @@ Human setup and service details also live in `docs/RUNBOOK.md`.
 | `scripts/` | One-off tools. Every script only prints what it would do unless you pass `--send`. |
 | `tests/` | pytest tests for `core/` and `sensor/`. |
 
-Components talk over WebSocket with small JSON events: `/ws/board`, `/ws/console`, `/ws/input`.
+Components talk over WebSocket with small JSON events: `/ws/board`, `/ws/console`, `/ws/input`,
+`/ws/desktop` (the desktop agent, `docs/desktop-control.md`).
 Only the AI, voice, and texting services reach the internet. The keyboard stand-in sends the same
 events as the headband, so the Core cannot tell them apart.
 

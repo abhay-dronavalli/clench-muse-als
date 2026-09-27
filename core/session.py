@@ -54,6 +54,12 @@ clenches are then ignored for LATE_CLENCH_S (1 s) so a clench meant for the prom
 or send the message. More blinks while it is open are ignored. A LONG_CLENCH still starts help at once.
 The help countdown itself is still cancelled by a DOUBLE_BLINK straight away.
 
+Desktop control (docs/desktop-control.md, decisions.md 20): with `input_target` "desktop" the board
+stays home with its scanning stopped, and CLENCH and DOUBLE_BLINK go to the desktop agent as
+DESKTOP_INPUT; the agent decides what they do in Windows. The help alert does not change: LONG_CLENCH
+starts the countdown, and during it a DOUBLE_BLINK cancels help and a CLENCH does nothing, so neither
+reaches the agent. Switching the target while scanning or confirming goes home without a word.
+
 Help alert (PRD D3): LONG_CLENCH while SCANNING, LOADING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one
 SCREEN per second, and the board says "Calling for help. Double blink to cancel.". DOUBLE_BLINK
 cancels back to where the person was. At 0 the help contact gets a call and a message (the countdown
@@ -82,8 +88,10 @@ from core.contracts import (
     Clench,
     Confirm,
     BackPrompt,
+    DesktopInput,
     DoubleBlink,
     FaceOk,
+    InputTarget,
     Lang,
     LongClench,
     Message,
@@ -304,6 +312,7 @@ class Session:
         self.learning = profile.learning if learning is None else learning
         self.long_clench_ms = profile.long_clench_ms
         self.muse_enabled = False
+        self.input_target: InputTarget = "board"  # session-only: every Core starts on the board
         self.tile_switch_margin = profile.tile_switch_margin
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
         self.jev = jev  # None = no Jev: the AI prior is 0
@@ -395,12 +404,17 @@ class Session:
             long_clench_ms=self.long_clench_ms,
             muse_enabled=self.muse_enabled,
             tile_switch_margin=self.tile_switch_margin,
+            input_target=self.input_target,
         )
 
     def handle(self, msg: Message) -> None:
         if isinstance(msg, (Clench, DoubleBlink, LongClench)):
             self._moves += 1
         match msg:
+            case Clench() if self._for_desktop():
+                self._emit(DesktopInput(kind="CLENCH", t=msg.t))
+            case DoubleBlink() if self._for_desktop():
+                self._emit(DesktopInput(kind="DOUBLE_BLINK", t=msg.t))
             case Clench():
                 self._on_clench()
             case DoubleBlink():
@@ -435,6 +449,16 @@ class Session:
                 log.debug("ignored %s in %s", msg.type, self.state.value)
 
     # --- gestures -------------------------------------------------------------
+
+    def _for_desktop(self) -> bool:
+        """A CLENCH or DOUBLE_BLINK goes to the desktop agent, unless a help countdown runs: then the
+        session keeps it (a double blink cancels help, a clench does nothing), whatever the target."""
+        return self.input_target == "desktop" and self.state is not SessionState.HELP_COUNTDOWN
+
+    def _start_pointer(self) -> None:
+        """Scan (or follow the head) only while the board is the input target."""
+        if self.input_target == "board":
+            self.pointer.start()
 
     def _on_clench(self) -> None:
         now = self._scheduler.now()
@@ -1065,7 +1089,7 @@ class Session:
         self.pointer.on_tiles_changed(count)
         if first_tile:
             self.pointer.place(count, 0)
-        self.pointer.start()  # the scan timer restarts from 0
+        self._start_pointer()  # the scan timer restarts from 0
         self._emit(self._screen())
         if home:
             self._announce_shortcut(shortcut_jev)
@@ -1074,7 +1098,7 @@ class Session:
     def _resume(self) -> None:
         """Back to scanning the same frame, the highlight where it was."""
         self.state = SessionState.SCANNING
-        self.pointer.start()
+        self._start_pointer()
         self._emit(self._screen())
 
     # --- AI requests ----------------------------------------------------------
@@ -1233,6 +1257,9 @@ class Session:
             self.muse_enabled = s.muse_enabled
         if s.tile_switch_margin is not None:
             self.tile_switch_margin = s.tile_switch_margin
+        target_changed = s.input_target is not None and s.input_target != self.input_target
+        if s.input_target is not None:
+            self.input_target = s.input_target
         self.pointer.apply_settings(s)
         lang_changed = s.lang is not None and s.lang != self.lang
         if s.lang is not None:
@@ -1242,7 +1269,9 @@ class Session:
             self.learning = s.learning
             self.suggester.use_history = s.learning
         self._emit(self.settings())  # every client sees the real values, whoever changed them
-        if learning_changed:
+        if target_changed:
+            self._change_target()
+        elif learning_changed:
             self._change_learning()
         elif lang_changed:
             self._change_language()
@@ -1261,7 +1290,23 @@ class Session:
         self.pointing_mode = mode
         log.info("pointing mode %s: highlight from %s", mode, new.source)
         if self.state is SessionState.SCANNING:
-            new.start()
+            self._start_pointer()
+
+    def _change_target(self) -> None:
+        """The input target changed. While scanning, loading or confirming the board goes home, quietly
+        (a message on the confirm screen is dropped, never sent); in desktop mode its scanning stops
+        there. Speaking finishes first and then goes home anyway. A help countdown carries on, and
+        its cancel or its end applies the new target."""
+        log.info("input target %s", "desktop: gestures go to the desktop agent" if self.input_target == "desktop"
+                 else "board: gestures pick tiles again")
+        if self.state in (SessionState.SCANNING, SessionState.LOADING, SessionState.CONFIRMING):
+            self._close_back()
+            self._cancel_wait()
+            self._pending = None
+            self._shortcut_from = None
+            self._go_home(first_tile=True)
+            if self.input_target == "desktop":
+                self.pointer.stop()  # the pointer may have been running since before the switch
 
     def _change_learning(self) -> None:
         """Day 1 mode on or off. While scanning, the board goes back to home so the before / after

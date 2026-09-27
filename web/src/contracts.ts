@@ -28,6 +28,11 @@ export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control
  */
 export type UtteranceKind = 'phrase' | 'echo' | 'system'
 /**
+ * Where CLENCH and DOUBLE_BLINK go: the board's menus, or the desktop agent that clicks in Windows
+ * (docs/desktop-control.md). LONG_CLENCH and the help countdown stay with the Core either way.
+ */
+export type InputTarget = 'board' | 'desktop'
+/**
  * branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
  * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
@@ -154,6 +159,8 @@ export interface Settings {
   tile_switch_margin?: number
   /** Session-only permission for the separate Muse input; defaults to paused. */
   muse_enabled?: boolean
+  /** board or desktop; session-only, starts on board; omit to keep it */
+  input_target?: InputTarget
 }
 
 // --- Core -> Board ---
@@ -312,6 +319,20 @@ export interface InputEvent {
   duration: number | null
 }
 
+// --- Core -> Desktop agent ---
+
+/**
+ * A gesture for the desktop agent, sent only while `input_target` is 'desktop'. The agent decides
+ * what it does in Windows (click, zoom, go back). LONG_CLENCH never comes here: the help countdown
+ * stays in the Core, and a DOUBLE_BLINK during it cancels help instead of coming here.
+ */
+export interface DesktopInput {
+  type: 'DESKTOP_INPUT'
+  kind: 'CLENCH' | 'DOUBLE_BLINK'
+  /** when the gesture happened (the sender's clock); the agent looks back from it */
+  t: number
+}
+
 export type JevStatus = 'off' | 'waiting' | 'answered'
 
 /**
@@ -360,5 +381,6 @@ export type Message =
   | Metrics
   | ShortcutDebug
   | InputEvent
+  | DesktopInput
 
 export type MessageType = Message['type']

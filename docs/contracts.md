@@ -25,6 +25,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
+| `/ws/desktop` | Desktop agent (`docs/desktop-control.md`) | SETTINGS; CLENCH, DOUBLE_BLINK, LONG_CLENCH from its keyboard stand-in | SETTINGS, SCREEN, ACTION_RESULT, DESKTOP_INPUT |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
 
@@ -57,6 +58,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 | SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
+| DESKTOP_INPUT | Core | Desktop agent | A CLENCH or DOUBLE_BLINK for the desktop, while `input_target` is `desktop` |
 
 ## Sensor Service -> Core
 
@@ -237,10 +239,11 @@ included). Screens show these values instead of assuming defaults.
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
 | `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
 | `tile_switch_margin` | float (optional) | webcam / gaze pointing: how far the point must be inside a new tile before the highlight moves there, as a share of that tile's width / height, 0 to 0.2; omit to keep the current value; default from `data/profile.yaml` (0.05). The board applies it; the dev panel has a slider |
+| `input_target` | `"board"` \| `"desktop"` (optional) | where CLENCH and DOUBLE_BLINK go (`docs/desktop-control.md`). Session-only; the Core starts on `board`; omit to keep it. Switching (either way) while scanning or confirming goes back to Home without saying anything; in `desktop` the board's scanning stops. LONG_CLENCH and the help countdown work the same in both |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "input_target": "board"}
 ```
 
 ## Core -> Board
@@ -521,6 +524,33 @@ blink has to be able to see the gestures the Core REFUSED, and why it refused th
 
 ```json
 {"type": "INPUT_EVENT", "t": 1777001234.5, "kind": "CLENCH", "source": "muse", "accepted": false, "reason": "Muse input is paused", "strength": 0.62, "duration": null}
+```
+
+## Core -> Desktop agent
+
+### DESKTOP_INPUT
+
+Sent to `/ws/desktop` only, while `input_target` is `desktop`, for every accepted CLENCH and
+DOUBLE_BLINK (from the headband, the web dev panel, or the agent's own keyboard stand-in). The agent
+decides what it does in Windows: click the element under the gaze, open or use the zoom, or open its
+"Go back?" prompt (a CLENCH within 3 s then sends Alt+Left). The Core keeps these rules:
+
+- LONG_CLENCH is never sent here. It starts the help countdown exactly as on the board. The agent
+  draws the countdown from the SCREEN messages it receives (`screen: "help_countdown"`), and the
+  next SCREEN ends it.
+- During the help countdown a DOUBLE_BLINK cancels help and is not sent here, and a CLENCH does
+  nothing.
+- A headband gesture needs a consumer: in `desktop` that is a connected agent, not a board. When the
+  last agent disconnects while the target is `desktop`, the Core switches `input_target` back to
+  `board`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `kind` | `"CLENCH"` \| `"DOUBLE_BLINK"` | which gesture |
+| `t` | float | when the gesture happened (the sender's clock); the agent picks the gaze from `clench_lookback_ms` before it |
+
+```json
+{"type": "DESKTOP_INPUT", "kind": "CLENCH", "t": 1727300020.5}
 ```
 
 ## Muse integration: clench and double blink

@@ -28,6 +28,9 @@ UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
 # suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
 TileKind = Literal["branch", "leaf", "suggestion", "other"]
+# Where CLENCH and DOUBLE_BLINK go: the board's menus, or the desktop agent that clicks in Windows
+# (docs/desktop-control.md). LONG_CLENCH and the help countdown stay with the Core either way.
+InputTarget = Literal["board", "desktop"]
 
 
 class _Msg(BaseModel):
@@ -150,6 +153,7 @@ class Settings(_Msg):
     # before the highlight moves there, 0 to 0.2. Omit to keep it.
     tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
     muse_enabled: bool | None = None  # session-only; startup is paused
+    input_target: InputTarget | None = None  # board or desktop; session-only, starts on board; omit to keep it
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -240,6 +244,19 @@ class ActionResult(_Msg):
     ok: bool
     detail: str  # "dry run" when ACTIONS_DRY_RUN is on; the service's error message on failure
     contact: str | None  # contact's display name in the current language; None when there is none
+
+
+# --- Core -> Desktop agent -----------------------------------------------------
+
+
+class DesktopInput(_Msg):
+    """A gesture for the desktop agent, sent only while `input_target` is desktop. The agent decides
+    what it does in Windows (click, zoom, go back). LONG_CLENCH never comes here: the help countdown
+    stays in the Core, and a DOUBLE_BLINK during it cancels help instead of coming here."""
+
+    type: Literal["DESKTOP_INPUT"] = "DESKTOP_INPUT"
+    kind: Literal["CLENCH", "DOUBLE_BLINK"]
+    t: float  # when the gesture happened (the sender's clock); the agent looks back from it
 
 
 # --- Core -> Console and web dev panel ------------------------------------------
@@ -346,6 +363,7 @@ Message = Annotated[
         Metrics,
         ShortcutDebug,
         InputEvent,
+        DesktopInput,
     ],
     Field(discriminator="type"),
 ]

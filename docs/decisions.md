@@ -645,3 +645,12 @@ Muse gestures to control all of Windows, not only the board tab.
   composes for another app still goes through the board's confirm screen. Flagged for Taher.
 - Gaze never goes to the Core. The board gets it from the agent's local bridge (chunk 5), the same
   way the tablet shell feeds it.
+- Chunk 1 (Core routing) details. Switching `input_target` while scanning, loading or confirming
+  goes home without saying anything, and a message on the confirm screen is dropped, never sent. A
+  help countdown carries on through a switch. The Core does not debounce DESKTOP_INPUT (the agent
+  owns its timing and debounces its own clicks). A headband gesture needs a consumer for the
+  current target: the board, or in desktop mode a connected agent ("no desktop agent is
+  connected"). When the last agent leaves in desktop mode, the target goes back to the board.
+  Closing the board does not pause Muse while an agent is in charge. The agent gets SCREEN (only
+  to draw the help countdown), SETTINGS and ACTION_RESULT, and never CONFIRM, SPEAK or audio; the
+  board tab still speaks.

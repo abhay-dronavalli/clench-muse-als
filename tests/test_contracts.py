@@ -48,6 +48,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
             "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None,
+            "input_target": "desktop",
         },
     ),
     "SCREEN": (
@@ -103,6 +104,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "BACK_PROMPT": (
         contracts.BackPrompt,
         {"type": "BACK_PROMPT", "open": True, "kind": "menu", "timeout_ms": 3000},
+    ),
+    "DESKTOP_INPUT": (
+        contracts.DesktopInput,
+        {"type": "DESKTOP_INPUT", "kind": "DOUBLE_BLINK", "t": 1727300020.5},
     ),
     "INPUT_EVENT": (
         contracts.InputEvent,
@@ -183,6 +188,9 @@ def test_round_trip(name):
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "learning": "day1"},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "long_clench_ms": 500},
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "tile_switch_margin": 0.5},
+        {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "input_target": "tv"},
+        {"type": "DESKTOP_INPUT", "kind": "LONG_CLENCH", "t": 1.0},  # help never goes to the desktop
+        {"type": "DESKTOP_INPUT", "kind": "CLENCH"},  # t is required
         {"type": "METRICS", "text": "x", "selections": 0, "scan_steps": 0, "day1_selections": 1, "day1_scan_steps": 0},
         {"type": "METRICS", "text": "x", "selections": 2, "scan_steps": 0, "day1_selections": 5},
         {

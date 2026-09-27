@@ -7,6 +7,8 @@ Run:  uv run uvicorn core.main:app --reload --port 8000
   /ws/console  caregiver console: SETTINGS in; SETTINGS plus a mirror of what the board gets out
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
                POINT, SETTINGS, RESET in; SETTINGS out
+  /ws/desktop  desktop agent (docs/desktop-control.md): SETTINGS and its keyboard stand-in's gestures
+               in; SETTINGS, SCREEN, ACTION_RESULT, DESKTOP_INPUT out
 
 Every client gets the current SETTINGS as soon as it connects, and again after every change.
 When the last board disconnects the session hears FACE_OK false (Auto falls back to scan in 3 s).
@@ -45,7 +47,7 @@ from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
 from core.rank.jev import JevRanker, build_jev
 from core.sensor_service import SensorService
-from core.session import Session, voice_lines
+from core.session import Session, SessionState, voice_lines
 from core.suggest import build_provider
 from core.suggest.provider import LLMProvider
 from core.suggest.service import Suggester
@@ -61,6 +63,7 @@ ACCEPTS: dict[Role, frozenset[str]] = {
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
+    "desktop": frozenset({"SETTINGS", "CLENCH", "DOUBLE_BLINK", "LONG_CLENCH"}),
 }
 
 # How long the headband may be missing before Muse input is paused. A Bluetooth reconnect takes a
@@ -100,7 +103,10 @@ def refuse_reason(session: "Session", hub: Hub, state: object, msg: Message) -> 
     signal: Signal = state.sensor_signal  # type: ignore[attr-defined]
     if not session.muse_enabled:
         return 'Muse input is paused'
-    if not hub.count('board'):
+    if session.input_target == 'desktop':
+        if not hub.count('desktop'):
+            return 'no desktop agent is connected'
+    elif not hub.count('board'):
         return 'no patient board is open'
     if not signal.connected:
         return 'the headband is not connected'
@@ -236,6 +242,8 @@ def create_app(
             # Sent after READY for boards to preserve the existing startup ordering.
             if role == 'console':
                 hub.send_to(client, app.state.sensor_signal)
+        if role == "desktop" and session.state is SessionState.HELP_COUNTDOWN:
+            hub.send_to(client, session.current_view())  # an agent that (re)connects mid-countdown draws it
         try:
             while True:
                 event = await ws.receive()
@@ -270,7 +278,7 @@ def create_app(
                         if reason is not None:
                             log.info('Muse %s suppressed: %s', msg.type, reason)
                             continue
-                    if role == 'input' and msg.type in GESTURES:
+                    if role in ('input', 'desktop') and msg.type in GESTURES:
                         hub.broadcast(input_event(msg, 'dev', None))
                     if isinstance(msg, Ready):
                         view = session.current_view()
@@ -290,7 +298,11 @@ def create_app(
                     profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')
                 hub.broadcast(app.state.sensor_signal)
                 session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
-            if role == 'board' and hub.count('board') == 0 and session.muse_enabled:
+            if role == "desktop" and hub.count("desktop") == 0 and session.input_target == "desktop":
+                # Gestures must land somewhere visible: back to the board's menus.
+                log.warning("last desktop agent disconnected: input target back to the board")
+                session.handle(Settings(**dict(session.settings().model_dump(), input_target="board")))
+            if role in ("board", "desktop") and hub.count("board") == 0 and session.muse_enabled                     and not (session.input_target == "desktop" and hub.count("desktop")):
                 session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
             if role == "board" and hub.count("board") == 0 and session.face_ok:
                 log.info("last board disconnected: no webcam face any more")
@@ -311,6 +323,10 @@ def create_app(
     @app.websocket('/ws/sensor')
     async def ws_sensor(ws: WebSocket) -> None:
         await serve(ws, 'sensor')
+
+    @app.websocket("/ws/desktop")
+    async def ws_desktop(ws: WebSocket) -> None:
+        await serve(ws, "desktop")
 
     @app.get("/audio/{name}")
     async def audio(name: str) -> FileResponse:
@@ -386,6 +402,8 @@ def create_app(
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),
+            "desktop_agents": hub.count("desktop"),
+            "input_target": session.input_target,
             "sensor_service": "running" if app.state.sensor_service.running() else "stopped",
             "muse_enabled": session.muse_enabled,
         }
