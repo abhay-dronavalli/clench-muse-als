@@ -2,7 +2,8 @@ import type { Signal, TripLayout, ActivePointer } from '../contracts'
 import { museFresh } from '../sensor/status'
 
 export type SetupStep = 'welcome' | 'eyes' | 'band' | 'clench' | 'done'
-export const LAUNCH_MS = 8000
+/** The start screen starts setup by itself after this long (a tap starts it at once, with sound). */
+export const LAUNCH_MS = 4000
 /** How long a step may take at most (a step that succeeds moves on at once). Short where nothing needs doing. */
 export const STEP_MS: Record<SetupStep, number> = { welcome: 2000, eyes: 45000, band: 30000, clench: 20000, done: 2000 }
 /** The eye calibration starts this long after the eyes step opens (time to read the instruction). */

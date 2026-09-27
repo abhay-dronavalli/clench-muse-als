@@ -6,12 +6,15 @@ const signal: Signal = { type: 'SIGNAL', t: 100, ch: [10, 20, 30, 40], connected
 
 describe('setup timers and permissions', () => {
   it('counts down launch, pauses while hidden and cannot go below zero', () => {
-    const timer = new SetupCountdown(LAUNCH_MS, 1000)
+    const timer = new SetupCountdown(8000, 1000) // the countdown itself; LAUNCH_MS is checked below
     expect(timer.tick(4000, false)).toBe(5000)
     expect(timer.tick(64000, true)).toBe(5000)
     expect(timer.tick(68999, false)).toBe(1)
     expect(timer.tick(69000, false)).toBe(0)
     expect(timer.tick(90000, false)).toBe(0)
+  })
+  it('starts setup within a few seconds', () => {
+    expect(LAUNCH_MS).toBeLessThanOrEqual(5000)
   })
   it('skips failed hardware on expiry, never inventing a successful clench', () => {
     expect(nextSetupStep('welcome', true, false, 0, false)).toBe('eyes')

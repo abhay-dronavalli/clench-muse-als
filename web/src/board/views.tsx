@@ -185,7 +185,8 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
   )
 }
 
-export function StartOverlay({ onStart }: { onStart: (gesture?: boolean) => void }) {
+export function StartOverlay({ onStart, lang }: { onStart: (gesture?: boolean) => void; lang: Lang }) {
+  const t = STRINGS[lang].start
   const [left, setLeft] = useState(LAUNCH_MS / 1000)
   const startRef = useRef(onStart)
   useLayoutEffect(() => { startRef.current = onStart })
@@ -207,13 +208,13 @@ export function StartOverlay({ onStart }: { onStart: (gesture?: boolean) => void
           onClick={() => onStart(true)}
           className="w-full rounded-3xl bg-[#007a72] px-8 py-6 text-3xl font-bold text-white shadow-lg shadow-[#00a99d]/30 transition-colors hover:bg-[#00665f] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#007a72] active:bg-[#00564f] sm:text-5xl"
         >
-          Click to start
+          {t.button}
         </button>
-        <p className="text-2xl text-zinc-600">Setup starts in {left}s · La configuración empieza en {left}s</p>
-        <div role="progressbar" aria-label="Setup starts" aria-valuemin={0} aria-valuemax={8} aria-valuenow={8 - left} className="h-3 w-full overflow-hidden rounded-full bg-zinc-200">
-          <div className="h-full bg-[#007a72] transition-[width]" style={{ width: `${(1 - left / 8) * 100}%` }} />
+        <p className="text-2xl text-zinc-600">{t.auto(left)}</p>
+        <div role="progressbar" aria-label={t.auto(left)} aria-valuemin={0} aria-valuemax={LAUNCH_MS / 1000} aria-valuenow={LAUNCH_MS / 1000 - left} className="h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className="h-full bg-[#007a72] transition-[width]" style={{ width: `${(1 - left / (LAUNCH_MS / 1000)) * 100}%` }} />
         </div>
-        <p className="text-lg text-zinc-500">Tap to begin now and enable sound. Toca para empezar con sonido.</p>
+        <p className="text-lg text-zinc-500">{t.hint}</p>
       </div>
     </div>
   )

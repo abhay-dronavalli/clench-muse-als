@@ -811,3 +811,8 @@ choices below are Taher's.
   its world again (road, grass, trees, houses, clouds, hills, day sky; `CarWorld` / `WorldPlan` and the
   `carSpeed` bridge are back). The preview hides the world and shows the car on a soft light
   platform against a plain backdrop.
+
+- Cleaner onboarding text: one language at a time (the start screen had Spanish printed next to the
+  English; it now follows the board's language like the rest), and short lines instead of full
+  sentences of instructions ("Follow the dots when they appear.", "Next: Headband in 3s", "Tap or double
+  blink to choose"). The start screen starts setup by itself after 4 s instead of 8.

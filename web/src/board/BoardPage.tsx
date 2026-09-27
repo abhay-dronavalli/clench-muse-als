@@ -267,7 +267,7 @@ export default function BoardPage() {
 
   return (
     <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
-      {!started && <StartOverlay onStart={start} />}
+      {!started && <StartOverlay onStart={start} lang={lang} />}
       {started && onboarding && <Onboarding lang={lang} paused={!connected || view.kind === 'help'} onDone={(muse) => openSetup(false, muse)} />}
       {started && onboarding && !connected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#eaf6f4] p-8 text-center text-3xl text-[#007a72]">{STRINGS[lang].connecting}</div>}
       <div className={onboarding && view.kind !== 'help' ? 'hidden' : 'contents'}>
