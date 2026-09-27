@@ -1,0 +1,6 @@
+brainflow
+numpy
+scipy
+matplotlib
+pytest
+mne==1.13.2

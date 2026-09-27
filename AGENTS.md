@@ -259,7 +259,7 @@ stability margin are in `data/profile.yaml` (`ranking`).
   hour >= 0.6 with at least 3 recent uses, or >= 0.4 when Jev picks the same phrase with confidence
   >= 0.45; Jev never blocks what the history alone allows), picking Suggested goes straight to the
   confirm screen with it. The dev panel's Shortcut line (SHORTCUT_DEBUG, after every Home render)
-  shows the top phrase, the history share, Jev's pick and "shortcut: yes/no (reason)". B there opens
+  shows the top phrase, the history share, Jev's pick and "shortcut: yes/no (reason)". B (then Space) there opens
   the full Suggested list instead of going home. The confirm clench is still required.
 - Day 1 mode (`learning: false` in SETTINGS; default `learning` in `data/profile.yaml`, dev panel
   toggle): `menu.yaml` order, the fixed Suggested list, no shortcut, no Jev, no history for the AI.
@@ -344,7 +344,7 @@ Camera troubleshooting (Windows):
 | --- | --- |
 | Space (tap) | CLENCH: pick the highlighted tile / confirm |
 | Space (hold 2.5 s) | LONG_CLENCH: start the 5 s help countdown (`long_clench_ms` in `data/profile.yaml`) |
-| B | DOUBLE_BLINK: go up one menu level / cancel the confirm screen / cancel the help countdown |
+| B | DOUBLE_BLINK: on a menu or the confirm screen, opens "Go back?"; Space within 3 s goes up one level / cancels the confirm screen, doing nothing stays. Cancels the help countdown at once. |
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
 The board needs a "Click to start" click before input counts.
@@ -377,7 +377,8 @@ those processes.
    Gemini key the "Say this?" screen then shows "My back hurts a lot. Can you help me turn over?".
    With a key a suggestions screen comes first: up to 3 sentences, then that fixed phrase, then
    "Other..."; pick one to get the "Say this?" screen. Nothing has been spoken yet.
-5. Press B: you are back where you picked it, still silent. Pick it again and press Space on the
+5. Press B: a "Go back?" prompt with a shrinking bar. Wait 3 s: it closes and nothing changes. Press B
+   then Space: you are back where you picked it, still silent. Pick it again and press Space on the
    confirm screen: the laptop speaks the sentence, then the board returns to Home.
 6. Pick People › Maria › Text (with a key, then pick the fixed phrase, the tile just before
    "Other...") and confirm with Space: the laptop says "Honey, I'm okay, call me at six." and a gray
@@ -391,13 +392,13 @@ those processes.
    "ElevenLabs (cached)" with them. Click Speak picks to Off and pick a tile: nothing is said.
 9. On Home pick "Other...": a soft click (no word) and new options (without a key: Yes, No, Good
    morning, Wait a moment). Pick "Other..." again: without a key it loops back to Home's own tiles;
-   with a key up to 3 pages, then back. Pick I need › Other... › Other... and press B: Home.
+   with a key up to 3 pages, then back. Pick I need › Other... › Other... and press B, then Space: Home.
 10. Learning: run `uv run python scripts/seed_demo.py --load` (the core keeps running). Open the
     dev panel and click Day 1 mode to On: the board goes Home in `menu.yaml` order. Text María as
     in step 6: the Last message line reads "Took 5 clenches, 6 s waiting" with a Gemini key (4
     clenches, 3 s without). Click Day 1 mode to Off and pick Suggested (Sugerencias): the confirm
     screen shows "Mija, estoy bien, llámame a las seis." at once; confirm: "Took 2 clenches, 0 s
-    waiting (Day 1: 5 clenches, 6 s)". Pick Suggested again and press B on the confirm screen: the
+    waiting (Day 1: 5 clenches, 6 s)". Pick Suggested again and press B, then Space, on the confirm screen: the
     full Suggested list opens, the María text first.
 11. Webcam: in the dev panel click Auto and allow the camera. The red "Cámara encendida" light
     shows, the preview shows your face with yaw and pitch, and the blue "Escaneando" badge shows

@@ -1,0 +1,6 @@
+.venv/
+.venv-compare/
+recordings/
+calibration.*.json
+__pycache__/
+*.pyc

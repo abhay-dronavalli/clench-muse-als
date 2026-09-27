@@ -19,6 +19,7 @@ from core.suggest.fake import FakeProvider
 from core.suggest.provider import Bundle, Options, Sentences
 from core.suggest.service import Suggester
 from core.voice import Voice
+from tests.gestures import go_back
 
 SCAN_S = 1.0
 
@@ -410,9 +411,9 @@ def test_double_blink_on_confirm_goes_back_to_the_suggestions(session, sched, se
     pick(session, sched, sent, "Water")
     first = labels(sent)[0]
     pick(session, sched, sent, first)
-    session.handle(DoubleBlink(t=0.0))
+    go_back(session)
     assert last_screen(sent).screen == "suggestions"
-    session.handle(DoubleBlink(t=0.0))
+    go_back(session)
     assert last_screen(sent).path == ["I need"]
 
 
@@ -439,7 +440,7 @@ def test_echo_rules(session, sched, sent, loop):
     sentence = labels(sent)[0]
     pick(session, sched, sent, "Other...")
     loop.run()
-    session.handle(DoubleBlink(t=0.0))  # up one level: I need
+    go_back(session)  # up one level: I need
     pick(session, sched, sent, "Water")
     pick(session, sched, sent, sentence)
     assert said(sent, "echo") == ["I need", "Water", "Water"]  # never the sentence itself

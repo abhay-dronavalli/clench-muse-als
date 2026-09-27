@@ -100,7 +100,17 @@ uv run uvicorn core.main:app --reload --port 8000
 # (/ws/* is proxied to the core on 127.0.0.1:8000)
 npm --prefix web run dev
 
-# Sensor service: not built yet (planned: uv run python -m sensor.main)
+# Sensor service
+
+Start Core on port 8001, then run the headless Muse bridge from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m sensor.main --profile taher --url ws://127.0.0.1:8001/ws/sensor
+```
+
+For a no-headband smoke test, use `--source demo`. In the web console, enable
+Muse clenches; short clenches select or confirm and a 2.5 second clench opens help.
+Blink navigation is disabled in the main app for now; use `B` for back/cancel.
 ```
 
 Without uv: `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install fastapi "uvicorn[standard]" "pydantic>=2" pyyaml python-dotenv pytest httpx`, then `python -m pytest`.
@@ -208,7 +218,7 @@ phrases, the last 5 confirmed sentences and the contacts' first names are sent (
 |---|---|
 | Space (tap) | CLENCH: pick the highlighted tile / confirm |
 | Space (hold 1.5 s) | LONG_CLENCH: start the 5 s help countdown |
-| B | DOUBLE_BLINK: go back one level / cancel the confirm screen / cancel the help countdown |
+| B | DOUBLE_BLINK: on a menu or the confirm screen, opens "Go back?"; Space within 3 s goes back / cancels, doing nothing stays. Cancels the help countdown at once. |
 | `` ` `` (backtick) | expand / collapse the dev panel (a small "Dev" pill bottom-left by default) |
 
 The expanded panel also has buttons for the same events, a scan speed slider, an EN/ES toggle, a
@@ -227,7 +237,7 @@ Speak picks on/off toggle (all showing the values the Core reports in SETTINGS) 
    Pain ΓÇ║ Back. With no Gemini key the "Say this?" screen then shows "My back hurts a lot. Can you
    help me turn over?". With a key a suggestions screen comes first: up to 3 sentences, then that
    fixed phrase, then "Other..."; pick one to get the "Say this?" screen. Nothing has been spoken yet.
-5. Press B: you are back where you picked it, still silent. Pick it again and press Space on the
+5. Press B, then Space within 3 s: you are back where you picked it, still silent. Pick it again and press Space on the
    confirm screen: the laptop speaks the sentence, then the board returns to Home.
 6. Pick People ΓÇ║ Maria ΓÇ║ Text (with a key, then pick the fixed phrase, the tile just before
    "Other...") and confirm with Space: the laptop says "Honey, I'm okay, call me at six." and a gray

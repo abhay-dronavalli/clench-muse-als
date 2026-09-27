@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
 
@@ -133,6 +134,33 @@ export function SpeakingView({ text, lang }: { text: string; lang: Lang }) {
 }
 
 /** Full-screen red help countdown (PRD D3): a huge number and how to cancel. */
+/**
+ * "Go back?" over the board after a double blink (BACK_PROMPT). A clench confirms; doing nothing lets
+ * the bar run out and nothing changes. The bar shows how long is left.
+ */
+export function BackPromptView({ kind, ms, lang }: { kind: 'menu' | 'confirm'; ms: number; lang: Lang }) {
+  const s = STRINGS[lang].back
+  const [full, setFull] = useState(true)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setFull(false)) // start the bar shrinking next frame
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return (
+    <div role="alertdialog" aria-live="assertive"
+      className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-black/60">
+      <div className="w-[min(90vw,48rem)] rounded-3xl bg-zinc-900 p-10 text-center text-white shadow-2xl ring-4 ring-sky-400">
+        <p className="text-7xl font-bold">↩ {s[kind]}</p>
+        <p className="mt-6 text-4xl font-semibold text-sky-300">{s.how}</p>
+        <p className="mt-2 text-2xl text-zinc-400">{s.stay[kind]}</p>
+        <div className="mt-8 h-4 overflow-hidden rounded-full bg-zinc-700">
+          <div className="h-4 rounded-full bg-sky-400"
+            style={{ width: full ? '100%' : '0%', transition: full ? 'none' : `width ${ms}ms linear` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function HelpCountdownView({ countdown, lang }: { countdown: number; lang: Lang }) {
   const s = STRINGS[lang].help
   return (

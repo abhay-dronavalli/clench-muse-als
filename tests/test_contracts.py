@@ -32,7 +32,8 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     ),
     "SIGNAL": (
         contracts.Signal,
-        {"type": "SIGNAL", "t": 1727300010.05, "ch": [12.5, -3.1, 40.2, 8.8]},
+        {"type": "SIGNAL", "t": 1727300010.05, "ch": [12.5, -3.1, 40.2, 8.8],
+         "connected": None, "profile": None, "emg": None, "threshold": None, "blocked": None},
     ),
     "POINT": (
         contracts.Point,
@@ -46,7 +47,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.Settings,
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
-            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05,
+            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None,
         },
     ),
     "SCREEN": (
@@ -98,6 +99,23 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "ACTION_RESULT": (
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
+    ),
+    "BACK_PROMPT": (
+        contracts.BackPrompt,
+        {"type": "BACK_PROMPT", "open": True, "kind": "menu", "timeout_ms": 3000},
+    ),
+    "INPUT_EVENT": (
+        contracts.InputEvent,
+        {
+            "type": "INPUT_EVENT",
+            "t": 1777001234.5,
+            "kind": "CLENCH",
+            "source": "muse",
+            "accepted": False,
+            "reason": "Muse input is paused",
+            "strength": 0.62,
+            "duration": None,
+        },
     ),
     "SHORTCUT_DEBUG": (
         contracts.ShortcutDebug,

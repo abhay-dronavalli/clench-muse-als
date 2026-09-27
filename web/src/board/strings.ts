@@ -10,7 +10,7 @@ export const STRINGS = {
     connecting: 'Connecting to Clench…',
     speaking: 'Speaking…',
     finding: 'Finding options…',
-    hint: 'Clench = send  |  Double blink = cancel',
+    hint: 'Clench = send  |  B = cancel',
     pointing: {
       scanning: 'Scanning',
       headtilt: 'Head tilt is not ready yet: scanning',
@@ -50,6 +50,12 @@ export const STRINGS = {
       title: 'Calling for help',
       cancel: 'Double blink to cancel',
     },
+    back: {
+      menu: 'Go back?',
+      confirm: 'Cancel this message?',
+      how: 'Clench to confirm',
+      stay: { menu: 'Do nothing to stay here', confirm: 'Do nothing to keep it' },
+    },
     toast: {
       ok: {
         speak: () => 'Said',
@@ -73,7 +79,7 @@ export const STRINGS = {
     connecting: 'Conectando con Clench…',
     speaking: 'Hablando…',
     finding: 'Buscando opciones…',
-    hint: 'Apretar = enviar  |  Doble parpadeo = cancelar',
+    hint: 'Apretar = enviar  |  B = cancelar',
     pointing: {
       scanning: 'Escaneando',
       headtilt: 'Inclinar la cabeza aún no está listo: escaneando',
@@ -111,7 +117,13 @@ export const STRINGS = {
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Pidiendo ayuda',
-      cancel: 'Doble parpadeo para cancelar',
+      cancel: 'Parpadea dos veces para cancelar',
+    },
+    back: {
+      menu: '¿Volver?',
+      confirm: '¿Cancelar este mensaje?',
+      how: 'Aprieta la mandíbula para confirmar',
+      stay: { menu: 'No hagas nada para quedarte', confirm: 'No hagas nada para conservarlo' },
     },
     toast: {
       ok: {
