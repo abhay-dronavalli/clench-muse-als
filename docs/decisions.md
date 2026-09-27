@@ -667,10 +667,10 @@ choices below are Taher's.
   the scenery and the camera to a stop. Trees stand back beyond the camera's circle so none can come
   between the camera and the car; the camera frames the car at about 17-35% down the screen, above the
   tiles, with a band of sky at the top (checked on the Tab S9 Ultra).
-- Motion (CarMotion, unit tested): a slow idle sway, a small camera push toward the car, and plain
+- Motion (CarMotion, unit tested): the scrolling and the camera circle above, a small camera push toward the car, and plain
   line particles per control (windows trace the door up or down, warm lines rise and spread, cool lines
   settle, music pulses outward in three beats). Every line grows from and shrinks to nothing; no
-  flashing, no hard cuts. Pull over has no particles: the car eases to still, the page takes a warm
+  flashing, no hard cuts. Pull over has no particles: the drive eases to a stop, the page takes a warm
   copper tint, and the sequence is shorter (0.6 s).
 - The model (`kushagra/tablet/app/src/main/assets/jaguar_i-pace.glb`, 8.9 MB) is git-ignored like the
   face model; without it the car area stays dark and the screen works the same.
