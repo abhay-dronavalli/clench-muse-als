@@ -692,4 +692,17 @@ choices below are Taher's.
   gaze thread could still deliver a queued frame, which crashed the app (NullPointerException in
   GazeTrackerCore) when the pointing mode switched to Scan mid-tracking. Released trackers now get
   callbacks that ignore everything instead.
+- Trip layouts (`web/src/board/tripLayout.ts`, a Car / Split / Map switch in the telemetry strip,
+  remembered in the browser): the upper part shows the 3D car, the route map on the left with the car
+  on the right (the scene's lens shifts so the car centres in the right half), or the map alone. The
+  tiles never move between layouts, so head and gaze pointing aim at the same places.
+- The route map (`RouteMap.tsx`) is drawn and offline for now: a city of streets, parks and a river,
+  the route (driven part grey), the car and the destination. It shows the whole route when it fits the
+  box and otherwise follows the car; the car advances as arrival counts down (CAR_STATE). It keeps its
+  props so a Google Maps implementation can replace the drawing later (VITE_GOOGLE_MAPS_API_KEY).
+- The trip scene's world is random each time the app starts (`WorldPlan`, unit tested): round trees,
+  pines, cypresses, bushes, houses, flowers, rocks, clouds drifting, far hills, a sun; each piece is
+  re-rolled when it wraps around. Everything taller than a flower stands beyond the camera's circle
+  (tested over many seeds), and there is no traffic, so nothing ever sweeps between the camera and the
+  car. The panel behind the tiles is now dark smoked glass instead of white.
 
