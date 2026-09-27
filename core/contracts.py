@@ -20,14 +20,17 @@ PointSource = Literal["webcam", "gaze", "headtilt"]
 ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
-ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
-ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
+ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "trip"]
+ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert", "pull_over"]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
-# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
-TileKind = Literal["branch", "leaf", "suggestion", "other"]
+# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options);
+# car = a trip control (core/trip.py).
+TileKind = Literal["branch", "leaf", "suggestion", "other", "car"]
+# The trip screen's controls, in the order they are shown (core/trip.py).
+CarActionName = Literal["window_up", "window_down", "warmer", "cooler", "music", "pull_over"]
 
 
 class _Msg(BaseModel):
@@ -133,18 +136,22 @@ class AudioDone(_Msg):
 class Tap(_Msg):
     """A touch or mouse press on the board (a caregiver, or testing without a headband). On a tile:
     pick tile `tile` of the SCREEN numbered `seq`, as a CLENCH would with that tile highlighted. On the
-    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would. The Core ignores a TAP for an
-    older screen, one while the go-back prompt is open, and one on the help countdown."""
+    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would; with `cancel`, a Cancel
+    button there: cancel the confirm screen at once. The Core ignores a TAP for an older screen, one
+    while the go-back prompt is open, and one on the help countdown."""
 
     type: Literal["TAP"] = "TAP"
     tile: int | None = Field(ge=0)
     seq: int | None = Field(ge=0)
+    cancel: bool = False
     t: float
 
     @model_validator(mode="after")
     def _card_or_tile(self) -> "Tap":
         if (self.tile is None) != (self.seq is None):
             raise ValueError("TAP: tile and seq are both set (a tile) or both null (the confirm card)")
+        if self.cancel and self.tile is not None:
+            raise ValueError("TAP: cancel is for the confirm screen (tile and seq null)")
         return self
 
 
@@ -168,6 +175,9 @@ class Settings(_Msg):
     # before the highlight moves there, 0 to 0.2. Omit to keep it.
     tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
     muse_enabled: bool | None = None  # session-only; startup is paused
+    # Trip mode: the board shows the trip screen (car controls) instead of the menus. Session-only;
+    # omit to keep it.
+    trip: bool | None = None
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -248,6 +258,16 @@ class Click(_Msg):
     board's sound queue in order with the echoes. Only sent when speak picks is on."""
 
     type: Literal["CLICK"] = "CLICK"
+
+
+class CarAction(_Msg):
+    """A trip control was picked (routine) or Pull over was confirmed: the board and the tablet play
+    that control's confirm animation for `ms`. For a routine control the Core ignores clenches, taps
+    and pointing for the same `ms` (LONG_CLENCH still starts the help countdown)."""
+
+    type: Literal["CAR_ACTION"] = "CAR_ACTION"
+    action: CarActionName
+    ms: int = Field(gt=0)
 
 
 class ActionResult(_Msg):
@@ -361,6 +381,7 @@ Message = Annotated[
         Speak,
         PlayAudio,
         Click,
+        CarAction,
         ActionResult,
         Metrics,
         ShortcutDebug,

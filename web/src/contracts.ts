@@ -20,8 +20,8 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
-export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip'
+export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
@@ -31,7 +31,10 @@ export type UtteranceKind = 'phrase' | 'echo' | 'system'
  * branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
  * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
-export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other'
+/** car = a trip control (core/trip.py), trip screen only */
+export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car'
+/** The trip screen's controls, in the order they are shown (core/trip.py). */
+export type CarActionName = 'window_up' | 'window_down' | 'warmer' | 'cooler' | 'music' | 'pull_over'
 
 // --- Sensor Service -> Core (the web dev panel also sends the first three) ---
 
@@ -154,6 +157,8 @@ export interface Settings {
   tile_switch_margin?: number
   /** Session-only permission for the separate Muse input; defaults to paused. */
   muse_enabled?: boolean
+  /** trip mode: the trip screen (car controls) instead of the menus; omit to keep it */
+  trip?: boolean | null
 }
 
 // --- Core -> Board ---
@@ -242,6 +247,18 @@ export interface PlayAudio {
  */
 export interface Click {
   type: 'CLICK'
+}
+
+/**
+ * A trip control was picked (routine) or Pull over was confirmed: play that control's confirm
+ * animation for `ms`. For a routine control the Core ignores clenches, taps and pointing for the same
+ * `ms` (LONG_CLENCH still starts the help countdown).
+ */
+export interface CarAction {
+  type: 'CAR_ACTION'
+  action: CarActionName
+  /** > 0 */
+  ms: number
 }
 
 /** How a confirmed action that leaves the laptop went (message, call, room control). */
@@ -350,6 +367,8 @@ export interface Tap {
   tile: number | null
   /** the SCREEN `seq` the tile belongs to; null with a null `tile` */
   seq: number | null
+  /** the Cancel button of the confirm screen (tile and seq null) */
+  cancel?: boolean
   t: number
 }
 
@@ -374,6 +393,7 @@ export type Message =
   | Speak
   | PlayAudio
   | Click
+  | CarAction
   | ActionResult
   | Metrics
   | ShortcutDebug

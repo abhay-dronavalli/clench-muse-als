@@ -43,12 +43,13 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "READY": (contracts.Ready, {"type": "READY"}),
     "RESET": (contracts.Reset, {"type": "RESET"}),
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
-    "TAP": (contracts.Tap, {"type": "TAP", "tile": 3, "seq": 42, "t": 1727300011.2}),
+    "TAP": (contracts.Tap, {"type": "TAP", "tile": 3, "seq": 42, "cancel": False, "t": 1727300011.2}),
+    "CAR_ACTION": (contracts.CarAction, {"type": "CAR_ACTION", "action": "warmer", "ms": 900}),
     "SETTINGS": (
         contracts.Settings,
         {
             "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": False,
-            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None,
+            "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": None, "trip": None,
         },
     ),
     "SCREEN": (

@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
@@ -56,6 +56,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | CLICK | Core | Board, Console | Play the short soft click for a picked "Other..." (in order with the echoes) |
+| CAR_ACTION | Core | Board, Console | A trip control acts (or Pull over was confirmed): play its animation, input locked meanwhile |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 | SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
@@ -224,8 +225,9 @@ matching AUDIO_DONE wins and later ones are ignored.
 A touch or mouse press on the board: a caregiver helping, or testing without a headband (the tablet
 has no keyboard for the stand-in). On a tile it picks that tile, exactly as a CLENCH would with that
 tile highlighted (no clench look-back: the finger says which tile). On the "Say this?" sentence it
-confirms, exactly as a CLENCH would. Everything else about a CLENCH applies (the 300 ms debounce, the
-confirm step: a tap on a tile never speaks or sends).
+confirms, exactly as a CLENCH would; with `cancel` (a Cancel button on that screen, e.g. Pull over's)
+it cancels the confirm screen at once. Everything else about a CLENCH applies (the 300 ms debounce,
+the confirm step: a tap on a tile never speaks or sends).
 
 The Core ignores a TAP whose `seq` is not the current screen's, a tile TAP when the board is not
 scanning, a card TAP when nothing is waiting for confirmation, and any TAP while the go-back prompt
@@ -236,14 +238,19 @@ help).
 |---|---|---|
 | `tile` | int or null | 0-based tile index on SCREEN `seq`; null = the "Say this?" card |
 | `seq` | int or null | the SCREEN `seq` the tile belongs to; null with a null `tile` (both or neither) |
+| `cancel` | bool | the Cancel button of the confirm screen (tile and seq null); default false |
 | `t` | float | epoch seconds when tapped |
 
 ```json
-{"type": "TAP", "tile": 3, "seq": 42, "t": 1727300011.2}
+{"type": "TAP", "tile": 3, "seq": 42, "cancel": false, "t": 1727300011.2}
 ```
 
 ```json
-{"type": "TAP", "tile": null, "seq": null, "t": 1727300015.0}
+{"type": "TAP", "tile": null, "seq": null, "cancel": false, "t": 1727300015.0}
+```
+
+```json
+{"type": "TAP", "tile": null, "seq": null, "cancel": true, "t": 1727300016.0}
 ```
 
 ## Console -> Core, and Core -> every client
@@ -266,10 +273,11 @@ included). Screens show these values instead of assuming defaults.
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
 | `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
 | `tile_switch_margin` | float (optional) | webcam / gaze pointing: how far the point must be inside a new tile before the highlight moves there, as a share of that tile's width / height, 0 to 0.2; omit to keep the current value; default from `data/profile.yaml` (0.05). The board applies it; the dev panel has a slider |
+| `trip` | bool (optional) | trip mode (`core/trip.py`): the board shows the trip screen (car controls, SCREEN `screen: "trip"`) instead of the menus. Session-only, default false; the dev panel's Start trip / End trip. A change while scanning switches at once, on the first tile |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "trip": false}
 ```
 
 ## Core -> Board
@@ -282,7 +290,7 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | `suggestions` = the sentences for a picked leaf |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` | `suggestions` = the sentences for a picked leaf; `trip` = the six car controls (trip mode), no "Other...", `path` empty |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
 | `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
@@ -299,6 +307,7 @@ Tiles:
 | `branch` | a menu category | opens the next level (the home "Suggested" opens the AI's sentences for right now, then its fixed phrases) |
 | `leaf` | an option that leads to a sentence, from `data/menu.yaml` or made by the AI | opens the suggestions screen, or the CONFIRM screen with the fixed phrase when there is no AI |
 | `suggestion` | a full sentence; `label` is the exact text | opens the CONFIRM screen with exactly that sentence |
+| `car` | a trip control (`trip.window_up`, `.window_down`, `.warmer`, `.cooler`, `.music`, `.pull_over`), trip screen only | a routine control acts at once: CAR_ACTION, input locked for its `ms`; `pull_over` opens the CONFIRM screen (`action: "pull_over"`) |
 | `other` | always the last tile: "Other..." / "Otro..." | the next page of new options for the same path (AI, else the level's fixed `more` list). After 3 pages, or when there is nothing new (or no AI), the next pick loops back to the level's own options |
 
 `id` is the dotted menu path (`need.pain.back`). The Core's own tile ends in `.other`
@@ -353,7 +362,7 @@ DOUBLE_BLINK cancels (PRD D5).
 | Field | Type | Notes |
 |---|---|---|
 | `text` | string | the exact sentence that will be spoken or sent |
-| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` | from the action registry |
+| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` \| `"pull_over"` | from the action registry (`pull_over`: the trip screen's Pull over, "Pull over here?") |
 
 ```json
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
@@ -469,6 +478,25 @@ away; the same for up and down.
 
 For example `{"center_yaw": 0.5, "center_pitch": -2.0, "left_yaw": -18.0, "right_yaw": 17.0,
 "up_pitch": 9.0, "down_pitch": -12.0}`.
+
+### CAR_ACTION
+
+A trip control was picked (window up / down, warmer, cooler, music), or Pull over was confirmed. The
+board plays that control's confirm animation for `ms` (the other tiles fade, the picked one stays and
+grows a little, the tablet's 3D car shows the control's particles; Pull over: a still car and a warm
+tint, no particles). For a routine control the Core locks input for the same `ms`: CLENCH, TAP and
+POINT are ignored, the highlight stays put, and the same screen comes back when it ends. LONG_CLENCH
+still starts the help countdown. Pull over's is sent with its confirm, before the confirmed sentence
+is spoken. The controls are mocks: nothing leaves the laptop for a routine control.
+
+| Field | Type | Notes |
+|---|---|---|
+| `action` | `"window_up"` \| `"window_down"` \| `"warmer"` \| `"cooler"` \| `"music"` \| `"pull_over"` | which control |
+| `ms` | int | how long the animation (and, for routine controls, the input lock) lasts, > 0 |
+
+```json
+{"type": "CAR_ACTION", "action": "warmer", "ms": 900}
+```
 
 ### ACTION_RESULT
 
