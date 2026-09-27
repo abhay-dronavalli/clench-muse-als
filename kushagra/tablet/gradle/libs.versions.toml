@@ -9,6 +9,8 @@ mediapipe = "0.10.14"
 coroutines = "1.9.0"
 eyedid = "1.0.0-beta5"
 junit = "4.13.2"
+okhttp = "4.12.0"
+json = "20240303"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -27,6 +29,8 @@ mediapipe-vision = { group = "com.google.mediapipe", name = "tasks-vision", vers
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 eyedid-gazetracker = { group = "camp.visual.eyedid.android.gazetracker", name = "eyedid-gazetracker", version.ref = "eyedid" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
