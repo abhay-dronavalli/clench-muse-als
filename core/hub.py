@@ -13,11 +13,11 @@ from typing import Literal
 
 from fastapi import WebSocket
 
-from core.contracts import InputEvent, Message, Metrics, Settings, ShortcutDebug
+from core.contracts import CarLog, CarResult, CarState, InputEvent, Message, Metrics, Settings, ShortcutDebug
 
 log = logging.getLogger("clench.hub")
 
-Role = Literal["board", "console", "input", "sensor"]
+Role = Literal["board", "console", "input", "sensor", "carsim"]
 
 
 class Client:
@@ -56,7 +56,11 @@ class Hub:
         no use for them. INPUT_EVENT goes the same way; the board's own input log opens a console
         socket for it, exactly as the board's Muse panel already does."""
         for c in self._clients:
-            if isinstance(msg, (Metrics, ShortcutDebug, InputEvent)):
+            if isinstance(msg, CarLog):
+                wanted = c.role == "carsim"  # the car link's log: /car-sim only
+            elif isinstance(msg, (CarState, CarResult)):
+                wanted = c.role in ("board", "console", "carsim")
+            elif isinstance(msg, (Metrics, ShortcutDebug, InputEvent)):
                 wanted = c.role in ("console", "input")
             else:
                 wanted = c.role in ("board", "console") or isinstance(msg, Settings)

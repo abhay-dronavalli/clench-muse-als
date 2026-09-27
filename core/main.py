@@ -5,6 +5,7 @@ Run:  uv run uvicorn core.main:app --reload --port 8000
   /ws/board    patient board: READY, RESET, AUDIO_DONE, POINT, FACE_OK in; SETTINGS, SCREEN, CONFIRM, SPEAK,
                PLAY_AUDIO, ACTION_RESULT out
   /ws/console  caregiver console: SETTINGS in; SETTINGS plus a mirror of what the board gets out
+  /ws/car-sim  the car simulator page (/car-sim): CAR_SIM in; CAR_STATE, CAR_RESULT, CAR_LOG out (core/car)
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
                POINT, SETTINGS, RESET in; SETTINGS out
 
@@ -36,10 +37,12 @@ from pydantic import BaseModel, ValidationError
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
 from core.config import dry_run_enabled, load_env, prewarm_enabled
-from core.contracts import (Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
+from core.contracts import (CarSim, Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
                             Message, Ready, Signal, Settings, parse_message)
 from core.db import DB_PATH, Db
+from core.car.mock import MockCar
 from core.geo.api import build_geo_router
+from core.geo.trip import load_trip
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
@@ -63,12 +66,14 @@ ACCEPTS: dict[Role, frozenset[str]] = {
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
+    "carsim": frozenset({"CAR_SIM", "READY"}),
 }
 
 # How long the headband may be missing before Muse input is paused. A Bluetooth reconnect takes a
 # few seconds and the command gate below already refuses anything that arrives meanwhile, so pausing
 # on the first dropped sample only flapped the switch between Paused and Ready every few seconds.
 MUSE_LOSS_GRACE_S = 10.0
+CAR_LATENCY_S = 0.12  # the mock car's simulated round trip (a real link over the network)
 GESTURES = ('CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK')
 
 
@@ -178,11 +183,20 @@ def create_app(
         app.state.suggester = suggester
         ranker_jev, jev_off = (jev, "") if jev is not None else build_jev(env)
         app.state.jev = ranker_jev
+        sched = scheduler or AsyncioScheduler()
+        geo_trip = load_trip()
+        # The car (core/car): the in-process mock, with a simulated round trip. /car-sim plays its side.
+        car = MockCar(sched, latency_s=CAR_LATENCY_S,
+                      routes={t.route_id: t.label for t in geo_trip.ride.tiles} if geo_trip and geo_trip.ride else {})
+        car.on_log(hub.broadcast)
+        app.state.car = car
         session = Session(
             menu,
             hub.broadcast,
-            scheduler or AsyncioScheduler(),
+            sched,
             profile=profile,
+            car_link=car,
+            geo_trip=geo_trip,
             actions=build_registry(voice, env, dry_run=dry_run),
             voice=voice,
             suggester=suggester,
@@ -192,6 +206,7 @@ def create_app(
             jev=ranker_jev,
         )
         app.state.session = session
+        session.input_connected = lambda: hub.count("board") > 0
         session.start()
         log.info("core ready: scanning home, %d ms per tile, lang %s, patient %s", scan_ms, session.lang, profile.name)
         if dry_run:
@@ -273,6 +288,12 @@ def create_app(
                         if reason is not None:
                             log.info('Muse %s suppressed: %s', msg.type, reason)
                             continue
+                    if role == "carsim":
+                        if isinstance(msg, CarSim):
+                            car_sim(app.state.car, msg)
+                        else:  # READY: the car's state now
+                            hub.send_to(client, app.state.car.state())
+                        continue
                     if role == 'input' and msg.type in GESTURES:
                         hub.broadcast(input_event(msg, 'dev', None))
                     if isinstance(msg, Ready):
@@ -312,6 +333,10 @@ def create_app(
     @app.websocket("/ws/input")
     async def ws_input(ws: WebSocket) -> None:
         await serve(ws, "input")
+
+    @app.websocket("/ws/car-sim")
+    async def ws_car_sim(ws: WebSocket) -> None:
+        await serve(ws, "carsim")
 
     @app.websocket('/ws/sensor')
     async def ws_sensor(ws: WebSocket) -> None:
@@ -402,6 +427,14 @@ def create_app(
         }
 
     return app
+
+
+def car_sim(car: MockCar, msg: CarSim) -> None:
+    """/car-sim plays the car's side: ask the rider a Support question, or change the situation."""
+    if msg.command == "ask" and msg.text:
+        car.ask(msg.text, msg.options, msg.timeout_s, msg.urgent)
+    elif msg.command == "set":
+        car.set_situation(on_highway=msg.on_highway, phase=msg.phase)
 
 
 def contact_names(menu: Menu) -> dict[Lang, tuple[str, ...]]:

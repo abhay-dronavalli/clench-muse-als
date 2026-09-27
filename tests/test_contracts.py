@@ -50,7 +50,23 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         {
             "type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72,
             "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4,
+            "phase": "EN_ROUTE", "music_playing": True, "on_highway": False,
         },
+    ),
+    "CAR_RESULT": (
+        contracts.CarResult,
+        {"type": "CAR_RESULT", "request_id": "r-1", "action_id": "pull_over", "status": "DELAYED",
+         "message": "Pulling over at the next safe spot.", "expected_in_seconds": 120, "rtt_ms": 150},
+    ),
+    "CAR_LOG": (
+        contracts.CarLog,
+        {"type": "CAR_LOG", "t": 1727300011.2, "direction": "to_car", "kind": "ActionRequest",
+         "summary": "pull_over", "request_id": "r-1", "rtt_ms": None},
+    ),
+    "CAR_SIM": (
+        contracts.CarSim,
+        {"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"],
+         "timeout_s": 30, "urgent": True, "on_highway": None, "phase": None},
     ),
     "SETTINGS": (
         contracts.Settings,
@@ -77,7 +93,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "path": [],
             "countdown": None,
             "loading": False,
-            "pointer": "scan",
+            "pointer": "scan", "prompt": None,
         },
     ),
     "CONFIRM": (

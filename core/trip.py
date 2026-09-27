@@ -4,18 +4,15 @@ Trip mode is switched on from the dev panel (SETTINGS `trip`); until then the bo
 communication menu as before. The trip menu is a small fixed tree (never ranked, never "Other...",
 so a rider's eyes learn where each control is):
 
-    Windows      -> Up / Down -> Front left, Front right, Rear left, Rear right, All
-    Temperature  -> Warmer / Cooler
-    Music        -> Louder / Softer
-    Pull over    (confirm first)
-    Slow down
-    Support      (confirm first: it calls rider support)
+    Trip          -> the route tiles and "Drop off at ...?" (data/geo/demo_trip.json)   HIGH: confirm
+    Comfort       -> Cooler, Warmer, Music off / on, Volume down, Windows > Up / Down > which   LOW
+    Trip changes  -> Pull over (HIGH: confirm), Slow down (LOW), Contact Support (HIGH: confirm)
 
-Every level below the top one ends with a Back tile. Routine controls act as soon as they are picked:
-the Core updates the car state (CAR_STATE), sends CAR_ACTION and locks input while the board and the
-tablet play the short confirm animation, and stays on the same level so a control can be repeated.
-Nothing is spoken or sent for them (PRD D5 is about speaking and sending). Pull over and Support are
-safety / outward actions: a confirm screen first. The controls are mocks for now.
+Every level below the top one ends with a Back tile. LOW-safety comfort controls (proto Safety) are
+sent to the car at once (decisions #21): the Core sends CAR_ACTION and locks input while the board and
+the tablet play the short animation, and stays on the same level so a control can be repeated. The car
+may still refuse (a window at highway speed); its reason is said. HIGH-safety requests always open the
+confirm screen first. The car answers every request through the car link (core/car, decisions #23).
 """
 
 from __future__ import annotations
@@ -39,63 +36,76 @@ MIN_SPEED = 10
 
 @dataclass(frozen=True)
 class TripNode:
-    """One tile of the trip menu: a level (children) or a control (action, maybe a window)."""
+    """One tile of the trip menu: a level (children, or `dynamic` ones built from data) or a control.
 
-    key: str  # id part: "windows", "up", "front_left", ...
+    `car_id` is the control's id in the car's catalog (core/car). `confirm` = a HIGH-safety request
+    (proto Safety): a confirm screen before it is sent. The others are LOW-safety comfort controls,
+    sent at once (decisions #21). `action` is the board / tablet animation of a LOW control."""
+
+    key: str  # id part: "comfort", "cooler", "front_left", ...
     label_en: str
     label_es: str
     children: tuple["TripNode", ...] = ()
     action: CarActionName | None = None
     window: WindowName | None = None
-    confirm: bool = False  # a confirm screen before it happens (Pull over, Support)
+    confirm: bool = False
+    car_id: str | None = None
+    dynamic: str | None = None  # "ride": the route and drop-off tiles from data/geo/demo_trip.json
 
     def label(self, lang: Lang) -> str:
         return self.label_en if lang == "en" else self.label_es
 
     @property
     def is_level(self) -> bool:
-        return bool(self.children)
+        return bool(self.children) or self.dynamic is not None
 
 
 def _windows(action: CarActionName) -> tuple[TripNode, ...]:
-    return (
-        TripNode("front_left", "Front left", "Delantera izquierda", action=action, window="front_left"),
-        TripNode("front_right", "Front right", "Delantera derecha", action=action, window="front_right"),
-        TripNode("rear_left", "Rear left", "Trasera izquierda", action=action, window="rear_left"),
-        TripNode("rear_right", "Rear right", "Trasera derecha", action=action, window="rear_right"),
-        TripNode("all", "All windows", "Todas", action=action, window="all"),
+    return tuple(
+        TripNode(key, en, es, action=action, window=key, car_id=f"{action}:{key}")  # type: ignore[arg-type]
+        for key, en, es in (
+            ("front_left", "Front left", "Delantera izquierda"),
+            ("front_right", "Front right", "Delantera derecha"),
+            ("rear_left", "Rear left", "Trasera izquierda"),
+            ("rear_right", "Rear right", "Trasera derecha"),
+            ("all", "All windows", "Todas"),
+        )
     )
 
+
+# Music shows "Music off" while music plays and "Music on" once it is off (core/session.py).
+MUSIC_ON = ("music", "Music on", "Poner música", "louder", "music_on")
 
 ROOT = TripNode(
     "trip", "Trip", "Viaje",
     children=(
-        TripNode("windows", "Windows", "Ventanas", children=(
-            TripNode("up", "Up", "Subir", children=_windows("window_up")),
-            TripNode("down", "Down", "Bajar", children=_windows("window_down")),
+        TripNode("ride", "Trip", "Viaje", dynamic="ride"),
+        TripNode("comfort", "Comfort", "Comodidad", children=(
+            TripNode("cooler", "Cooler", "Más fresco", action="cooler", car_id="cooler"),
+            TripNode("warmer", "Warmer", "Más calor", action="warmer", car_id="warmer"),
+            TripNode("music", "Music off", "Apagar música", action="softer", car_id="music_off"),
+            TripNode("volume_down", "Volume down", "Bajar volumen", action="softer", car_id="volume_down"),
+            TripNode("windows", "Windows", "Ventanas", children=(
+                TripNode("up", "Up", "Subir", children=_windows("window_up")),
+                TripNode("down", "Down", "Bajar", children=_windows("window_down")),
+            )),
         )),
-        TripNode("temperature", "Temperature", "Temperatura", children=(
-            TripNode("warmer", "Warmer", "Más calor", action="warmer"),
-            TripNode("cooler", "Cooler", "Más fresco", action="cooler"),
+        TripNode("changes", "Trip changes", "Cambios de viaje", children=(
+            TripNode("pull_over", "Pull over", "Orillarse", action="pull_over", car_id="pull_over", confirm=True),
+            TripNode("slow_down", "Slow down", "Más despacio", action="slow_down", car_id="slow_down"),
+            TripNode("support", "Contact Support", "Llamar a soporte", action="support", car_id="contact_support", confirm=True),
         )),
-        TripNode("music", "Music", "Música", children=(
-            TripNode("louder", "Louder", "Más alto", action="louder"),
-            TripNode("softer", "Softer", "Más bajo", action="softer"),
-        )),
-        TripNode("pull_over", "Pull over", "Orillarse", action="pull_over", confirm=True),
-        TripNode("slow_down", "Slow down", "Más despacio", action="slow_down"),
-        TripNode("support", "Support", "Soporte", action="support", confirm=True),
     ),
 )
 BACK_LABEL: dict[Lang, str] = {"en": "Back", "es": "Atrás"}
 # In the split layout (the route map beside the car) the top level shows only these, the most
-# important controls, so the tiles stay big in half the screen.
-SPLIT_TOP = ("windows", "pull_over", "support")
+# important controls, so the tiles stay big in half the screen. (All three top levels today.)
+SPLIT_TOP = ("ride", "comfort", "changes")
 
 # What is said once the rider confirms (the confirm screen asks "Pull over here?" / "Call support?").
 CONFIRM_PHRASE: dict[str, dict[Lang, str]] = {
     "pull_over": {"en": "Please pull over here.", "es": "Por favor, oríllate aquí."},
-    "support": {"en": "Calling rider support.", "es": "Llamando a soporte."},
+    "contact_support": {"en": "Please connect me to rider support.", "es": "Por favor, comunícame con soporte."},
 }
 
 
@@ -111,6 +121,9 @@ class Car:
         default_factory=lambda: {"front_left": 0, "front_right": 0, "rear_left": 0, "rear_right": 0}
     )  # % open, 0 = fully up
     volume: int = 4
+    phase: str = "EN_ROUTE"  # EN_ROUTE / PULLED_OVER / ARRIVED (core/car)
+    music_playing: bool = True
+    on_highway: bool = False
 
     def apply(self, action: CarActionName, window: WindowName | None = None) -> None:
         """Change the state the way `action` would (clamped to sensible ranges)."""
@@ -132,6 +145,8 @@ class Car:
                 self.speed_mph = max(MIN_SPEED, self.speed_mph - SLOW_STEP)
         elif action == "pull_over":
             self.speed_mph = 0
+            self.phase = "PULLED_OVER"
+            self.on_highway = False
 
     def tick(self) -> None:
         """A minute of the ride: closer to arriving, a little battery used."""
@@ -147,5 +162,8 @@ class Car:
             cabin_temp_f=self.cabin_temp_f,
             windows=WindowsOpen(**self.windows),
             volume=self.volume,
+            phase=self.phase,  # type: ignore[arg-type]
+            music_playing=self.music_playing,
+            on_highway=self.on_highway,
         )
 

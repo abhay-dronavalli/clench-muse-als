@@ -320,14 +320,14 @@ suggestions screen keeps its leaf's id. The AI never chooses the action or the c
 takes them from its level, an AI sentence from its leaf.
 
 ```json
-{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam"}
+{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam", "prompt": null}
 ```
 
 **Suggestions screen** (PRD section 5 step 6). Up to 3 AI sentences, then the leaf's fixed phrase
 (when the AI did not already write it), then "Other..." (more sentences):
 
 ```json
-{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan"}
+{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan", "prompt": null}
 ```
 
 **Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
@@ -340,7 +340,7 @@ Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Pa
 para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
-{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null}
+{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null, "prompt": null}
 ```
 
 **Pointing** (PRD D2, A3.3a). The Core has one pointer slot, set live by SETTINGS `pointing_mode`:
@@ -519,7 +519,29 @@ that connects during a trip. The tablet's 3D scene drives at `speed_mph` (0 afte
 | `volume` | int | music volume 0 to 10; Louder / Softer move it by 1 |
 
 ```json
-{"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4}
+{"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4, "phase": "EN_ROUTE", "music_playing": true, "on_highway": false}
+```
+
+### SCREEN: a Support question
+
+When the car's Support team asks the rider something (core/car, proto `SupportQuestion`), the trip
+screen gives way to `support_question`: the question in `prompt`, its options as `answer` tiles. Picking
+one opens the confirm screen (`action` `support_answer`); nothing is sent before the confirm. With no
+answer before the question's timeout the Core sends `SupportAnswer.no_response`. Help works as usual.
+
+```json
+{"type": "SCREEN", "screen": "support_question", "seq": 40, "tiles": [{"id": "support.q1.yes", "label": "Yes", "kind": "answer"}, {"id": "support.q1.no", "label": "No", "kind": "answer"}, {"id": "support.q1.not_sure", "label": "Not sure", "kind": "answer"}], "highlight": 0, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "scan", "prompt": "Support asks: Are you hurt?"}
+```
+
+### CAR_RESULT
+
+The car's answer to a trip request (proto `ActionResult`), to boards, consoles and `/car-sim`. Low-safety
+comfort controls (temperature, music, volume, windows) are sent without a confirm screen, as in
+decisions #21; the Core says `message` only when such a control is `DELAYED` or `REJECTED`. For
+confirmed high-safety requests (pull over, Support, drop-off, route) every answer is said.
+
+```json
+{"type": "CAR_RESULT", "request_id": "r-12", "action_id": "pull_over", "status": "DELAYED", "message": "We're on the highway. Pulling over at the next safe spot, in about 2 minutes.", "expected_in_seconds": 120, "rtt_ms": 152}
 ```
 
 ### ACTION_RESULT
@@ -538,6 +560,28 @@ board shows it as a toast for 4 s.
 
 ```json
 {"type": "ACTION_RESULT", "action": "send_message", "ok": true, "detail": "sent", "contact": "María"}
+```
+
+## Core <-> car simulator (`/ws/car-sim`)
+
+`/car-sim` (a page for a second laptop) shows the mock car (core/car) and plays the car's side. It
+receives `CAR_STATE`, `CAR_RESULT` and `CAR_LOG`, and sends `CAR_SIM`.
+
+### CAR_LOG
+
+One request or answer crossing the car link, with the round trip for answers.
+
+```json
+{"type": "CAR_LOG", "t": 1790000000.5, "direction": "to_car", "kind": "ActionRequest", "summary": "pull_over (confirmed, clench)", "request_id": "r-12", "rtt_ms": null}
+```
+
+### CAR_SIM
+
+`ask` sends a Support question to the rider; `set` changes the mock car's situation (on the highway,
+the ride's phase).
+
+```json
+{"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"], "timeout_s": 30, "urgent": true, "on_highway": null, "phase": null}
 ```
 
 ## Core -> Console and web dev panel

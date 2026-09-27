@@ -20,8 +20,16 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip'
-export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over' | 'support'
+/** support_question = a question from the car's Support team (core/car): its answer options as tiles */
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip' | 'support_question'
+/** dropoff / route / support_answer: trip requests confirmed and sent to the car (core/car) */
+export type ActionName =
+  | 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over' | 'support'
+  | 'dropoff' | 'route' | 'support_answer'
+/** How the car answered a request (proto ActionResult.Status) */
+export type CarStatus = 'ACCEPTED' | 'COMPLETED' | 'DELAYED' | 'REJECTED'
+/** The ride's phase (proto RideState.Phase, the ones the mock car uses) */
+export type RidePhase = 'EN_ROUTE' | 'PULLED_OVER' | 'ARRIVED'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
@@ -32,7 +40,7 @@ export type UtteranceKind = 'phrase' | 'echo' | 'system'
  * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
 /** car = a trip menu level or control (core/trip.py); back = the trip menu's Back tile */
-export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car' | 'back'
+export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car' | 'back' | 'answer'
 /** What a trip control does (core/trip.py). */
 export type CarActionName =
   | 'window_up'
@@ -206,6 +214,8 @@ export interface Screen {
    * tilt mode means the fallback is on: the board shows a small "Scanning" badge
    */
   pointer?: ActivePointer | null
+  /** the question on a support_question screen ("Support asks: Are you hurt?"); null elsewhere */
+  prompt?: string | null
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */
@@ -300,6 +310,48 @@ export interface CarState {
   windows: WindowsOpen
   /** 0..10 */
   volume: number
+  /** from the car link (core/car); null from older senders */
+  phase?: RidePhase | null
+  music_playing?: boolean | null
+  on_highway?: boolean | null
+}
+
+/**
+ * The car's answer to a trip request (proto ActionResult). The Core says `message` for DELAYED /
+ * REJECTED answers and for every answer to a confirmed request.
+ */
+export interface CarResult {
+  type: 'CAR_RESULT'
+  request_id: string
+  action_id: string
+  status: CarStatus
+  message: string
+  expected_in_seconds?: number
+  /** request sent -> this answer; null for an unrequested update */
+  rtt_ms?: number | null
+}
+
+/** One request or answer crossing the car link, for /car-sim. */
+export interface CarLog {
+  type: 'CAR_LOG'
+  t: number
+  direction: 'to_car' | 'to_rider'
+  kind: string
+  summary: string
+  request_id?: string | null
+  rtt_ms?: number | null
+}
+
+/** /car-sim -> Core: ask the rider a Support question, or change the mock car's situation. */
+export interface CarSim {
+  type: 'CAR_SIM'
+  command: 'ask' | 'set'
+  text?: string | null
+  options?: string[]
+  timeout_s?: number
+  urgent?: boolean
+  on_highway?: boolean | null
+  phase?: RidePhase | null
 }
 
 /** How a confirmed action that leaves the laptop went (message, call, room control). */
@@ -436,6 +488,9 @@ export type Message =
   | Click
   | CarAction
   | CarState
+  | CarResult
+  | CarLog
+  | CarSim
   | ActionResult
   | Metrics
   | ShortcutDebug

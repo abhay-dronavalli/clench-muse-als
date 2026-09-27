@@ -1,11 +1,14 @@
-"""Trip mode (core/trip.py): the trip menu tree, the mock car's telemetry, the input lock while a
-control animates, and the confirm screens of Pull over and Support."""
+"""Trip mode (core/trip.py): the trip menu tree (Trip / Comfort / Trip changes), the mock car's
+telemetry, the input lock while a LOW control animates, and the confirm screens of the HIGH-safety
+requests (Pull over, Contact Support). The car answers through the car link (core/car/mock.py)."""
 
 import pytest
 
+from core.car.mock import PULL_OVER_S as CAR_PULL_OVER_S
 from core.contracts import (
     ActionResult,
     CarAction,
+    CarResult,
     CarState,
     Clench,
     Confirm,
@@ -32,7 +35,9 @@ from tests.test_session import (  # noqa: F401 (fixtures)
     spoken,
 )
 
-TOP = ["Windows", "Temperature", "Music", "Pull over", "Slow down", "Support"]
+TOP = ["Trip", "Comfort", "Trip changes"]
+COMFORT = ["Cooler", "Warmer", "Music off", "Volume down", "Windows", "Back"]
+CHANGES = ["Pull over", "Slow down", "Contact Support", "Back"]
 
 
 def trip(on: bool = True, lang: str | None = None) -> Settings:
@@ -48,6 +53,16 @@ def tap_label(s: Session, sched, sent, label: str) -> None:
     settle(sched)
     screen = last_screen(sent)
     s.handle(Tap(tile=[t.label for t in screen.tiles].index(label), seq=screen.seq, t=0.0))
+
+
+def go(s: Session, sched, sent, *path: str) -> None:
+    """Tap down a path of labels."""
+    for label in path:
+        tap_label(s, sched, sent, label)
+
+
+def car_results(sent) -> list[CarResult]:
+    return [m for m in sent if isinstance(m, CarResult)]
 
 
 def labels(sent) -> list[str]:
@@ -72,7 +87,7 @@ def test_trip_mode_opens_the_top_of_the_trip_menu_with_a_fresh_ride(in_trip, sen
     screen = last_screen(sent)
     assert screen.screen == "trip"
     assert labels(sent) == TOP
-    assert [t.id for t in screen.tiles][:2] == ["trip.windows", "trip.temperature"]
+    assert [t.id for t in screen.tiles][:2] == ["trip.ride", "trip.comfort"]
     assert {t.kind for t in screen.tiles} == {"car"}
     assert screen.highlight == 0 and screen.path == []
     assert in_trip.settings().trip is True
@@ -80,12 +95,12 @@ def test_trip_mode_opens_the_top_of_the_trip_menu_with_a_fresh_ride(in_trip, sen
 
 
 def test_windows_up_or_down_then_which_window(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Windows")
+    go(in_trip, sched, sent, "Comfort", "Windows")
     assert labels(sent) == ["Up", "Down", "Back"]
-    assert last_screen(sent).path == ["Windows"]
+    assert last_screen(sent).path == ["Comfort", "Windows"]
     tap_label(in_trip, sched, sent, "Down")
     assert labels(sent) == ["Front left", "Front right", "Rear left", "Rear right", "All windows", "Back"]
-    assert last_screen(sent).path == ["Windows", "Down"]
+    assert last_screen(sent).path == ["Comfort", "Windows", "Down"]
     tap_label(in_trip, sched, sent, "Front left")
     assert car_actions(sent) == [CarAction(action="window_down", window="front_left", ms=round(ROUTINE_S * 1000))]
     assert car_state(sent).windows.front_left == 25
@@ -93,8 +108,7 @@ def test_windows_up_or_down_then_which_window(in_trip, sched, sent):
 
 
 def test_a_routine_control_locks_input_then_stays_on_its_level(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Temperature")
-    tap_label(in_trip, sched, sent, "Warmer")
+    go(in_trip, sched, sent, "Comfort", "Warmer")
     assert in_trip.state is SessionState.ACTING
     assert car_state(sent).cabin_temp_f == 73
     assert spoken(sent) == []  # nothing said or sent for a routine control
@@ -109,37 +123,36 @@ def test_a_routine_control_locks_input_then_stays_on_its_level(in_trip, sched, s
 
     sched.advance(ROUTINE_S)
     assert in_trip.state is SessionState.SCANNING
-    assert labels(sent) == ["Warmer", "Cooler", "Back"]  # same level: warmer again is one pick away
+    assert labels(sent) == COMFORT  # same level: warmer again is one pick away
     tap_label(in_trip, sched, sent, "Warmer")
     assert car_state(sent).cabin_temp_f == 74
 
 
-def test_music_louder_and_softer_change_the_volume(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Music")
-    tap_label(in_trip, sched, sent, "Louder")
-    assert car_state(sent).volume == Car().volume + 1
+def test_music_off_and_volume_down(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Comfort", "Volume down")
+    assert car_state(sent).volume == Car().volume - 1
     sched.advance(ROUTINE_S)
-    tap_label(in_trip, sched, sent, "Softer")
-    assert car_state(sent).volume == Car().volume
-    assert [a.action for a in car_actions(sent)] == ["louder", "softer"]
+    tap_label(in_trip, sched, sent, "Music off")
+    assert car_state(sent).music_playing is False
+    sched.advance(ROUTINE_S)
+    assert "Music on" in labels(sent)  # the tile now turns it back on
+    assert [a.action for a in car_actions(sent)] == ["softer", "softer"]
 
 
 def test_slow_down_acts_at_once(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Slow down")
+    go(in_trip, sched, sent, "Trip changes", "Slow down")
     assert car_actions(sent)[-1].action == "slow_down"
     assert car_state(sent).speed_mph == Car().speed_mph - 5
 
 
 def test_back_tile_and_double_blink_go_up_a_level(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Windows")
-    tap_label(in_trip, sched, sent, "Up")
-    tap_label(in_trip, sched, sent, "Back")
+    go(in_trip, sched, sent, "Comfort", "Windows", "Up", "Back")
     assert labels(sent) == ["Up", "Down", "Back"]
     settle(sched)
     in_trip.handle(DoubleBlink(t=0.0))  # the go-back prompt, then a clench confirms it
     settle(sched)
     in_trip.handle(Clench(t=0.0, strength=1.0))
-    assert labels(sent) == TOP
+    assert labels(sent) == COMFORT
 
 
 def test_double_blink_at_the_top_of_the_trip_menu_does_nothing(in_trip, sent):
@@ -149,7 +162,7 @@ def test_double_blink_at_the_top_of_the_trip_menu_does_nothing(in_trip, sent):
 
 
 def test_help_still_works_during_the_lock(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Slow down")
+    go(in_trip, sched, sent, "Trip changes", "Slow down")
     assert in_trip.state is SessionState.ACTING
     in_trip.handle(LongClench(t=0.0, duration=2.5))
     assert in_trip.state is SessionState.HELP_COUNTDOWN
@@ -161,53 +174,58 @@ def test_help_still_works_during_the_lock(in_trip, sched, sent):
 
 
 def test_pull_over_confirms_first_and_tap_cancel_cancels(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Pull over")
+    go(in_trip, sched, sent, "Trip changes", "Pull over")
     assert in_trip.state is SessionState.CONFIRMING
     assert sent[-1] == Confirm(text="Please pull over here.", action="pull_over")
     assert car_actions(sent) == []
     settle(sched)
     in_trip.handle(Tap(tile=None, seq=None, cancel=True, t=0.0))
     assert in_trip.state is SessionState.SCANNING
-    assert labels(sent) == TOP
-    assert spoken(sent) == [] and car_actions(sent) == []
+    assert labels(sent) == CHANGES
+    assert spoken(sent) == [] and car_actions(sent) == [] and car_results(sent) == []
     assert car_state(sent).speed_mph > 0
 
 
-def test_pull_over_confirmed_stops_the_car_speaks_and_runs(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Pull over")
+def test_pull_over_confirmed_is_sent_to_the_car_which_stops(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Trip changes", "Pull over")
     settle(sched)
     in_trip.handle(Tap(tile=None, seq=None, t=0.0))  # Confirm
-    assert car_actions(sent) == [CarAction(action="pull_over", ms=round(PULL_OVER_S * 1000))]
-    assert car_state(sent).speed_mph == 0
     assert spoken(sent) == [("Please pull over here.", "en")]
-    assert [(r.action, r.ok) for r in sent if isinstance(r, ActionResult)] == [("pull_over", True)]
+    assert [(r.action_id, r.status) for r in car_results(sent)] == [("pull_over", "ACCEPTED")]
     in_trip.handle(done(sent))
     assert last_screen(sent).screen == "trip" and labels(sent) == TOP
-    tap_label(in_trip, sched, sent, "Slow down")
+    sched.advance(CAR_PULL_OVER_S)
+    assert [(r.action_id, r.status) for r in car_results(sent)][-1] == ("pull_over", "COMPLETED")
+    assert car_actions(sent) == [CarAction(action="pull_over", ms=round(PULL_OVER_S * 1000))]
+    assert car_state(sent).speed_mph == 0 and car_state(sent).phase == "PULLED_OVER"
+    go(in_trip, sched, sent, "Trip changes", "Slow down")
     assert car_state(sent).speed_mph == 0  # a car that has pulled over stays stopped
+    assert car_results(sent)[-1].status == "REJECTED"
 
 
 def test_support_confirms_then_calls(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Support")
-    assert sent[-1] == Confirm(text="Calling rider support.", action="support")
+    go(in_trip, sched, sent, "Trip changes", "Contact Support")
+    assert sent[-1] == Confirm(text="Please connect me to rider support.", action="support")
     settle(sched)
     in_trip.handle(Clench(t=0.0, strength=1.0))
-    assert spoken(sent) == [("Calling rider support.", "en")]
-    assert [(r.action, r.ok) for r in sent if isinstance(r, ActionResult)] == [("support", True)]
+    assert spoken(sent) == [("Please connect me to rider support.", "en")]
+    assert [(r.action_id, r.status) for r in car_results(sent)] == [("contact_support", "ACCEPTED")]
+    assert not [m for m in sent if isinstance(m, ActionResult)]  # the car answers, not a local mock
 
 
 def test_cancelling_a_confirm_returns_to_the_same_level(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Support")
+    go(in_trip, sched, sent, "Trip changes", "Contact Support")
     settle(sched)
     in_trip.handle(DoubleBlink(t=0.0))
     settle(sched)
     in_trip.handle(Clench(t=0.0, strength=1.0))  # confirms the go-back prompt: cancel
-    assert labels(sent) == TOP
+    assert labels(sent) == CHANGES
+    assert car_results(sent) == []
     assert spoken(sent) == []
 
 
 def test_ending_the_trip_goes_back_to_the_menus(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Music")
+    tap_label(in_trip, sched, sent, "Comfort")
     in_trip.handle(trip(False))
     screen = last_screen(sent)
     assert screen.screen == "menu" and screen.tiles[0].id == "suggested"
@@ -217,7 +235,7 @@ def test_ending_the_trip_goes_back_to_the_menus(in_trip, sched, sent):
 
 def test_labels_follow_the_language(in_trip, sent):
     in_trip.handle(trip(True, lang="es"))
-    assert labels(sent) == ["Ventanas", "Temperatura", "Música", "Orillarse", "Más despacio", "Soporte"]
+    assert labels(sent) == ["Viaje", "Comodidad", "Cambios de viaje"]
 
 
 def test_the_ride_moves_on_each_minute(in_trip, sched, sent):
@@ -231,7 +249,7 @@ def test_trip_events_never_reach_the_sentence_history(menu, profile, sched, sent
     s = Session(menu, sent.append, sched, profile=profile, spawn=run_now, lang="en", scan_ms=1000, db=db)
     s.start()
     s.handle(trip())
-    tap_label(s, sched, sent, "Slow down")
+    go(s, sched, sent, "Trip changes", "Slow down")
     sched.advance(ROUTINE_S)
     tap_label(s, sched, sent, "Pull over")
     settle(sched)
@@ -240,7 +258,7 @@ def test_trip_events_never_reach_the_sentence_history(menu, profile, sched, sent
 
 
 def test_trip_screen_is_what_a_reconnecting_board_sees(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Slow down")
+    go(in_trip, sched, sent, "Trip changes", "Slow down")
     view = in_trip.current_view()
     assert isinstance(view, Screen) and view.screen == "trip"  # mid-animation too
 
@@ -253,21 +271,21 @@ def test_help_countdown_cancel_back_to_trip(in_trip, sched, sent):
 
 
 def test_a_scan_covers_every_tile_of_a_level_back_included(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Temperature")
-    sched.advance(2 * SCAN_S)
-    assert last_screen(sent).highlight == 2  # Back
+    tap_label(in_trip, sched, sent, "Trip changes")
+    sched.advance(3 * SCAN_S)
+    assert last_screen(sent).highlight == 3  # Back
     sched.advance(SCAN_S)
     assert last_screen(sent).highlight == 0
 
 
 def test_the_split_layout_keeps_only_the_three_most_important_controls(in_trip, sched, sent):
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
-    assert labels(sent) == ["Windows", "Pull over", "Support"]
+    assert labels(sent) == TOP  # the three top levels are all important now
     assert in_trip.settings().trip_layout == "split"
-    tap_label(in_trip, sched, sent, "Windows")  # the levels below are whole
-    assert labels(sent) == ["Up", "Down", "Back"]
+    tap_label(in_trip, sched, sent, "Comfort")  # the levels below are whole
+    assert labels(sent) == COMFORT
     tap_label(in_trip, sched, sent, "Back")
-    assert labels(sent) == ["Windows", "Pull over", "Support"]
+    assert labels(sent) == TOP
     sched.advance(3 * SCAN_S)
     assert last_screen(sent).highlight == 0  # the scan wraps after three tiles
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="car"))
@@ -276,5 +294,5 @@ def test_the_split_layout_keeps_only_the_three_most_important_controls(in_trip, 
 
 def test_pull_over_from_the_split_layout_still_confirms(in_trip, sched, sent):
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
-    tap_label(in_trip, sched, sent, "Pull over")
+    go(in_trip, sched, sent, "Trip changes", "Pull over")
     assert sent[-1] == Confirm(text="Please pull over here.", action="pull_over")

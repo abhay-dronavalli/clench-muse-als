@@ -20,15 +20,26 @@ PointSource = Literal["webcam", "gaze", "headtilt"]
 ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
-ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "trip"]
-ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert", "pull_over", "support"]
+# support_question = a question from the car's Support team (core/car): its answer options as tiles.
+ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "trip", "support_question"]
+# dropoff / route / support_answer: trip requests confirmed on the confirm screen and sent to the car
+# (core/car, proto clench.rider.v1).
+ActionName = Literal[
+    "speak", "send_message", "place_call", "room_control", "help_alert", "pull_over", "support",
+    "dropoff", "route", "support_answer",
+]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
 # suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options);
-# car = a trip control or a trip menu level (core/trip.py); back = the trip menu's Back tile.
-TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back"]
+# car = a trip control or a trip menu level (core/trip.py); back = the trip menu's Back tile;
+# answer = an answer option to a Support question.
+TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back", "answer"]
+# How the car answered a request (proto ActionResult.Status).
+CarStatus = Literal["ACCEPTED", "COMPLETED", "DELAYED", "REJECTED"]
+# The ride's phase (proto RideState.Phase, the ones the mock car uses).
+RidePhase = Literal["EN_ROUTE", "PULLED_OVER", "ARRIVED"]
 # What a trip control does (core/trip.py).
 CarActionName = Literal[
     "window_up", "window_down", "warmer", "cooler", "louder", "softer", "slow_down", "pull_over", "support"
@@ -215,6 +226,8 @@ class Screen(_Msg):
     # Where the highlight comes from right now (None on the help countdown). "scan" in Auto or Head
     # tilt mode means the fallback is on: the board shows a small "Scanning" badge.
     pointer: ActivePointer | None = None
+    # The question on a support_question screen ("Support asks: Are you hurt?"); None elsewhere.
+    prompt: str | None = None
 
 
 class Confirm(_Msg):
@@ -299,6 +312,51 @@ class CarState(_Msg):
     cabin_temp_f: int
     windows: WindowsOpen
     volume: int = Field(ge=0, le=10)
+    # From the car link (core/car); None from older senders.
+    phase: RidePhase | None = None
+    music_playing: bool | None = None
+    on_highway: bool | None = None
+
+
+class CarResult(_Msg):
+    """The car's answer to a trip request (proto ActionResult). The board shows it and the Core says
+    `message` for DELAYED / REJECTED answers and for every answer to a confirmed request."""
+
+    type: Literal["CAR_RESULT"] = "CAR_RESULT"
+    request_id: str
+    action_id: str
+    status: CarStatus
+    message: str
+    expected_in_seconds: int = Field(default=0, ge=0)
+    rtt_ms: int | None = Field(default=None, ge=0)  # request sent -> this answer (None for an unrequested update)
+
+
+# --- Core <-> car simulator (/ws/car-sim) ---------------------------------------
+
+
+class CarLog(_Msg):
+    """One line of the car link's log, for /car-sim: a request or answer crossing the link."""
+
+    type: Literal["CAR_LOG"] = "CAR_LOG"
+    t: float
+    direction: Literal["to_car", "to_rider"]
+    kind: str  # ActionRequest / DropoffRequest / RideProfile / ActionResult / SupportQuestion / SupportAnswer
+    summary: str
+    request_id: str | None = None
+    rtt_ms: int | None = Field(default=None, ge=0)
+
+
+class CarSim(_Msg):
+    """/car-sim -> Core: ask the rider a Support question, or change the mock car's situation."""
+
+    type: Literal["CAR_SIM"] = "CAR_SIM"
+    command: Literal["ask", "set"]
+    text: str | None = None  # ask: the question
+    options: list[str] = Field(default_factory=list, max_length=5)  # ask: answer labels
+    timeout_s: int = Field(default=30, ge=5, le=300)
+    urgent: bool = False
+    on_highway: bool | None = None  # set
+    phase: RidePhase | None = None  # set
 
 
 class ActionResult(_Msg):
@@ -414,6 +472,9 @@ Message = Annotated[
         Click,
         CarAction,
         CarState,
+        CarResult,
+        CarLog,
+        CarSim,
         ActionResult,
         Metrics,
         ShortcutDebug,
