@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react'
+import { resetApp } from '../lib/resetApp'
 import {
   POINTING_MODES,
   type HeadRange,
@@ -366,6 +367,21 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         title="Onboarding: eye calibration, headband connection, a test clench"
       >
         Run setup
+      </button>
+      <button
+        type="button"
+        className={`${btn} mb-3 w-full text-xs text-red-300`}
+        onMouseDown={noFocus}
+        onClick={() => {
+          const ok = window.confirm(
+            'Reset the app to its first run?\n\nThis deletes the history (every pick and sentence, and a loaded demo week), ' +
+              "the head range and the tablet's eye calibration, disconnects the headband, and restarts at the start screen.",
+          )
+          if (ok) resetApp().catch((e: unknown) => window.alert(`Reset failed: ${e instanceof Error ? e.message : String(e)}`))
+        }}
+        title="POST /api/reset: history, head range, eye calibration and settings back to a first run (the voice cache is kept)"
+      >
+        Reset app
       </button>
 
       <div className="mb-2 flex items-center justify-between">

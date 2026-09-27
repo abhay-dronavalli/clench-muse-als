@@ -55,6 +55,8 @@ export interface ClenchNativeBridge {
   carSpeed?(mph: number): void
   /** the trip screen's layout ("car", "split", "map"): the 3D car recentres in the right half for split */
   carLayout?(mode: string): void
+  /** Reset app: forget the saved eye calibration and the shell's own settings (lib/resetApp.ts) */
+  resetApp?(): void
 }
 
 export type NativeEvent =

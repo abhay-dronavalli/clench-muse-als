@@ -4,6 +4,7 @@ import type { CarState, Lang, Screen, TripLayout, WindowsOpen } from '../contrac
 import type { CarAnim } from './carAnimation'
 import { RouteMap } from './RouteMap'
 import { STRINGS } from './strings'
+import { BackButton } from './views'
 
 /**
  * The trip screen (SCREEN `screen: "trip"`, core/trip.py). A telemetry column on the left (CAR_STATE),
@@ -187,6 +188,7 @@ export function TripView({
   phase,
   tint,
   onTap,
+  onBack,
   ...shared
 }: Shared & {
   screen: Screen
@@ -194,6 +196,8 @@ export function TripView({
   phase: 'in' | 'out'
   tint: boolean
   onTap: (tile: number) => void
+  /** the Back button above a level below the top (TAP cancel: up one level) */
+  onBack?: () => void
 }) {
   const picked = pickedTile(screen, anim)
   const locked = anim !== null
@@ -204,7 +208,10 @@ export function TripView({
   return (
     <TripShell lang={screen.lang} tint={tint} {...shared}>
       {screen.path.length > 0 && (
-        <p className="mb-4 text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
+        <div className="mb-4 flex items-center gap-6">
+          {onBack && <BackButton lang={screen.lang} onBack={onBack} />}
+          <p className="text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
+        </div>
       )}
       {screen.prompt && (
         // "Plan a trip", a routes screen's drop-off (and why), or a Support question (core/car): large,

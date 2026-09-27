@@ -7,6 +7,7 @@ type ToastText = Record<ActionName, (who: string) => string>
 export const STRINGS = {
   en: {
     home: 'Home',
+    goBack: 'Back',
     connecting: 'Connecting to Clench…',
     speaking: 'Speaking…',
     finding: 'Finding options…',
@@ -168,6 +169,7 @@ export const STRINGS = {
   },
   es: {
     home: 'Inicio',
+    goBack: 'Atrás',
     connecting: 'Conectando con Clench…',
     speaking: 'Hablando…',
     finding: 'Buscando opciones…',

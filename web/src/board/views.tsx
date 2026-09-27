@@ -4,17 +4,37 @@ import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
 import { LAUNCH_MS, SetupCountdown } from './onboardingFlow'
 
-export function Breadcrumb({ screen }: { screen: Screen }) {
+/**
+ * The Back button on every screen with somewhere to go back to: up one menu or trip level at once, or
+ * off the confirm screen (TAP cancel). A touch is deliberate, so there is no "Go back?" prompt; a double
+ * blink still asks first. Not a tile: the scan and the eyes never land on it.
+ */
+export function BackButton({ lang, onBack, className = '' }: { lang: Lang; onBack: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className={`shrink-0 select-none rounded-2xl bg-zinc-900 px-8 py-4 text-3xl font-bold text-yellow-300 shadow-lg ring-2 ring-yellow-300/70 transition-colors hover:bg-zinc-800 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-yellow-300 active:bg-zinc-700 ${className}`}
+    >
+      ‹ {STRINGS[lang].goBack}
+    </button>
+  )
+}
+
+export function Breadcrumb({ screen, onBack }: { screen: Screen; onBack?: () => void }) {
   const parts = [STRINGS[screen.lang].home, ...screen.path]
   return (
-    <nav className="px-8 pt-6 text-3xl font-semibold text-zinc-400" aria-label="breadcrumb">
-      {parts.map((p, i) => (
-        <span key={i}>
-          {i > 0 && <span className="px-3 text-zinc-600">›</span>}
-          <span className={i === parts.length - 1 ? 'text-white' : undefined}>{p}</span>
-        </span>
-      ))}
-    </nav>
+    <div className="flex items-center gap-6 px-8 pt-6">
+      {onBack && <BackButton lang={screen.lang} onBack={onBack} />}
+      <nav className="text-3xl font-semibold text-zinc-400" aria-label="breadcrumb">
+        {parts.map((p, i) => (
+          <span key={i}>
+            {i > 0 && <span className="px-3 text-zinc-600">›</span>}
+            <span className={i === parts.length - 1 ? 'text-white' : undefined}>{p}</span>
+          </span>
+        ))}
+      </nav>
+    </div>
   )
 }
 
@@ -110,11 +130,12 @@ export function TileGrid({ screen, onTap }: { screen: Screen; onTap?: (tile: num
   )
 }
 
-export function ConfirmView({ confirm, lang, onTap }: { confirm: Confirm; lang: Lang; onTap?: () => void }) {
+export function ConfirmView({ confirm, lang, onTap, onBack }: { confirm: Confirm; lang: Lang; onTap?: () => void; onBack?: () => void }) {
   const s = STRINGS[lang]
   const [confirmRef, gazeOn] = useGazeOver<HTMLParagraphElement>() // gaze lights the sentence (a clench confirms it)
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-12 p-12 text-center">
+      {onBack && <BackButton lang={lang} onBack={onBack} className="fixed left-4 top-4 z-40" />}
       <p className="text-4xl font-semibold text-yellow-300">{s.confirm[confirm.action]}</p>
       <p
         ref={confirmRef}

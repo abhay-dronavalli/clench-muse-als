@@ -316,14 +316,15 @@ export default function BoardPage() {
       )}
       {tripScreen && !carSetup && (
         <>
-          <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} onTap={tapTile} {...tripShared} />
+          <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} onTap={tapTile}
+            onBack={tripScreen.screen === 'trip' && tripScreen.path.length > 0 ? tapCancel : undefined} {...tripShared} />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
         </>
       )}
       {screen && !tripScreen && (
         <>
-          <Breadcrumb screen={screen} />
+          <Breadcrumb screen={screen} onBack={screen.path.length > 0 && !screen.loading ? tapCancel : undefined} />
           <TileGrid screen={screen} onTap={tapTile} />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
@@ -334,7 +335,7 @@ export default function BoardPage() {
       )}
       {connected && view.kind === 'confirm' && pointing && <CursorDot />}
       {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && view.confirm.action !== 'route' && (
-        <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
+        <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} onBack={tapCancel} />
       )}
       {connected && view.kind === 'speaking' && trip && (
         <TripSpeaking lang={lang} text={view.text} tint={car.tint} {...tripShared} />
