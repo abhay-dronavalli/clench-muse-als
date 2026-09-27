@@ -274,7 +274,8 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
         "CONTACT_MARIA_PHONE": "+13055550123",
     }
     actions = build_registry(Voice(sent.append), env, dry_run=False, transport=httpx.MockTransport(service))
-    s = Session(menu, sent.append, sched, profile=profile, actions=actions, spawn=run_now)  # profile lang: es
+    spanish = profile.model_copy(update={"lang": "es"})
+    s = Session(menu, sent.append, sched, profile=spanish, actions=actions, spawn=run_now)
     s.start()
     s.handle(long_clench())
     sched.advance(HELP_COUNTDOWN_S)

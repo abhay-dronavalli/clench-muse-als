@@ -71,7 +71,7 @@ def confirm(session: Session, sched: ManualScheduler) -> None:
 
 
 def test_profile_loads(profile):
-    assert (profile.name, profile.lang, profile.help_contact) == ("Luis", "es", "maria")
+    assert (profile.name, profile.lang, profile.help_contact) == ("Luis", "en", "maria")
 
 
 def test_profile_help_contact_must_exist(menu, tmp_path: Path):
