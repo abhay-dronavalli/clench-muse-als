@@ -36,9 +36,9 @@ from tests.test_session import (  # noqa: F401 (fixtures)
     spoken,
 )
 
-TOP = ["Trip", "Comfort", "Trip changes"]
+TOP = ["Comfort", "Trip changes"]  # the ride controls, once a route is confirmed
 COMFORT = ["Cooler", "Warmer", "Music off", "Volume down", "Windows", "Back"]
-CHANGES = ["Pull over", "Slow down", "Contact Support", "Back"]
+CHANGES = ["Pull over", "Slow down", "Contact Support", "Change trip", "Back"]
 
 
 def trip(on: bool = True, lang: str | None = None) -> Settings:
@@ -78,9 +78,23 @@ def car_state(sent) -> CarState:
     return next(m for m in reversed(sent) if isinstance(m, CarState))
 
 
+def board_and_go(s: Session, sched, sent) -> None:
+    """Car mode starts on Plan a trip: pick MDC Kendall, its first route, confirm; the ride starts."""
+    tap_label(s, sched, sent, "MDC Kendall")
+    tap_label(s, sched, sent, last_screen(sent).tiles[0].label)
+    settle(sched)
+    s.handle(Tap(tile=None, seq=None, t=0.0))  # confirm the route
+    s.handle(done(sent))  # the confirmed sentence was said
+
+
 @pytest.fixture
-def in_trip(session, sent):
+def in_trip(session, sched, sent):
     session.handle(trip())
+    board_and_go(session, sched, sent)
+    # Each test starts from the ride under way: forget the boarding's messages, keep what shows now.
+    sent.clear()
+    sent.append(session.current_view())
+    sent.append(session.car_link.state())
     return session
 
 
@@ -88,11 +102,11 @@ def test_trip_mode_opens_the_top_of_the_trip_menu_with_a_fresh_ride(in_trip, sen
     screen = last_screen(sent)
     assert screen.screen == "trip"
     assert labels(sent) == TOP
-    assert [t.id for t in screen.tiles][:2] == ["trip.ride", "trip.comfort"]
+    assert [t.id for t in screen.tiles][:2] == ["trip.comfort", "trip.changes"]
     assert {t.kind for t in screen.tiles} == {"car"}
-    assert screen.highlight == 0 and screen.path == []
+    assert screen.path == []
     assert in_trip.settings().trip is True
-    assert car_state(sent) == Car().message()
+    assert car_state(sent).phase == "EN_ROUTE" and car_state(sent).speed_mph > 0
 
 
 def test_windows_up_or_down_then_which_window(in_trip, sched, sent):
@@ -236,7 +250,7 @@ def test_ending_the_trip_goes_back_to_the_menus(in_trip, sched, sent):
 
 def test_labels_follow_the_language(in_trip, sent):
     in_trip.handle(trip(True, lang="es"))
-    assert labels(sent) == ["Viaje", "Comodidad", "Cambios de viaje"]
+    assert labels(sent) == ["Comodidad", "Cambios de viaje"]
 
 
 def test_the_ride_moves_on_each_minute(in_trip, sched, sent):
@@ -250,6 +264,7 @@ def test_trip_events_never_reach_the_sentence_history(menu, profile, sched, sent
     s = Session(menu, sent.append, sched, profile=profile, spawn=run_now, lang="en", scan_ms=1000, db=db)
     s.start()
     s.handle(trip())
+    board_and_go(s, sched, sent)
     go(s, sched, sent, "Trip changes", "Slow down")
     sched.advance(ROUTINE_S)
     tap_label(s, sched, sent, "Pull over")
@@ -273,10 +288,10 @@ def test_help_countdown_cancel_back_to_trip(in_trip, sched, sent):
 
 def test_a_scan_covers_every_tile_of_a_level_back_included(in_trip, sched, sent):
     tap_label(in_trip, sched, sent, "Trip changes")
-    sched.advance(3 * SCAN_S)
-    assert last_screen(sent).highlight == 3  # Back
+    sched.advance(4 * SCAN_S)
+    assert last_screen(sent).highlight == 4  # Back
     sched.advance(SCAN_S)
-    assert last_screen(sent).highlight == 4  # the Home corner, after the grid
+    assert last_screen(sent).highlight == 5  # the Home corner, after the grid
     sched.advance(SCAN_S)
     assert last_screen(sent).highlight == 0
 
@@ -317,11 +332,11 @@ def test_tracking_loss_keeps_the_split_preference_and_the_highlight(in_trip, sch
     in_trip.handle(FaceOk(ok=False))
     sched.advance(3.1)
     assert labels(sent) == TOP
-    assert last_screen(sent).tiles[in_trip.highlight].label == "Comfort"
+    assert last_screen(sent).tiles[in_trip.highlight].label == "Trip changes"
     assert in_trip.settings().trip_layout == "split"
     in_trip.handle(FaceOk(ok=True))
-    in_trip.handle(Point(source="gaze", tile=2, seq=in_trip.seq, t=0.0))
-    assert labels(sent) == TOP and in_trip.highlight == 2
+    in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
+    assert labels(sent) == TOP and in_trip.highlight == 0
 
 
 def test_tracking_recovery_keeps_the_current_submenu(in_trip, sched, sent):

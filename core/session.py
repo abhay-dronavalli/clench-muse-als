@@ -118,7 +118,7 @@ from core.car.mock import MockCar
 from core.geo.model import Trip as GeoTrip
 from core.geo.config import load_geo_config
 from core.geo.trip import load_trip
-from core.trip import BACK_LABEL, CONFIRM_PHRASE, MUSIC_ON, SPLIT_TOP, PULL_OVER_S, ROOT as TRIP_ROOT, ROUTINE_S, Car, TripNode
+from core.trip import BACK_LABEL, CONFIRM_PHRASE, MUSIC_ON, PLAN_ROOT, SPLIT_TOP, PULL_OVER_S, ROOT as TRIP_ROOT, ROUTINE_S, Car, TripNode
 from core.rank import Entry, Ranker
 from core.rank.history import Sentence, leaf_path
 from core.rank.jev import JevAnswer, JevRanker
@@ -278,8 +278,17 @@ CAR_MODE_PHRASE: dict[Lang, str] = {"en": "Start Car mode?", "es": "¿Iniciar el
 
 
 def _drop_short(description: str) -> str:
-    """ "Main entrance, Jack Kassewitz Building (I)(9) from service road" -> the part before "from"."""
-    return description.split(" from ", 1)[0]
+    """ "Main entrance, Jack Kassewitz Building (I)(9) from service road" -> "Main entrance, Jack Kassewitz
+    Building": the part before "from", without OSM's parenthesised codes."""
+    return re.sub(r"\s*\([^)]*\)", "", description.split(" from ", 1)[0]).strip()
+
+
+def _short_reason(reason: str) -> str:
+    """The drop-off reason's first three points, and its unknowns: one short line."""
+    main, _, unknown = reason.partition("; unknown: ")
+    points = [p.strip() for p in main.split(",")][:3]
+    text = ", ".join(points)
+    return text + (f". Unknown: {unknown}." if unknown else ".")
 
 
 def _join(prefix: str, part: str) -> str:
@@ -339,7 +348,7 @@ class Session:
         # and the Car mode corner on Home brings the rider straight back to it.
         self.ride_active = False
         self.trip_layout: TripLayout = "car"  # car / split (map beside the car: fewer top tiles) / map
-        self._trip_path: list[TripNode] = [TRIP_ROOT]  # the trip menu levels, top first
+        self._trip_path: list[TripNode] = [PLAN_ROOT]  # the trip menu levels, top first
         # The car (core/car): the in-process mock unless main passes another link. The trip tiles
         # (routes, drop-off) come from the committed open-data result (core/geo).
         self.geo_trip = geo_trip if geo_trip is not None else load_trip()
@@ -353,6 +362,12 @@ class Session:
         self._question_timer: TimerHandle | None = None
         self.input_connected: Callable[[], bool] = lambda: True  # main: is a board / input connected
         self._planning: str | None = None  # the destination being planned live (core/geo/plan.py)
+        # Car mode: Plan a trip until a route is confirmed (and after "Change trip"), then the ride controls.
+        self.ride_started = False
+        self._changing_trip = False
+        from core.geo.plan import load_places
+
+        self.place_trips = load_places()  # saved places' committed trips: every pick is instant
         self._plan_note: str | None = None  # why the last plan fell back to the demo trip
         self._acting_timer: TimerHandle | None = None
         self._ride_timer: TimerHandle | None = None
@@ -814,6 +829,11 @@ class Session:
             self._enter_frame()
             return
         assert node.car_id is not None
+        if node.car_id == "change_trip":
+            self._changing_trip = True
+            self._trip_path = [PLAN_ROOT]
+            self._enter_frame()
+            return
         if node.car_id.startswith("plan:"):
             place = next(p for p in load_geo_config().places if p.key == node.car_id.removeprefix("plan:"))
             self._trip_path.pop()  # back to the Trip level, which shows the planning
@@ -925,6 +945,19 @@ class Session:
         if self.trip and self.state in (SessionState.SCANNING, SessionState.ACTING) and self._question is None:
             self._emit(self._screen())
 
+    def _routes_prompt(self, key: str) -> str:
+        """The routes screen: where the rider is dropped off and why, in two short lines."""
+        trip = self.place_trips[key]
+        req = trip.dropoff.request if trip.dropoff else None
+        if req is None:
+            if self.lang == "en":
+                return "No accessible drop-off is mapped here. The car chooses where to stop.\nTimes without traffic."
+            return "No hay un punto de bajada accesible en el mapa. El auto elige dónde parar.\nTiempos sin tráfico."
+        why = _short_reason(req.reason)
+        if self.lang == "en":
+            return f"Drop-off: {_drop_short(req.description)}\n{why}\nTimes without traffic."
+        return f"Bajada: {_drop_short(req.description)}\n{why}\nTiempos sin tráfico."
+
     def _ride_prompt(self) -> str | None:
         """What the Trip level says above its tiles: the drop-off's reason and each route's trade-off."""
         t = self.geo_trip
@@ -943,6 +976,15 @@ class Session:
     def _car_phrase(self, node: TripNode) -> str:
         """The sentence on the confirm screen, said in the car once confirmed."""
         cid = node.car_id or ""
+        if cid.startswith("go:"):
+            key = cid.split(":")[1]
+            trip = self.place_trips[key]
+            place = next(p for p in load_geo_config().places if p.key == key)
+            name = place.label_en if self.lang == "en" else place.label_es
+            drop = _drop_short(trip.dropoff.request.description) if trip.dropoff and trip.dropoff.request else None
+            if self.lang == "en":
+                return f"Go to {name}? {node.label_en}, without traffic. " + (f"Drop-off: {drop}." if drop else "Drop-off: the car chooses.")
+            return f"¿Ir a {name}? {node.label_en}, sin tráfico. " + (f"Bajada: {drop}." if drop else "Bajada: la elige el auto.")
         if cid in CONFIRM_PHRASE:
             return CONFIRM_PHRASE[cid][self.lang]
         if cid == "dropoff":
@@ -972,6 +1014,22 @@ class Session:
             assert self.geo_trip is not None and self.geo_trip.dropoff is not None and self.geo_trip.dropoff.request is not None
             self.car_link.request(self.geo_trip.dropoff.request.model_copy(update={"request_id": rid}))
             return
+        if car_id.startswith("go:"):
+            _, key, route_id = car_id.split(":", 2)
+            trip = self.place_trips[key]
+            self.geo_trip = trip
+            if isinstance(self.car_link, MockCar):
+                self.car_link.routes = {t.route_id: t.label for t in trip.ride.tiles} if trip.ride else {}
+            if trip.dropoff is not None and trip.dropoff.request is not None:
+                self._car_requests += 1
+                drop_id = f"r-{self._car_requests}"
+                self._confirmed_requests.add(drop_id)
+                self.car_link.request(trip.dropoff.request.model_copy(update={"request_id": drop_id}))
+            car_id = f"route:{route_id}"
+            self.ride_started = True
+            self._changing_trip = False
+            if isinstance(self.car_link, MockCar):
+                self.car_link.depart()
         if car_id.startswith("route:") and self.geo_trip is not None and self.geo_trip.ride is not None:
             tile = next((t for t in self.geo_trip.ride.tiles if f"route:{t.route_id}" == car_id), None)
             if tile is not None and tile.ride_profile is not None:
@@ -1079,6 +1137,7 @@ class Session:
             self._emit(self.car_link.state())  # back to the ride under way
         elif self.trip:
             self.ride_active = True
+            self.ride_started = False
             self.car_link.start_ride()  # a fresh (mock) ride; its CAR_STATE comes back through on_car_state
             self._ride_timer = self._scheduler.call_later(RIDE_MINUTE_S, self._ride_tick)
         if self.state in (SessionState.SCANNING, SessionState.LOADING, SessionState.ACTING):
@@ -1088,7 +1147,7 @@ class Session:
             self._go_home(first_tile=True)
         else:
             self._stack = [self._home()]
-            self._trip_path = [TRIP_ROOT]
+            self._trip_path = [self._trip_home()]
 
     def _ride_tick(self) -> None:
         """Another minute of the mock ride: arrival closer, a little battery used."""
@@ -1136,6 +1195,9 @@ class Session:
         log.info("Car mode: back to Home (the ride goes on)")
         self._set_trip(False)
 
+    def _trip_home(self) -> TripNode:
+        return TRIP_ROOT if self.ride_started and not self._changing_trip else PLAN_ROOT
+
     def car_start_ride(self) -> None:
         """The car started the ride (/car-sim Start ride): the board shows Car mode. The car's action,
         not the rider's request, so there is no confirm screen; help works as always."""
@@ -1146,6 +1208,8 @@ class Session:
         """The car ended the ride (/car-sim End ride): back to Home; the next ride starts fresh."""
         log.info("the car ended the ride")
         self.ride_active = False
+        self.ride_started = False
+        self._changing_trip = False
         self._cancel_ride()
         self._set_trip(False)
 
@@ -1163,7 +1227,14 @@ class Session:
         if level.dynamic == "ride":
             return self._ride_nodes()
         if level.dynamic == "plan":
-            return self._plan_nodes()
+            return [TripNode(p.key, p.label_en, p.label_es, dynamic=f"routes:{p.key}")
+                    for p in load_geo_config().places if p.key in self.place_trips][:5]
+        if level.dynamic and level.dynamic.startswith("routes:"):
+            key = level.dynamic.removeprefix("routes:")
+            trip = self.place_trips[key]
+            assert trip.ride is not None
+            return [TripNode(f"route_{i + 1}", t.label, t.label, car_id=f"go:{key}:{t.route_id}", confirm=True)
+                    for i, t in enumerate(trip.ride.tiles[:3])]
         if self.trip_layout == "split" and self.pointer.source != "scan" and len(self._trip_path) == 1:
             return [n for n in level.children if n.key in SPLIT_TOP]
         music_off = self.car_link.state().music_playing is False
@@ -1199,7 +1270,7 @@ class Session:
 
     def _go_home(self, *, first_tile: bool = False) -> None:
         self._stack = [self._home()]
-        self._trip_path = [TRIP_ROOT]  # in trip mode, home is the top of the trip menu
+        self._trip_path = [self._trip_home()]  # in trip mode: Plan a trip, or the ride controls once under way
         self._effort.reset()  # metrics count from home
         self._enter_frame(first_tile=first_tile)
 
@@ -1885,8 +1956,11 @@ class Session:
             prompt = ("Support asks: " if self.lang == "en" else "Soporte pregunta: ") + q.text
         elif self.trip:
             tiles = self._trip_tiles()
-            if self._trip_path[-1].dynamic == "ride":
-                prompt = self._ride_prompt()
+            level = self._trip_path[-1]
+            if level.dynamic == "plan":
+                prompt = "Plan a trip" if self.lang == "en" else "Planear un viaje"
+            elif level.dynamic and level.dynamic.startswith("routes:"):
+                prompt = self._routes_prompt(level.dynamic.removeprefix("routes:"))
         else:
             tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind) for i in frame.items]
             tiles.append(self._other_tile(frame))

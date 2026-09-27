@@ -1,0 +1,1488 @@
+{
+ "generated_at": "2026-09-27T13:29:35+00:00",
+ "attribution": [
+  "© OpenStreetMap contributors (ODbL)",
+  "USGS 3D Elevation Program (public domain)"
+ ],
+ "duration_note": "Drive times are OSRM free-flow estimates from OpenStreetMap road speeds, without live traffic.",
+ "dropoff": {
+  "destination": "Pharmacy",
+  "destination_point": {
+   "latitude": 25.6993646,
+   "longitude": -80.4471633
+  },
+  "radius_m": 150.0,
+  "candidates": [
+   {
+    "id": "83349f3e",
+    "rank": 1,
+    "score": 91.2,
+    "stop": {
+     "latitude": 25.6991364,
+     "longitude": -80.4469709
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 357.4,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 563017283,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 13.2,
+    "walk_kind": "step-free path",
+    "walk_polyline": "sjz{Cph_jNOCCD??",
+    "slope": {
+     "max_grade_pct": 1.1,
+     "avg_grade_pct": 1.1,
+     "climb_m": 0.14,
+     "length_m": 13.0,
+     "samples": 4,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.1% / avg 1.1% over 13.0 m of the walk (4 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934026832) 8 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "13 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.1%), step-free path, sidewalk, quiet road, short walk; unknown: curb"
+   },
+   {
+    "id": "4314315f",
+    "rank": 2,
+    "score": 81.2,
+    "stop": {
+     "latitude": 25.6986681,
+     "longitude": -80.4471513
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 15.4,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 290515343,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 135.9,
+    "walk_kind": "step-free path",
+    "walk_polyline": "ugz{Cti_jNWNAk@Ag@@OBCK?U@O?BFKBEDGHOPCD??",
+    "slope": {
+     "max_grade_pct": 1.5,
+     "avg_grade_pct": 0.8,
+     "climb_m": 0.76,
+     "length_m": 120.2,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.5% / avg 0.8% over 120.2 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934024835) 14 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "136 m along mapped footways; crosses Southwest 72nd Street"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.5%), step-free path, sidewalk, quiet road, walk crosses Southwest 72nd Street; unknown: curb"
+   },
+   {
+    "id": "afd56838",
+    "rank": 3,
+    "score": 76.2,
+    "stop": {
+     "latitude": 25.698841,
+     "longitude": -80.4469732
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 359.6,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 190683288,
+    "road_class": "tertiary",
+    "road_name": "Southwest 72nd Street",
+    "walk_m": 103.1,
+    "walk_kind": "step-free path",
+    "walk_polyline": "whz{Cph_jNFFAg@@OBCK?U@O?BFKBEDGHOPCD??",
+    "slope": {
+     "max_grade_pct": 1.5,
+     "avg_grade_pct": 0.6,
+     "climb_m": 0.77,
+     "length_m": 90.8,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.5% / avg 0.6% over 90.8 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934024835) 4 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.6,
+      "used": 0.6,
+      "weight": 2.0,
+      "evidence": "highway=tertiary (Southwest 72nd Street)"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "103 m along mapped footways; crosses Southwest 72nd Street"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from Southwest 72nd Street",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.5%), step-free path, sidewalk, walk crosses Southwest 72nd Street; unknown: curb"
+   },
+   {
+    "id": "fc518e92",
+    "rank": 4,
+    "score": 75.6,
+    "stop": {
+     "latitude": 25.6996267,
+     "longitude": -80.446866
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 194.4,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 563017278,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 124.8,
+    "walk_kind": "step-free path",
+    "walk_polyline": "umz{C|g_jNQ[`CE?NEDGHOPCD??",
+    "slope": {
+     "max_grade_pct": 3.0,
+     "avg_grade_pct": 1.1,
+     "climb_m": 0.69,
+     "length_m": 116.5,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 3.0% / avg 1.1% over 116.5 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934026830) 14 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "125 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from service road",
+    "reason": "Wheelchair-accessible entrance, gentle slope (max 3.0%), step-free path, sidewalk, quiet road, long walk; unknown: curb"
+   },
+   {
+    "id": "978df8aa",
+    "rank": 5,
+    "score": 72.5,
+    "stop": {
+     "latitude": 25.6992571,
+     "longitude": -80.4465164
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 267.7,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 365554194,
+    "road_class": "secondary",
+    "road_name": "Southwest 157th Avenue",
+    "walk_m": 408.6,
+    "walk_kind": "step-free path",
+    "walk_polyline": "kkz{Cve_jNMYTYDq@Eg@E_AT[KUQQCa@ZAH@BFHtG?D?LBV?PBFKBEDGHOPCD??",
+    "slope": {
+     "max_grade_pct": 1.4,
+     "avg_grade_pct": 0.4,
+     "climb_m": 1.12,
+     "length_m": 369.8,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.4% / avg 0.4% over 369.8 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934026829) 3 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.3,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "highway=secondary (Southwest 157th Avenue)"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "409 m along mapped footways; crosses Southwest 157th Avenue"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from Southwest 157th Avenue",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.4%), step-free path, sidewalk, busy road, walk crosses Southwest 157th Avenue; unknown: curb"
+   },
+   {
+    "id": "f6d1d190",
+    "rank": 6,
+    "score": 66.9,
+    "stop": {
+     "latitude": 25.6989572,
+     "longitude": -80.4466224
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 311.6,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 134545506,
+    "road_class": "secondary",
+    "road_name": "Southwest 72nd Street",
+    "walk_m": 57.4,
+    "walk_kind": "step-free path",
+    "walk_polyline": "oiz{Cjf_jNM@?PBFKBEDGHOPCD??",
+    "slope": {
+     "max_grade_pct": 2.7,
+     "avg_grade_pct": 1.5,
+     "climb_m": 0.62,
+     "length_m": 54.1,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 2.7% / avg 1.5% over 54.1 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 934026273) 9 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.3,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "highway=secondary (Southwest 72nd Street)"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.2,
+      "used": 0.2,
+      "weight": 2.0,
+      "evidence": "57 m along mapped footways; crosses Southwest 157th Avenue"
+     }
+    ],
+    "unknown": [
+     "curb"
+    ],
+    "description": "Main entrance, Walgreens from Southwest 72nd Street",
+    "reason": "Wheelchair-accessible entrance, gentle slope (max 2.7%), step-free path, sidewalk, busy road, walk crosses Southwest 157th Avenue; unknown: curb"
+   },
+   {
+    "id": "6864df98",
+    "rank": 7,
+    "score": 66.9,
+    "stop": {
+     "latitude": 25.699384,
+     "longitude": -80.4474814
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 107.5,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 563017293,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 53.1,
+    "walk_kind": "straight line",
+    "walk_polyline": "clz{Cvk_jNZcB",
+    "slope": {
+     "max_grade_pct": 1.2,
+     "avg_grade_pct": 0.7,
+     "climb_m": 0.31,
+     "length_m": 53.1,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "max 1.2% / avg 0.7% over 53.1 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no mapped footpath connects the stop and the entrance, and no steps or ramps are mapped near the straight line (absence in OSM is not proof)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": null,
+      "used": 0.3,
+      "weight": 1.0,
+      "evidence": "road has no sidewalk tag and no footway is mapped nearby"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.1,
+      "used": 0.1,
+      "weight": 2.0,
+      "evidence": "53 m straight line (no mapped footpath connects); crosses a building (OSM way 225337627): the real walk is longer"
+     }
+    ],
+    "unknown": [
+     "steps/ramp",
+     "curb",
+     "sidewalk"
+    ],
+    "description": "Main entrance, Walgreens from service road",
+    "reason": "Wheelchair-accessible entrance, flat (max 1.2%), quiet road, walk crosses a building; unknown: steps/ramp, curb, sidewalk"
+   },
+   {
+    "id": "a2e993da",
+    "rank": 8,
+    "score": 61.2,
+    "stop": {
+     "latitude": 25.6991965,
+     "longitude": -80.4476524
+    },
+    "entrance": {
+     "latitude": 25.6992406,
+     "longitude": -80.4469762
+    },
+    "heading_to_entrance_deg": 85.9,
+    "entrance_osm_id": 8656780434,
+    "entrance_kind": "main",
+    "road_osm_id": 563017281,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 67.9,
+    "walk_kind": "straight line",
+    "walk_polyline": "_kz{Cxl_jNGeC",
+    "slope": {
+     "max_grade_pct": 2.3,
+     "avg_grade_pct": 1.0,
+     "climb_m": 0.68,
+     "length_m": 67.9,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 3.0,
+      "evidence": "wheelchair=yes on OSM node 8656780434"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "entrance=main"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 2.3% / avg 1.0% over 67.9 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no mapped footpath connects the stop and the entrance, and no steps or ramps are mapped near the straight line (absence in OSM is not proof)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": null,
+      "used": 0.3,
+      "weight": 1.0,
+      "evidence": "road has no sidewalk tag and no footway is mapped nearby"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.1,
+      "used": 0.1,
+      "weight": 2.0,
+      "evidence": "68 m straight line (no mapped footpath connects); crosses a building (OSM way 225337627): the real walk is longer"
+     }
+    ],
+    "unknown": [
+     "steps/ramp",
+     "curb",
+     "sidewalk"
+    ],
+    "description": "Main entrance, Walgreens from service road",
+    "reason": "Wheelchair-accessible entrance, gentle slope (max 2.3%), quiet road, walk crosses a building; unknown: steps/ramp, curb, sidewalk"
+   }
+  ],
+  "request": {
+   "request_id": "dropoff-83349f3e",
+   "point": {
+    "latitude": 25.6991364,
+    "longitude": -80.4469709
+   },
+   "description": "Main entrance, Walgreens from service road",
+   "reason": "Wheelchair-accessible entrance, flat (max 1.1%), step-free path, sidewalk, quiet road, short walk; unknown: curb",
+   "fallback_point": {
+    "latitude": 25.6986681,
+    "longitude": -80.4471513
+   }
+  },
+  "osm_fetched_at": "2026-09-27T13:18:51+00:00",
+  "notes": []
+ },
+ "ride": {
+  "pickup": "FIU Modesto A. Maidique Campus, 11200 SW 8th St, Miami, FL 33199",
+  "destination": "Pharmacy (drop-off: Main entrance, Walgreens from service road)",
+  "pickup_point": {
+   "latitude": 25.7553898,
+   "longitude": -80.3762833
+  },
+  "destination_point": {
+   "latitude": 25.6991364,
+   "longitude": -80.4469709
+  },
+  "routes": [
+   {
+    "id": "route-1",
+    "label": "Fastest",
+    "duration_s": 1084.0,
+    "distance_m": 13191.3,
+    "summary": "Southwest 42nd Street, Southwest 157th Avenue",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??L?F?B@L@L@JBNDRPx@Pv@BT@F@P@N?R?PATCTCRETGRGPYv@O\\ENYr@GNGRGRCNCNAJAJ?LAL@N?Z?Z?VA`@?Z?NAN?T@r@?r@@zD?D?Rd@ArBEtDGpLO`CEnCED?rC?xDKT?tCEtCAnAEp@A~IKjHKR?b@ArIMVAV?zDGRAlFItAAvEMrACV?n@AbFGb@AH?hACtBEF?R??R?H@~@?tC?rA?dA?Z?j@?h@@b@@z@@^@^DXD^FZJl@Tv@L`@Rh@JX@BBDHPNRLPV^\\`@NRb@d@\\f@PXPZLXTh@L^Lb@DTBJJh@J`ABh@@j@@^@d@@V@p@PrR@hB@XF`G@`BBzA?t@HhFBfC?T@pC@`B@l@@t@B`BDfC@~@BnB@rBDnDBhB@|A@L@r@B`CHnH@x@@j@@hC@p@?pA@lA@v@FpEDtC@v@DjE@`B@dA?`@?h@@|@@j@?b@@`AD`CFhEDfEDtB@rAD`EHfE@tB@tADpD?BDbE@|A@fABjA?x@@d@@vADhC@dAD|D@hBBpCBbC?V@v@B`A@`@BdABtA@v@FbFDdE@jE@hBBdA?ZDzD@`ABhB?^HbILhL@VJlLNfJ@N?JRR~JMjCCdCEbCCfCGxDEhCEfCGx@AD?T?NAhEE~AC^?xJMpFItGIpDED?NAT?PAnCEJ?zCEvAAhHKtEGfNUV?f@AD?xFEjLQzJOfDG?L?TLHH@HE`BA?T",
+    "sharp_turns": 8,
+    "climb_m": 11.7,
+    "steepest_grade_pct": 2.1,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 19,
+    "stop_signs": 3,
+    "traffic_calming": 3,
+    "traffic_calming_kinds": {
+     "hump": 3
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 55.3,
+    "bridge_m": 40.0,
+    "comfort_cost": 66.62,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533837,
+       "longitude": -80.3779204
+      },
+      "detail": "80° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7537759,
+       "longitude": -80.3842359
+      },
+      "detail": "91° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7321291,
+       "longitude": -80.3833686
+      },
+      "detail": "87° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7281289,
+       "longitude": -80.4476897
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6998038,
+       "longitude": -80.4466689
+      },
+      "detail": "82° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6997807,
+       "longitude": -80.4468569
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.753214,
+       "longitude": -80.3787071
+      },
+      "detail": "traffic_calming=hump (OSM node 5022513450)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7537814,
+       "longitude": -80.3820726
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585765)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.75379,
+       "longitude": -80.3823801
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585766)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7537875,
+       "longitude": -80.3815888
+      },
+      "detail": "OSM node 12535191670"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.753779,
+       "longitude": -80.3841127
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7468636,
+       "longitude": -80.383963
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7393546,
+       "longitude": -80.383679
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7348392,
+       "longitude": -80.383466
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7322686,
+       "longitude": -80.38336
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.732117,
+       "longitude": -80.3857143
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7315663,
+       "longitude": -80.3881881
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7299589,
+       "longitude": -80.3915736
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7297,
+       "longitude": -80.3996147
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.729448,
+       "longitude": -80.4076122
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7292061,
+       "longitude": -80.4156057
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7289409,
+       "longitude": -80.4236849
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7288169,
+       "longitude": -80.4277003
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7287019,
+       "longitude": -80.431607
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7284449,
+       "longitude": -80.4395417
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7281679,
+       "longitude": -80.4475176
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7279058,
+       "longitude": -80.4477547
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7208393,
+       "longitude": -80.44747
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7135813,
+       "longitude": -80.4472077
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   },
+   {
+    "id": "route-2",
+    "label": "Smoothest",
+    "duration_s": 1162.3,
+    "distance_m": 13553.8,
+    "summary": "Southwest 117th Avenue, Southwest 72nd Street",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??L?F?B@L@L@JBNDRPx@Pv@BT@F@P@N?R?PATCTCRETGRGPYv@O\\ENYr@GNGRGRCNCNAJAJ?LAL@N?Z?Z?VA`@?Z?NAN?T@r@?r@@zD?D?Rd@ArBEtDGpLO`CEnCED?rC?xDKT?tCEtCAnAEp@A~IKjHKR?b@ArIMVAV?zDGRAlFItAAvEMrACV?n@AbFGb@AH?hACtBEF?R?\\AZAfHM\\?f@A`@AxCEfHKfAA`@AvKOvEGb@?r@AJ?vACTA\\?rFI^AvGIdBCvIMdBClLOF?RAT?R?pLWfEIl@CV?H?JAL?F@F?NBZBPBfBTh@H^Bv@@xFMP?hACz@CfDGh@A`@Ap@Cb@?d@Ad@AvAC|@Cb@A|ACzAEjAC~AC~ACRAjACh@?VAr@Ad@AD?ZACVANCVAVCVAVCVAXATCn@Ch@?T?H?V?V?J?L?V?P@`@?V@x@@j@@hA@t@@lA@f@?Z@n@BdC@`@?^@N?|@DlD@d@@tABnBFlG@h@BzA@jBBlB?LBjB?Z@X@|A?FBvA@|@?ZBdA@dABhB@fA@|@@b@@zA@f@?^FjG@RBrC@hA?R@~@BhBB~C?NBtBFhGD`EBxA?J?V?J@bADzDDtDFbFD~DDnEB~BDbE@r@BdB?P@h@FzFFzF@v@@`BBvAFlH??BbADpEDjE@R?N?V@NDrEX|W?r@HdG@`AB~B?X?R?V?L?bIBzELtHBrA?BBlCDzCD`CDdC@p@?V@VHpGFbHHdF@lAHlJRpH?NQ@wCD@V?L?TLHH@HE`BA?T",
+    "sharp_turns": 9,
+    "climb_m": 10.9,
+    "steepest_grade_pct": 2.0,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 20,
+    "stop_signs": 3,
+    "traffic_calming": 3,
+    "traffic_calming_kinds": {
+     "hump": 3
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 69.4,
+    "bridge_m": 60.0,
+    "comfort_cost": 55.83,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533837,
+       "longitude": -80.3779204
+      },
+      "detail": "80° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7537759,
+       "longitude": -80.3842359
+      },
+      "detail": "91° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7008219,
+       "longitude": -80.3822895
+      },
+      "detail": "102° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6989607,
+       "longitude": -80.4465031
+      },
+      "detail": "91° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6998078,
+       "longitude": -80.446548
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6997589,
+       "longitude": -80.4468725
+      },
+      "detail": "96° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6991868,
+       "longitude": -80.4468578
+      },
+      "detail": "64° right"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.753214,
+       "longitude": -80.3787071
+      },
+      "detail": "traffic_calming=hump (OSM node 5022513450)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7537814,
+       "longitude": -80.3820726
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585765)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.75379,
+       "longitude": -80.3823801
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585766)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7537875,
+       "longitude": -80.3815888
+      },
+      "detail": "OSM node 12535191670"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.753779,
+       "longitude": -80.3841127
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7468636,
+       "longitude": -80.383963
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7393546,
+       "longitude": -80.383679
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7348392,
+       "longitude": -80.383466
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7322686,
+       "longitude": -80.38336
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7272239,
+       "longitude": -80.3831489
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7239418,
+       "longitude": -80.383023
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7230012,
+       "longitude": -80.3829879
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7215186,
+       "longitude": -80.3829289
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7150637,
+       "longitude": -80.3826799
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7146824,
+       "longitude": -80.3826648
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7009543,
+       "longitude": -80.3822968
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7006529,
+       "longitude": -80.3940894
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7005049,
+       "longitude": -80.3985086
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7002629,
+       "longitude": -80.4064426
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7000099,
+       "longitude": -80.4144356
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6997499,
+       "longitude": -80.4224747
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6995011,
+       "longitude": -80.4304984
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6992688,
+       "longitude": -80.4385704
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6989627,
+       "longitude": -80.4465032
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   }
+  ],
+  "fastest_id": "route-1",
+  "smoothest_id": "route-2",
+  "tiles": [
+   {
+    "route_id": "route-1",
+    "kind": "fastest",
+    "label": "Fastest, 18 min",
+    "detail": "8 sharp turns, 19 traffic lights, 3 stop signs, 3 speed bumps",
+    "ride_profile": {
+     "route_preference": "ROUTE_PREFERENCE_FASTEST",
+     "uses_wheelchair": true,
+     "needs_extra_boarding_time": true
+    }
+   },
+   {
+    "route_id": "route-2",
+    "kind": "smoothest",
+    "label": "Smoothest, 19 min",
+    "detail": "0.8 m less climbing",
+    "ride_profile": {
+     "route_preference": "ROUTE_PREFERENCE_SMOOTHEST",
+     "uses_wheelchair": true,
+     "needs_extra_boarding_time": true
+    }
+   }
+  ],
+  "osm_fetched_at": "2026-09-27T13:20:49+00:00",
+  "notes": []
+ },
+ "notes": []
+}

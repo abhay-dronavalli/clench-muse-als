@@ -29,7 +29,7 @@ export type ActionName =
 /** How the car answered a request (proto ActionResult.Status) */
 export type CarStatus = 'ACCEPTED' | 'COMPLETED' | 'DELAYED' | 'REJECTED'
 /** The ride's phase (proto RideState.Phase, the ones the mock car uses) */
-export type RidePhase = 'EN_ROUTE' | 'PULLED_OVER' | 'ARRIVED'
+export type RidePhase = 'BOARDING' | 'EN_ROUTE' | 'PULLED_OVER' | 'ARRIVED'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.

@@ -79,7 +79,6 @@ MUSIC_ON = ("music", "Music on", "Poner música", "louder", "music_on")
 ROOT = TripNode(
     "trip", "Trip", "Viaje",
     children=(
-        TripNode("ride", "Trip", "Viaje", dynamic="ride"),
         TripNode("comfort", "Comfort", "Comodidad", children=(
             TripNode("cooler", "Cooler", "Más fresco", action="cooler", car_id="cooler"),
             TripNode("warmer", "Warmer", "Más calor", action="warmer", car_id="warmer"),
@@ -94,13 +93,17 @@ ROOT = TripNode(
             TripNode("pull_over", "Pull over", "Orillarse", action="pull_over", car_id="pull_over", confirm=True),
             TripNode("slow_down", "Slow down", "Más despacio", action="slow_down", car_id="slow_down"),
             TripNode("support", "Contact Support", "Llamar a soporte", action="support", car_id="contact_support", confirm=True),
+            TripNode("change_trip", "Change trip", "Cambiar viaje", car_id="change_trip"),
         )),
     ),
 )
 BACK_LABEL: dict[Lang, str] = {"en": "Back", "es": "Atrás"}
 # In the split layout (the route map beside the car) the top level shows only these, the most
 # important controls, so the tiles stay big in half the screen. (All three top levels today.)
-SPLIT_TOP = ("ride", "comfort", "changes")
+SPLIT_TOP = ("comfort", "changes")
+# Before a route is confirmed (and after "Change trip"), Car mode is the Plan a trip screen: the saved
+# places, then a place's routes (core/session.py builds both from data/geo/places/).
+PLAN_ROOT = TripNode("plan", "Plan a trip", "Planear un viaje", dynamic="plan")
 
 # What is said once the rider confirms (the confirm screen asks "Pull over here?" / "Call support?").
 CONFIRM_PHRASE: dict[str, dict[Lang, str]] = {

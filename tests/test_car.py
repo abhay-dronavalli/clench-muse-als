@@ -6,7 +6,7 @@ from core.car.mock import PULL_OVER_DELAYED_S, MockCar
 from core.contracts import CarLog, CarResult, Confirm, DoubleBlink, LongClench, Tap
 from core.session import HELP_COUNTDOWN_S, SessionState
 from tests.test_session import SCAN_S, done, last_screen, menu, profile, run_now, sched, sent, session, said  # noqa: F401
-from tests.test_session_trip import go, in_trip, settle, tap_label, trip  # noqa: F401
+from tests.test_session_trip import board_and_go, go, in_trip, settle, tap_label, trip  # noqa: F401
 
 
 class Listener:
@@ -83,28 +83,27 @@ def test_a_rejected_comfort_control_says_why(in_trip, sched, sent):
     assert said(sent, "system")[-1][0] == results(sent)[-1].message
 
 
-def test_drop_off_is_sent_only_after_the_confirm(in_trip, sched, sent):
-    go(in_trip, sched, sent, "Trip")
+def test_car_mode_plans_first_and_the_car_moves_only_after_the_route_confirm(session, sched, sent):
+    session.handle(trip())
     screen = last_screen(sent)
-    assert screen.prompt and "Drop-off:" in screen.prompt  # the reason, from the open-data result
-    drop = next(t.label for t in screen.tiles if t.label.startswith("Drop off at"))
-    tap_label(in_trip, sched, sent, drop)
-    assert isinstance(sent[-1], Confirm) and sent[-1].action == "dropoff"
-    assert results(sent) == []  # nothing sent yet
-    settle(sched)
-    in_trip.handle(Tap(tile=None, seq=None, t=0.0))
-    assert [(r.action_id, r.status) for r in results(sent)] == [("dropoff", "ACCEPTED")]
-    assert said(sent, "system")[-1][0] == results(sent)[-1].message  # a confirmed request's answer is said
-
-
-def test_a_route_tile_confirms_then_asks_the_car(in_trip, sched, sent):
-    go(in_trip, sched, sent, "Trip")
-    route = last_screen(sent).tiles[0].label
-    tap_label(in_trip, sched, sent, route)
+    assert screen.prompt == "Plan a trip"
+    assert [t.label for t in screen.tiles] == ["Home (demo)", "Miami Cancer Institute", "Pharmacy", "MDC Kendall"]
+    assert session.car.phase == "BOARDING" and session.car.speed_mph == 0  # the rider got in: parked
+    tap_label(session, sched, sent, "MDC Kendall")
+    routes = last_screen(sent)
+    assert routes.prompt.startswith("Drop-off: Main entrance, Jack Kassewitz Building\n")  # no OSM codes
+    tap_label(session, sched, sent, routes.tiles[0].label)
     assert isinstance(sent[-1], Confirm) and sent[-1].action == "route"
+    assert "Go to MDC Kendall?" in sent[-1].text and "without traffic" in sent[-1].text
+    assert results(sent) == [] and session.car.speed_mph == 0  # nothing sent, still parked
     settle(sched)
-    in_trip.handle(Tap(tile=None, seq=None, t=0.0))
-    assert results(sent)[-1].status == "ACCEPTED" and results(sent)[-1].action_id.startswith("route:")
+    session.handle(Tap(tile=None, seq=None, t=0.0))
+    assert {(r.action_id.split(":")[0], r.status) for r in results(sent)} == {("dropoff", "ACCEPTED"), ("route", "ACCEPTED")}
+    assert session.car.phase == "EN_ROUTE" and session.car.speed_mph > 0
+    session.handle(done(sent))
+    assert [t.label for t in last_screen(sent).tiles] == ["Comfort", "Trip changes"]
+    go(session, sched, sent, "Trip changes", "Change trip")
+    assert last_screen(sent).prompt == "Plan a trip"
 
 
 def ask(s, text="Are you hurt?", timeout=30):
@@ -165,6 +164,7 @@ def test_car_mode_is_entered_only_after_its_confirm(session, sched, sent):
     session.handle(Tap(tile=None, seq=None, t=0.0))
     assert session.trip is True and session.ride_active is True
     assert last_screen(sent).screen == "trip" and last_screen(sent).corner.label == "Home"
+    assert last_screen(sent).prompt == "Plan a trip"
 
 
 def test_leaving_car_mode_keeps_the_ride_and_the_corner_brings_it_back(in_trip, sched, sent):

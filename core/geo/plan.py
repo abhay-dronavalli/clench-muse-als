@@ -10,7 +10,25 @@ from __future__ import annotations
 from core.geo.config import CACHE_DIR, GeoConfig, load_geo_config
 from core.geo.http import DiskCache, OpenDataClient
 from core.geo.model import Trip
-from core.geo.trip import build_trip
+from core.geo.trip import DEMO_TRIP_PATH, build_trip, load_trip, save_trip
+
+PLACES_DIR = DEMO_TRIP_PATH.parent / "places"
+
+
+def place_path(key: str):
+    return DEMO_TRIP_PATH if key == "mdc" else PLACES_DIR / f"{key}.json"
+
+
+def load_places(cfg: GeoConfig | None = None) -> dict[str, Trip]:
+    """Every saved place's committed trip (data/geo/places/<key>.json; MDC Kendall = the demo trip).
+    The board uses only these: picking a place is instant on any machine, with no live planning."""
+    cfg = cfg or load_geo_config()
+    out: dict[str, Trip] = {}
+    for p in cfg.places:
+        trip = load_trip(place_path(p.key))
+        if trip is not None and trip.ride is not None and trip.ride.tiles:  # a drop-off may be unmapped
+            out[p.key] = trip
+    return out
 
 
 def plan_trip(query: str, label: str, cfg: GeoConfig | None = None) -> Trip:

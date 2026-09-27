@@ -121,8 +121,16 @@ class MockCar:
         self.lang = lang
 
     def start_ride(self) -> None:
-        self.car = Car()
+        """The rider got in: the car is parked (BOARDING) until a route is confirmed."""
+        self.car = Car(speed_mph=0, phase="BOARDING")
         self.open_questions.clear()
+        self._state_changed()
+
+    def depart(self) -> None:
+        """A route was confirmed: the car moves off."""
+        if self.car.phase in ("BOARDING", "PULLED_OVER", "ARRIVED") or self.car.speed_mph == 0:
+            self.car.phase, self.car.speed_mph, self.car.on_highway = "EN_ROUTE", CITY_SPEED, False
+        self._log("to_rider", "RideState", f"phase {self.car.phase}, {self.car.speed_mph} mph", None)
         self._state_changed()
 
     def tick(self) -> None:
