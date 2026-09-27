@@ -477,3 +477,17 @@ Status: **done** = built, **planned** = agreed, not built yet.
   board or console opens a short full-width strip at the top listing them with per-kind counts; Esc
   or `/` closes it. Refused gestures are shown (amber) because "the detector never fired" and "the
   Core ignored it" look the same otherwise.
+- **Muse panel moved to a left-side debug panel on ",".** The bottom-bar widget is gone.
+  `web/src/sensor/MusePanel.tsx` is a full-height strip on the left (Esc also closes it; open by
+  default on `/console`) with four sections in the order you use them: headband (profile, double
+  blink, Connect / Disconnect, demo source), live signal (per-channel spread with flat / noisy
+  flags, jaw level against the threshold, sample age), the Enable / Pause switch, and the service's
+  output. Closed, only a small "Muse" tab with a status dot stays on the left edge.
+- **The panel no longer flickers Disconnected / Paused.** It required a sample's time to be at or
+  before the page clock, but the page clock ticks every 250 ms and a sample arrives every ~285 ms,
+  so the newest sample was routinely "from the future" and read as Disconnected several times a
+  second, disabling the Enable button with it. A sample up to 2 s ahead now counts as fresh.
+- **The detector keeps running while Muse is paused or blocked.** Gestures go to the Core, which
+  refuses them and reports them as INPUT_EVENT with the reason, so the input log is not silently
+  empty while paused. Any change of the pause or block state still resets and re-arms the detector,
+  so a clench held across Enable, or a crossing during head motion, never fires.

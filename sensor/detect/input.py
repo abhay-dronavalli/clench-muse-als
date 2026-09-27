@@ -12,6 +12,7 @@ class ClenchInput:
         # the calibration could not separate a blink from rest, and a guessed blink threshold fires
         # on every forehead twitch, so a missing or failed calibration means no blinks at all.
         self.blink_wanted = profile.get('blink_enabled', True) if blink is None else blink
+        self.gate = None  # (enabled, clear) last tick; any change re-arms the detector
         self.reset()
 
     @property
@@ -39,7 +40,15 @@ class ClenchInput:
         self.pending_blink = None
 
     def update(self, level, now, *, enabled, blocked=None, blink=None):
-        if not enabled or blocked or not math.isfinite(level):
+        # Detection keeps running while paused or blocked, and the Core refuses (and logs) what it
+        # sends then: otherwise the input log stays empty and "the detector never fired" looks the
+        # same as "the switch was off". Any change of the pause or block state resets and re-arms,
+        # so a clench held across Enable, or a crossing during head motion, can never fire.
+        gate = (bool(enabled), not blocked)
+        if gate != self.gate:
+            self.gate = gate
+            self.reset()
+        if not math.isfinite(level):
             self.reset()
             return []
         # Enabling or reconnecting mid-clench cannot select/confirm. Require a

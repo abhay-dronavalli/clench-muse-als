@@ -178,3 +178,31 @@ def test_a_clench_wins_the_tick_over_a_blink():
     # The jaw releases on the same tick the second blink lands: CLENCH only, no DOUBLE_BLINK.
     events = detector.update(5.0, 1.2, enabled=True, blink=(120.0, 120.0))
     assert [e["type"] for e in events] == ["CLENCH"]
+
+
+# --- detection while paused (so the input log is never silently empty) ---------
+
+
+def test_a_paused_detector_still_reports_a_clench_for_the_core_to_refuse():
+    detector = ClenchInput(profile())
+    detector.update(5.0, 0.0, enabled=False)
+    detector.update(5.0, 0.7, enabled=False)
+    detector.update(30.0, 1.0, enabled=False)
+    events = detector.update(5.0, 1.25, enabled=False)
+    assert [e["type"] for e in events] == ["CLENCH"]
+
+
+def test_a_clench_held_across_enable_never_fires():
+    """Enabling mid-clench must not select: the switch change re-arms the detector."""
+    detector = ClenchInput(profile())
+    detector.update(5.0, 0.0, enabled=False)
+    detector.update(5.0, 0.7, enabled=False)
+    detector.update(30.0, 1.0, enabled=False)            # clench starts while paused
+    assert detector.update(30.0, 1.1, enabled=True) == []  # caregiver enables mid-clench
+    assert detector.update(5.0, 1.3, enabled=True) == []   # release: not armed, nothing fires
+
+
+def test_a_crossing_during_head_motion_never_fires_after_it_stops():
+    detector = armed_detector()
+    detector.update(30.0, 1.0, enabled=True, blocked="Head moving")
+    assert detector.update(5.0, 1.2, enabled=True) == []
