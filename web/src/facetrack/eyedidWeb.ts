@@ -8,7 +8,8 @@
 //            (gazeOwnsCamera in cameraOwner.ts), as with the tablet's tracker
 //   network  the SDK checks the key online and downloads its engine (~14 MB, cached) from
 //            cdn.seeso.io at start. Without either, gaze is unavailable and Auto points with the head.
-//   calib.   five points (EyeCalibrationOverlay), saved in this browser per person
+//   calib.   five points (EyeCalibrationOverlay), saved in this browser; checked with one dot at
+//            every start and asked for when missing, as on the tablet (EyeSetupOverlay)
 //
 // The SDK itself is imported only when it is about to run, so the board never loads it otherwise.
 
@@ -17,6 +18,16 @@ import { gaze, type GazeInput } from './gaze'
 import { nativeBridge } from './native'
 
 export type EyedidState = 'off' | 'starting' | 'on' | 'error'
+
+/**
+ * What the board asks the caregiver once the tracker is on, as the tablet shell does
+ * (kushagra/tablet/.../BoardActivity.kt checkSavedCalibration):
+ *   uncalibrated   nothing saved yet: "Calibrate now / Later"
+ *   check          a saved calibration was loaded: one dot, is the gaze on that tile? (gazeCheck.ts)
+ *   check_failed   it was not: "Recalibrate / Try the check again / Keep it"
+ *   none           nothing to ask
+ */
+export type EyedidSetup = 'none' | 'uncalibrated' | 'check' | 'check_failed'
 
 /** The browser key from the SeeSo / Eyedid console. Vite only exposes VITE_* names to the page. */
 export const EYEDID_WEB_KEY: string = (import.meta.env.VITE_EYEDID_WEB_KEY as string | undefined)?.trim() ?? ''
@@ -97,6 +108,9 @@ export interface CalibrationUi {
 
 class EyedidWeb {
   state: EyedidState = 'off'
+  setup: EyedidSetup = 'none'
+  /** the tile (0..5) the one-dot check shows, picked each time a check starts */
+  checkTile = 0
   detail = ''
   calibrated = loadCalibration() !== null
   private sdk: SeesoSdk | null = null
@@ -104,6 +118,8 @@ class EyedidWeb {
   private wanted = false
   private listeners = new Set<() => void>()
   private calibrating: CalibrationUi | null = null
+  private holding = false // calibrating or checking: the board holds still
+  private raw = new Set<(g: GazeInput) => void>()
   private unhook: (() => void) | null = null  // removes the calibration callbacks from the SDK
 
   subscribe = (fn: () => void) => {
@@ -117,7 +133,36 @@ class EyedidWeb {
   active = (): boolean => this.state === 'starting' || this.state === 'on'
 
   /** A snapshot for useSyncExternalStore. */
-  snapshot = (): string => `${this.state}|${this.detail}|${this.calibrated}`
+  snapshot = (): string => `${this.state}|${this.detail}|${this.calibrated}|${this.setup}|${this.checkTile}`
+
+  private setSetup(setup: EyedidSetup) {
+    // A new random tile for every check, never picked during a render.
+    if (setup === 'check') this.checkTile = Math.floor(Math.random() * 6)
+    this.setup = setup
+    this.listeners.forEach((fn) => fn())
+  }
+
+  /** The caregiver dismissed the prompt ("Later", "Keep it"). */
+  dismissSetup = (): void => this.setSetup('none')
+
+  /** Show the one-dot check again. */
+  checkAgain = (): void => this.setSetup('check')
+
+  /** Checking a calibration: the board gets no gaze meanwhile (it holds still), `onRaw` does. */
+  hold = (on: boolean): void => {
+    this.holding = on
+  }
+
+  /** Every gaze sample, also while the board is held (for the one-dot check). */
+  onRaw = (fn: (g: GazeInput) => void) => {
+    this.raw.add(fn)
+    return () => {
+      this.raw.delete(fn)
+    }
+  }
+
+  /** The check's verdict: passed = nothing to ask; failed = offer to recalibrate. */
+  checked = (passed: boolean): void => this.setSetup(passed ? 'none' : 'check_failed')
 
   private set(state: EyedidState, detail = '') {
     this.state = state
@@ -147,8 +192,16 @@ class EyedidWeb {
   }
 
   private onGaze = (g: { x: number; y: number; trackingState: number }) => {
-    if (!this.wanted || this.calibrating) return
-    gaze.feed(toGazeInput(g, window.innerWidth, window.innerHeight))
+    if (!this.wanted) return
+    const input = toGazeInput(g, window.innerWidth, window.innerHeight)
+    this.raw.forEach((fn) => fn(input))
+    if (this.calibrating || this.holding) {
+      // As the tablet does: keep feeding, not found, so the board knows the tracker is alive and
+      // holds the highlight still instead of saying "no eye tracker".
+      gaze.feed({ x: 0.5, y: 0.5, found: false, confidence: 0, state: 'CALIBRATING' })
+      return
+    }
+    gaze.feed(input)
   }
 
   private async start() {
@@ -170,6 +223,8 @@ class EyedidWeb {
       if (!this.wanted) return this.stop('stopped while starting')
       if (!this.sdk.startTracking(this.stream)) throw new Error('tracking did not start')
       this.set('on', saved ? '' : 'not calibrated yet')
+      // Ask right away, as the tablet does: an uncalibrated tracker cannot reach the whole screen.
+      this.setSetup(saved ? 'check' : 'uncalibrated')
     } catch (e) {
       console.warn('Eyedid web: could not start', e)
       this.releaseCamera()
@@ -192,6 +247,8 @@ class EyedidWeb {
 
   private stop(why: string | null) {
     this.cancelCalibration()
+    this.holding = false
+    this.setup = 'none'
     this.releaseCamera()
     gaze.clear()
     this.set('off', why ?? '')
@@ -214,6 +271,7 @@ class EyedidWeb {
       this.calibrating = null
       saveCalibration(data)
       this.calibrated = true
+      this.setup = 'none'
       this.set('on', '')
       ui.done(true)
     }
@@ -227,6 +285,7 @@ class EyedidWeb {
     }
     this.calibrating = ui
     this.unhook = unhook
+    this.setSetup('none') // the calibration screen replaces any prompt
     return true
   }
 
