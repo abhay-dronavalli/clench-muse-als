@@ -1029,3 +1029,17 @@ choices below are Taher's.
   own settings are cleared, and the page reloads to the start screen and the onboarding. The
   ElevenLabs audio cache is kept: it costs credits to make and holds nothing about the person. The
   reset is refused (409) during a help countdown, so it can never cancel a call for help.
+
+## 32. One set of servers for the tablet and the demo
+
+- The tablet app keeps loading `http://localhost:5173/` (its BOARD_URL); only where that leads changed.
+  `kushagra/tablet/run-tablet.bat` now forwards it (adb reverse 5173 -> 5173) to the demo's own
+  servers, the Core on 8000 and the web app on 5173 open to the Wi-Fi, the same ones
+  `scripts/start-demo.bat` starts, and reuses them when they are already up. Before, it started a second
+  Core on 8001 behind a web app on 5174, so the tablet and laptop 2's /car-sim talked to two different
+  Cores (two mock cars, two sessions) and whichever script ran last decided what the tablet saw.
+- `run-tablet.bat test` keeps the separate copy on 8001 / 5174 for agents, who must not touch 8000 /
+  5173 (AGENTS.md).
+- `start-demo` pins the web app to 5173 (`--strictPort`: Vite used to move to the next free port
+  silently, and the tablet and laptop 2 would then miss it) and points a tablet plugged in over USB at
+  the same servers.

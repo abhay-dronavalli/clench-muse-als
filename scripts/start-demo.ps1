@@ -5,6 +5,10 @@
 #
 # It stops whatever is already listening on 8000 / 5173 first. If Windows asks "Allow Node.js to
 # communicate", tick BOTH Private and Public, then click Allow.
+#
+# One set of servers for everything: laptop 2 (/car-sim), this laptop and the tablet all use this Core.
+# A tablet plugged in over USB is pointed at it too (adb reverse 5173 -> 5173); after installing a new
+# build, kushagra\tablet\run-tablet.bat reuses these servers instead of starting its own.
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -25,7 +29,7 @@ Write-Host '[..] Starting the Core on 8000 (window "Clench Core :8000")...'
 
 # 6. Window 2: the web app, reachable from other machines (--host).
 Start-Process powershell -WorkingDirectory $repo -ArgumentList '-NoExit', '-Command',
-    "`$Host.UI.RawUI.WindowTitle = 'Clench Web :5173'; npm --prefix web run dev -- --host"
+    "`$Host.UI.RawUI.WindowTitle = 'Clench Web :5173'; npm --prefix web run dev -- --port 5173 --strictPort --host"
 Write-Host '[..] Starting the web app on 5173 (window "Clench Web :5173")...'
 
 function Wait-Url($url, $name) {
@@ -41,6 +45,20 @@ function Wait-Url($url, $name) {
 }
 $coreUp = Wait-Url 'http://127.0.0.1:8000/health' 'The Core'
 $webUp = Wait-Url 'http://127.0.0.1:5173/' 'The web app'
+
+# The tablet, if one is plugged in: its app loads http://localhost:5173/, forwarded here over USB.
+$adb = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+if (-not (Test-Path $adb)) { $adb = (Get-Command adb -ErrorAction SilentlyContinue).Source }
+if ($adb) {
+    $state = & $adb get-state 2>$null
+    if ($state -eq 'device') {
+        & $adb reverse tcp:5173 tcp:5173 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host '[ok] Tablet connected: it now uses these servers (reopen the app if it shows "not reachable").' }
+        else { Write-Host '[x] Tablet found, but adb reverse failed. Run kushagra\tablet\run-tablet.bat.' -ForegroundColor Yellow }
+    } else {
+        Write-Host '[i] No tablet on USB. Plug it in and run this again (or kushagra\tablet\run-tablet.bat).'
+    }
+}
 
 # 7. This laptop's address on the Wi-Fi (an iPhone hotspot gives 172.20.10.x).
 $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |

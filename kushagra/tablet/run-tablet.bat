@@ -2,16 +2,25 @@
 rem One-click tablet run: starts the Core and the web board on this laptop, installs the latest
 rem build of the tablet app on the plugged-in tablet, connects the tablet to the board and opens it.
 rem
-rem   run-tablet.bat              open Clench Board (Eyedid + web board) if this branch has it
+rem   run-tablet.bat              open Clench Board (Eyedid + web board) on the demo servers
+rem   run-tablet.bat test         the same on a separate test copy (Core 8001, web 5174), for agents
 rem   run-tablet.bat mediapipe    open the standalone MediaPipe app instead (no servers needed)
 rem
-rem Ports: the Core on 8001 and the web board on 5174 (the demo ports 8000 / 5173 stay free). The
-rem tablet still loads http://localhost:5173/, which adb reverse forwards to 5174 here.
+rem Ports: the tablet always loads http://localhost:5173/ (the app's BOARD_URL); adb reverse forwards
+rem it to this laptop. By default that is the demo's own servers, the same ones scripts\start-demo.bat
+rem starts (the Core on 8000, the web app on 5173, open to laptop 2 on the Wi-Fi), so the tablet, the
+rem laptop and laptop 2's /car-sim share one Core. "test" keeps a separate copy on 8001 / 5174.
 rem Run it again any time: servers that are already up are left alone; the app is rebuilt.
 
 setlocal EnableExtensions
-set "CORE_PORT=8001"
-set "WEB_PORT=5174"
+set "CORE_PORT=8000"
+set "WEB_PORT=5173"
+set "WEB_HOST=--host"
+if /i "%~1"=="test" (
+    set "CORE_PORT=8001"
+    set "WEB_PORT=5174"
+    set "WEB_HOST=--host 127.0.0.1"
+)
 set "TABLET_PORT=5173"
 set "PKG=com.clench.eyetrack"
 
@@ -64,7 +73,7 @@ if "%NEED_SERVERS%"=="1" (
     curl.exe -s -o nul --max-time 2 http://127.0.0.1:%WEB_PORT%/
     if errorlevel 1 (
         echo [..] Starting the web board on %WEB_PORT% in a new window.
-        start "Clench Web :%WEB_PORT%" /d "%REPO%" cmd /k "set "CORE_URL=http://127.0.0.1:%CORE_PORT%" && npm --prefix web run dev -- --port %WEB_PORT% --strictPort --host 127.0.0.1"
+        start "Clench Web :%WEB_PORT%" /d "%REPO%" cmd /k "set "CORE_URL=http://127.0.0.1:%CORE_PORT%" && npm --prefix web run dev -- --port %WEB_PORT% --strictPort %WEB_HOST%"
     ) else (
         echo [ok] Web board already running on %WEB_PORT%.
     )
