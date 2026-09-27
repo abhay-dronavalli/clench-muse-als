@@ -128,7 +128,7 @@ Thinned copy of the signal, for the caregiver chart only. Never used for decisio
 | `ch` | float[] | one value per channel |
 
 ```json
-{"type": "SIGNAL", "t": 1727300010.05, "ch": [12.5, -3.1, 40.2, 8.8]}
+{"type": "SIGNAL", "t": 1727300010.05, "ch": [12.5, -3.1, 40.2, 8.8], "connected": true, "profile": "taher", "emg": 18.0, "threshold": 35.0, "blocked": null}
 ```
 
 ## Board / Sensor Service -> Core (pointing)
@@ -240,7 +240,7 @@ included). Screens show these values instead of assuming defaults.
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false}
 ```
 
 ## Core -> Board
@@ -479,3 +479,57 @@ qualifies for. A cancel of the phrase in the last 24 h scales both numbers down.
 ```json
 {"type": "SHORTCUT_DEBUG", "top": "Mija, estoy bien, llámame a las seis.", "history_share": 0.72, "jev": "answered", "jev_pick": "Mija, estoy bien, llámame a las seis.", "jev_confidence": 0.52, "shortcut": true, "reason": "history share 0.72 >= 0.6"}
 ```
+
+### INPUT_EVENT
+
+Sent to `/ws/console` and `/ws/input` only, once for every input gesture the Core receives from the
+headband or the keyboard stand-in, whether or not it acted on it. The board's input log (press `/`)
+shows these: someone checking whether the headband is picking up a clench, a long clench or a double
+blink has to be able to see the gestures the Core REFUSED, and why it refused them.
+
+| Field | Type | Notes |
+|---|---|---|
+| `t` | float | when the gesture happened (the sender's clock) |
+| `kind` | `"CLENCH"` \| `"LONG_CLENCH"` \| `"DOUBLE_BLINK"` | which gesture |
+| `source` | `"muse"` \| `"dev"` | the headband Sensor Service, or the keyboard stand-in |
+| `accepted` | bool | false = the Core ignored it |
+| `reason` | string \| null | why it was ignored; null when accepted |
+| `strength` | float \| null | 0 to 1, CLENCH only |
+| `duration` | float \| null | seconds held, LONG_CLENCH only |
+
+```json
+{"type": "INPUT_EVENT", "t": 1777001234.5, "kind": "CLENCH", "source": "muse", "accepted": false, "reason": "Muse input is paused", "strength": 0.62, "duration": null}
+```
+
+## Muse integration: clench and double blink
+
+`/ws/sensor` accepts CLENCH, LONG_CLENCH, DOUBLE_BLINK and SIGNAL from one headless Muse service.
+It receives SETTINGS, including `long_clench_ms` and the optional `muse_enabled`
+boolean. Core starts with Muse paused (`false`); omitted settings preserve the value.
+Web controls on the board and console enable/pause it via `/ws/console`.
+Keyboard `/ws/input` remains independent. DOUBLE_BLINK arrives only from a profile whose eye
+calibration passed (`blink_enabled`); the service never guesses a blink threshold.
+
+SIGNAL adds optional nullable fields: `connected` (boolean), `profile` (string),
+`emg` (finite nonnegative microvolts), `threshold` (finite positive microvolts),
+and `blocked` (string explanation, null when ready). Existing senders may omit them.
+Muse sends telemetry at 4 Hz; `ch` contains four channel standard deviations in
+TP9/AF7/AF8/TP10 order, or [] when unavailable, never raw waveform arrays.
+Core forwards it to boards and consoles, caches it for new consoles, and sends
+`connected: false` when the service socket closes. The web marks samples older
+than two seconds disconnected. Core ignores commands with stale telemetry,
+a blocked signal, no patient board, or event timestamps outside the past second, and reports every
+one of them as an INPUT_EVENT with `accepted: false`.
+
+A service disconnect or the last board disconnect pauses Muse (`muse_enabled: false`). A brief
+headband dropout does NOT: the gate above already refuses commands while the signal is disconnected,
+so pausing on every Bluetooth reconnect only flapped the switch and made the caregiver re-enable the
+input every few seconds. Muse pauses on headband loss only once it has lasted
+`MUSE_LOSS_GRACE_S` (10 s).
+The next session must be enabled again, and the detector requires 600 ms of
+released jaw before accepting a new gesture. Commands are never queued for replay
+across a lost connection. A short clench emits on release; a long one emits help
+at the configured duration and suppresses its short-clench release.
+
+B remains the keyboard/caregiver Back/Cancel stand-in while deliberate eye input
+is redesigned. No real blink triggers app navigation in this integration.

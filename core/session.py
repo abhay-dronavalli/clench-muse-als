@@ -118,8 +118,8 @@ HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
 HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
 HELP_START: dict[Lang, str] = {
-    "en": "Calling for help. Double blink to cancel.",
-    "es": "Pidiendo ayuda. Parpadea dos veces para cancelar.",
+    "en": "Calling for help. Press B to cancel.",
+    "es": "Pidiendo ayuda. Pulsa B para cancelar.",
 }
 OTHER_LABEL: dict[Lang, str] = {"en": "Other...", "es": "Otro..."}
 OTHER_WORD: dict[Lang, str] = {"en": "Other", "es": "Otro"}  # the breadcrumb (a pick is a click, no word)
@@ -293,6 +293,7 @@ class Session:
         self.speak_picks = profile.speak_picks if speak_picks is None else speak_picks
         self.learning = profile.learning if learning is None else learning
         self.long_clench_ms = profile.long_clench_ms
+        self.muse_enabled = False
         self.tile_switch_margin = profile.tile_switch_margin
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
         self.jev = jev  # None = no Jev: the AI prior is 0
@@ -378,6 +379,7 @@ class Session:
             speak_picks=self.speak_picks,
             learning=self.learning,
             long_clench_ms=self.long_clench_ms,
+            muse_enabled=self.muse_enabled,
             tile_switch_margin=self.tile_switch_margin,
         )
 
@@ -1154,6 +1156,8 @@ class Session:
             self.speak_picks = s.speak_picks
         if s.long_clench_ms is not None:
             self.long_clench_ms = s.long_clench_ms
+        if s.muse_enabled is not None:
+            self.muse_enabled = s.muse_enabled
         if s.tile_switch_margin is not None:
             self.tile_switch_margin = s.tile_switch_margin
         self.pointer.apply_settings(s)

@@ -78,6 +78,11 @@ class Signal(_Msg):
     type: Literal["SIGNAL"] = "SIGNAL"
     t: float
     ch: list[float]
+    connected: bool | None = None
+    profile: str | None = None
+    emg: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    threshold: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    blocked: str | None = None
 
 
 # --- Board -> Core (Webcam mode) / Sensor Service -> Core (Head tilt mode) ----
@@ -144,6 +149,7 @@ class Settings(_Msg):
     # Webcam / gaze pointing: how far (share of a tile's size) the point must be inside a new tile
     # before the highlight moves there, 0 to 0.2. Omit to keep it.
     tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
+    muse_enabled: bool | None = None  # session-only; startup is paused
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -240,6 +246,24 @@ class Metrics(_Msg):
     day1_scan_steps: int = Field(ge=0)
 
 
+InputSource = Literal["muse", "dev"]
+
+
+class InputEvent(_Msg):
+    """One raw input gesture and what the Core did with it. Sent to consoles and input clients only,
+    for the board's input log (press "/"): a caregiver checking whether the headband is picking up a
+    clench, a long clench or a double blink needs to see the gestures the Core REFUSED too, and why."""
+
+    type: Literal["INPUT_EVENT"] = "INPUT_EVENT"
+    t: float
+    kind: Literal["CLENCH", "LONG_CLENCH", "DOUBLE_BLINK"]
+    source: InputSource  # muse = headband sensor service, dev = keyboard stand-in
+    accepted: bool  # False = the Core ignored it (paused, stale, blocked, or no patient board)
+    reason: str | None = None  # why it was ignored; None when accepted
+    strength: float | None = Field(default=None, ge=0.0, le=1.0)  # CLENCH only
+    duration: float | None = Field(default=None, gt=0.0)  # LONG_CLENCH only
+
+
 JevStatus = Literal["off", "waiting", "answered"]
 
 
@@ -309,6 +333,7 @@ Message = Annotated[
         ActionResult,
         Metrics,
         ShortcutDebug,
+        InputEvent,
     ],
     Field(discriminator="type"),
 ]

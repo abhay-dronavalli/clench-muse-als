@@ -36,7 +36,8 @@ from pydantic import BaseModel, ValidationError
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
 from core.config import dry_run_enabled, load_env, prewarm_enabled
-from core.contracts import FaceOk, HeadRange, Lang, Message, Ready, Signal, Settings, parse_message
+from core.contracts import (Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
+                            Message, Ready, Signal, Settings, parse_message)
 from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
@@ -59,8 +60,14 @@ ACCEPTS: dict[Role, frozenset[str]] = {
     "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK"}),
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
-    "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'SIGNAL'}),
+    "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
 }
+
+# How long the headband may be missing before Muse input is paused. A Bluetooth reconnect takes a
+# few seconds and the command gate below already refuses anything that arrives meanwhile, so pausing
+# on the first dropped sample only flapped the switch between Paused and Ready every few seconds.
+MUSE_LOSS_GRACE_S = 10.0
+GESTURES = ('CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK')
 
 
 class SensorStart(BaseModel):
@@ -68,6 +75,42 @@ class SensorStart(BaseModel):
 
     profile: str = "taher"
     source: str = "muse"
+    blink: str = "auto"  # auto follows the profile's eye calibration
+
+
+def input_event(msg: Message, source: str, reason: str | None) -> InputEvent:
+    """Describe one gesture for the board's input log, accepted or not."""
+    return InputEvent(
+        t=getattr(msg, "t", time.time()),
+        kind=msg.type,  # type: ignore[arg-type]  (callers pass a gesture only)
+        source=source,  # type: ignore[arg-type]
+        accepted=reason is None,
+        reason=reason,
+        strength=msg.strength if isinstance(msg, Clench) else None,
+        duration=msg.duration if isinstance(msg, LongClench) else None,
+    )
+
+
+def refuse_reason(session: "Session", hub: Hub, state: object, msg: Message) -> str | None:
+    """Why the Core must ignore this headband gesture, or None to act on it.
+
+    The emergency path depends on none of this beyond the headband being alive: LONG_CLENCH is
+    refused for exactly the same reasons as any other gesture, never for an extra one.
+    """
+    signal: Signal = state.sensor_signal  # type: ignore[attr-defined]
+    if not session.muse_enabled:
+        return 'Muse input is paused'
+    if not hub.count('board'):
+        return 'no patient board is open'
+    if not signal.connected:
+        return 'the headband is not connected'
+    if signal.blocked:
+        return signal.blocked
+    if time.monotonic()-state.sensor_seen > 2:  # type: ignore[attr-defined]
+        return 'the signal is stale (no telemetry for 2 s)'
+    if not 0 <= time.time()-msg.t <= 1:
+        return 'the gesture is older than a second (clock skew?)'
+    return None
 
 
 def decode(text: str, role: Role) -> Message | None:
@@ -177,6 +220,7 @@ def create_app(
     app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False, blocked='Muse service not connected')
     app.state.sensor_seen = 0.0
     app.state.sensor_service = SensorService()
+    app.state.headband_lost_at: float | None = None
 
     async def serve(ws: WebSocket, role: Role) -> None:
         if role == 'sensor' and hub.count('sensor'):
@@ -210,15 +254,24 @@ def create_app(
                             app.state.sensor_signal = msg
                             app.state.sensor_seen = time.monotonic()
                             hub.broadcast(msg)
-                            if not msg.connected and session.muse_enabled:
-                                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+                            if msg.connected:
+                                app.state.headband_lost_at = None
+                            else:
+                                # Pause only once the loss lasts: a reconnect must not flap the switch.
+                                if app.state.headband_lost_at is None:
+                                    app.state.headband_lost_at = time.monotonic()
+                                lost_for = time.monotonic()-app.state.headband_lost_at
+                                if lost_for >= MUSE_LOSS_GRACE_S and session.muse_enabled:
+                                    log.info('headband missing for %.0f s: pausing Muse input', lost_for)
+                                    session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
                             continue
-                        signal = app.state.sensor_signal
-                        if (not session.muse_enabled or not hub.count('board') or not signal.connected
-                                or signal.blocked or time.monotonic()-app.state.sensor_seen > 2
-                                or not 0 <= time.time()-msg.t <= 1):
-                            log.info('Muse command suppressed: paused, stale, blocked or no patient board')
+                        reason = refuse_reason(session, hub, app.state, msg)
+                        hub.broadcast(input_event(msg, 'muse', reason))
+                        if reason is not None:
+                            log.info('Muse %s suppressed: %s', msg.type, reason)
                             continue
+                    if role == 'input' and msg.type in GESTURES:
+                        hub.broadcast(input_event(msg, 'dev', None))
                     if isinstance(msg, Ready):
                         view = session.current_view()
                         if view is not None:
@@ -296,7 +349,7 @@ def create_app(
         # not the web dev server's port that proxied the request here.
         url = f"ws://127.0.0.1:{server[1]}/ws/sensor"
         try:
-            return app.state.sensor_service.start(url, body.profile, body.source)
+            return app.state.sensor_service.start(url, body.profile, body.source, body.blink)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

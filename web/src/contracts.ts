@@ -74,6 +74,11 @@ export interface Signal {
   type: 'SIGNAL'
   t: number
   ch: number[]
+  connected?: boolean | null
+  profile?: string | null
+  emg?: number | null
+  threshold?: number | null
+  blocked?: string | null
 }
 
 // --- Board -> Core (Webcam mode) / Sensor Service -> Core (Head tilt mode) ---
@@ -147,6 +152,8 @@ export interface Settings {
    * before the highlight moves there, 0 to 0.2; omit to keep it
    */
   tile_switch_margin?: number
+  /** Session-only permission for the separate Muse input; defaults to paused. */
+  muse_enabled?: boolean
 }
 
 // --- Core -> Board ---
@@ -268,6 +275,29 @@ export interface Metrics {
   day1_scan_steps: number
 }
 
+export type InputSource = 'muse' | 'dev'
+
+/**
+ * One raw input gesture and what the Core did with it. Sent to consoles and input clients only,
+ * for the board's input log (press "/"): a caregiver checking whether the headband is picking up a
+ * clench, a long clench or a double blink needs to see the gestures the Core REFUSED too, and why.
+ */
+export interface InputEvent {
+  type: 'INPUT_EVENT'
+  t: number
+  kind: 'CLENCH' | 'LONG_CLENCH' | 'DOUBLE_BLINK'
+  /** muse = headband sensor service, dev = keyboard stand-in */
+  source: InputSource
+  /** false = the Core ignored it (paused, stale, blocked, or no patient board) */
+  accepted: boolean
+  /** why it was ignored; null when accepted */
+  reason: string | null
+  /** CLENCH only, 0..1 */
+  strength: number | null
+  /** LONG_CLENCH only, seconds */
+  duration: number | null
+}
+
 export type JevStatus = 'off' | 'waiting' | 'answered'
 
 /**
@@ -314,5 +344,6 @@ export type Message =
   | ActionResult
   | Metrics
   | ShortcutDebug
+  | InputEvent
 
 export type MessageType = Message['type']

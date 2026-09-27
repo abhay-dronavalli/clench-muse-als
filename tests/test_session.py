@@ -248,7 +248,7 @@ def test_help_countdown_fires_call_and_message(session, sched, sent):
         ActionResult(action="send_message", ok=True, detail="dry run", contact="Maria"),
     ]
     assert spoken(sent) == []
-    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en"), ("Calling Maria", "en")]
+    assert said(sent, "system") == [("Calling for help. Press B to cancel.", "en"), ("Calling Maria", "en")]
     # A system line never holds the session: straight home.
     assert session.state is SessionState.SCANNING
     assert last_screen(sent).path == []
@@ -285,7 +285,7 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
     assert message.url.host == "api.telegram.org"
     assert json.loads(message.content) == {"chat_id": "42", "text": "Luis necesita ayuda ahora"}
     assert said(sent, "system") == [
-        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
+        ("Pidiendo ayuda. Pulsa B para cancelar.", "es"),
         ("Llamando a María", "es"),
     ]
     assert [(r.action, r.ok, r.contact) for r in results(sent)] == [
@@ -306,7 +306,7 @@ def test_double_blink_cancels_help_back_to_scanning(session, sched, sent):
     assert (screen.screen, screen.path, screen.highlight) == ("menu", ["I need"], 2)  # where it was
     sched.advance(30)
     assert results(sent) == [] and spoken(sent) == []
-    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en")]  # no "Calling Maria"
+    assert said(sent, "system") == [("Calling for help. Press B to cancel.", "en")]  # no "Calling Maria"
     assert countdowns(sent) == [5, 4, 3]
 
 
@@ -551,8 +551,8 @@ def test_voice_lines_cover_labels_system_lines_and_phrases(menu, profile):
         ("A lot", "en"),
         ("My back hurts a lot. Can you help me turn over?", "en"),
         ("Mija, estoy bien, llámame a las seis.", "es"),
-        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
-        ("Calling for help. Double blink to cancel.", "en"),
+        ("Pidiendo ayuda. Pulsa B para cancelar.", "es"),
+        ("Calling for help. Press B to cancel.", "en"),
         ("Llamando a María", "es"),
         ("Calling Maria", "en"),
     ]:

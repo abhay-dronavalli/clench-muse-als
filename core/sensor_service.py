@@ -29,6 +29,7 @@ log = logging.getLogger("clench.sensor_service")
 PROFILE_NAME = re.compile(r"[A-Za-z0-9_-]{1,32}")
 PROFILE_DIR = Path(__file__).resolve().parent.parent / "test"
 SOURCES = ("muse", "demo")
+BLINK_MODES = ("auto", "on", "off")
 LOG_LINES = 120
 
 
@@ -50,6 +51,7 @@ class SensorService:
         self.proc: subprocess.Popen[str] | None = None
         self.profile: str | None = None
         self.source: str | None = None
+        self.blink: str = "auto"
         self.lines: deque[str] = deque(maxlen=LOG_LINES)
         self.lock = threading.Lock()
 
@@ -67,6 +69,7 @@ class SensorService:
                 "pid": proc.pid if proc is not None and exit_code is None else None,
                 "profile": self.profile,
                 "source": self.source,
+                "blink": self.blink,
                 "exit_code": exit_code,
                 "profiles": available_profiles(),
                 "log": list(self.lines),
@@ -74,10 +77,13 @@ class SensorService:
 
     # --- control -------------------------------------------------------------
 
-    def start(self, url: str, profile: str, source: str = "muse") -> dict[str, object]:
+    def start(self, url: str, profile: str, source: str = "muse",
+              blink: str = "auto") -> dict[str, object]:
         """Launch the Sensor Service. Replaces a running one so the headband has one owner."""
         if source not in SOURCES:
             raise ValueError(f"source must be one of {', '.join(SOURCES)}")
+        if blink not in BLINK_MODES:
+            raise ValueError(f"blink must be one of {', '.join(BLINK_MODES)}")
         # A demo run needs no calibration file; a real headband must not guess a threshold.
         if source == "muse":
             if not PROFILE_NAME.fullmatch(profile):
@@ -85,7 +91,8 @@ class SensorService:
             if not (PROFILE_DIR / f"calibration.{profile}.json").is_file():
                 raise ValueError(f"no calibration profile named {profile!r}")
         self.stop()
-        args = [self.python, "-m", "sensor.main", "--source", source, "--url", url]
+        args = [self.python, "-m", "sensor.main", "--source", source, "--url", url,
+                "--blink", blink]
         if source == "muse":
             args += ["--profile", profile]
         with self.lock:
@@ -105,7 +112,7 @@ class SensorService:
             except OSError as exc:
                 self.lines.append(f"could not start the Sensor Service: {exc}")
                 raise ValueError(f"could not start the Sensor Service: {exc}") from exc
-            self.profile, self.source = profile, source
+            self.profile, self.source, self.blink = profile, source, blink
             threading.Thread(target=self._drain, args=(self.proc,), daemon=True).start()
         log.info("sensor service started: pid %d, profile %s, source %s", self.proc.pid, profile, source)
         return self.status()
