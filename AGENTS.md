@@ -352,8 +352,31 @@ outline encloses the group's actual controls; selecting it leaves one yellow tar
 The compact control dock moves to the top when it would cover a selected bottom control. Browser menu
 is always the last choice. Clench a band, then clench a target. Eight choices fit on a target page
 (seven targets plus More when needed). Double blink returns to bands. Browser menu contains
-Scroll down/up, history Back, Home and Exit. Text fields currently show "Search options coming
-next" and Cancel. Hold is always help, never Back.
+Scroll down/up, history Back, Home and Exit. Picking a search field opens up to five queries,
+Other / Otro, Keyboard / Teclado and Cancel. Picking a query fills that field and presses Enter;
+this pick is the confirmation to search. Back cancels the panel. Hold is always help, never Back.
+
+Search suggestions use Gemini through the existing provider layer (4-second timeout, 10-minute
+cache), with immediate bilingual defaults in `data/computer_suggestions.yaml` when unavailable.
+Navigation prefetches suggestions on recognized search sites, and Other offers three pages before
+looping. Late AI replies never replace the choices currently being scanned. Queries are at most
+40 characters; URLs and the configured blocked action words are rejected. Generic comments,
+chat editors and other non-search fields are not submitted by smart search.
+
+The last-resort keyboard scans a row, then a letter: a-z, ñ, Space, Delete and Done. Up to three
+local word completions appear above the rows. Done submits the draft; Back returns to the search
+panel and keeps the draft until that panel is cancelled. Help pauses and restores the panel or
+keyboard. EN/ES changes rebuild an idle search panel in the selected language.
+
+Confirmed searches live in SQLite's `computer_searches` table, separately from spoken messages.
+The existing rank score uses search frequency, recency and local hour within each site/language.
+Day 1 ignores history for ranking and AI; confirmed searches are still saved for later learning.
+The demo seed now includes simulated evening YouTube searches in both languages. `--reset` also
+clears search history; never run it on the shared database without authorization.
+
+Foreground Chromium still uses scanning. Backtick/Dev panel access, head/webcam and gaze pointing,
+and the broader grouping/UI redesign are deferred follow-ups recorded in `docs/decisions.md`.
+See [computer search checks](docs/computer-search.md) for the manual flow and isolated demo seed.
 
 Space, hold Space and B work in both the board dev panel and the foreground managed browser.
 The browser keyboard listener runs in a Chromium isolated world so website scripts cannot forge

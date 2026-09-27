@@ -267,13 +267,18 @@ CHUNK REPORT
 - Problems or warnings: <anything broken, skipped, or risky>
 - Suggested next step: <one line>
 ```
-## Computer mode (part 1)
+## Computer mode and smart search
 
 Install once with `uv sync` and `uv run playwright install chromium`. Start/unlock the board's
 audio, then pick **Computer / Computadora** on Home. Chromium opens with the local launcher.
 Clench a highlighted horizontal band, then a target. B/double blink returns to bands. Browser
 menu provides scrolling, history Back, Home and Exit. Hold Space/long clench always calls for
-help with the normal five-second cancel window. Text entry is a placeholder until part 2.
+help with the normal five-second cancel window. Pick a search box to open suggested queries;
+pick one to fill it and press Enter. Other cycles three pages; Keyboard opens row-column entry
+with local word completions. B cancels search or returns from the keyboard to suggestions.
+Queries use Gemini when ready, or the bilingual lists in `data/computer_suggestions.yaml`.
+Confirmed searches teach site/language-specific history and time-of-day ranking. Day 1 disables
+use of that history. See [computer search checks](computer-search.md) for a walkthrough.
 
 The persistent profile is `data/browser-profile/`; keep it private and use one owner at a time.
 For a caregiver's one-time Spotify login, Exit computer mode, run

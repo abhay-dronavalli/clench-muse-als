@@ -761,3 +761,15 @@ redesign now; the immediate request is to retain this feedback for work after Pa
 - Overlay updates are serialized and coalesced to the newest state so rapid edits or scans cannot
   leave a queue of stale highlights. The local Chromium test waits for the rendered frame before
   capturing the suggestion and keyboard panels.
+
+## Computer search completion (2026-09-27)
+
+- AGENTS.md and the runbook now describe search, setup, keyboard use, history and current limits;
+  docs/computer-search.md includes the no-headband walkthrough and isolated seed command.
+- Validation: 508 Python tests passed with the existing real-network test skipped by default;
+  92 web tests, the production build, lint and the Python contract import passed. Local Chromium
+  verified scan-to-field, suggestion fill/Enter, keyboard completion/Done and Cancel. Rendered
+  panel screenshots were inspected. A different-model review found no remaining blocker.
+- No Part 2 core/board event format changed. No shared patient database, .env or protected demo
+  process was modified. Foreground Dev panel, webcam/gaze input and general UI redesign remain
+  explicitly deferred until after this part.
