@@ -119,7 +119,7 @@ The core loads `data/menu.yaml`, `data/contacts.yaml` and `data/profile.yaml` at
 to start on a bad file. A menu level holds at most 5 items; the core adds "Other..." as the sixth tile
 on every level. `--reload` only watches `.py` files; restart the core after editing the YAML.
 Every pick, confirmed send, cancelled confirm and help alert is written to `data/clench.db` (delete
-the file to start fresh). The board starts in the profile's language (Spanish for Luis).
+the file to start fresh). The board starts in the profile's language (`lang` in `data/profile.yaml`, English by default).
 
 ### Voice (ElevenLabs, optional)
 
@@ -229,9 +229,10 @@ Speak picks on/off toggle (all showing the values the Core reports in SETTINGS) 
 
 1. Start the core and the web app (two terminals, commands above). Open http://localhost:5173/ in Chrome or Edge.
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
-   green, and the home board shows six Spanish tiles (Sugerencias, Necesito, Personas, C├│mo me
-   siento, Cuarto and the dashed "Otro...") with the highlight moving about once a second.
-3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
+   green, and the home board shows six English tiles (Suggested, I need, People, How I feel, Room
+   and the dashed "Other...") with the highlight moving about once a second.
+3. Press backtick and click EN/ES twice in the dev panel: the tiles switch to Spanish and back to
+   English. Press backtick again.
 4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. Each tile's
    label is said softly as you pick it ("I need", "Pain", ...). The breadcrumb reads Home ΓÇ║ I need ΓÇ║
    Pain ΓÇ║ Back. With no Gemini key the "Say this?" screen then shows "My back hurts a lot. Can you

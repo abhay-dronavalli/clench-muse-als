@@ -685,3 +685,10 @@ Muse gestures to control all of Windows, not only the board tab.
   30 fps) jitter at rest drops from 13 px (One Euro alone) to 7 px, and a 600 px jump arrives 90% in
   about 230 ms instead of 70 ms. Flags: --sg-window-ms (0 = off), --sg-order, --sg-lag-ms,
   --no-one-euro.
+
+## 21. English by default (Taher, 2026-09-27)
+
+`data/profile.yaml` `lang` is now `en`: the board, the Core's system lines, the AI's sentences and the
+desktop agent's overlay start in English. Spanish stays one tap away (dev panel EN/ES, SETTINGS
+`lang`). `test_profile_loads` reads the file, so it expects `en`; the Spanish help-alert test now asks
+for Spanish explicitly instead of relying on the profile.

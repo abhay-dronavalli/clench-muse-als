@@ -107,7 +107,7 @@ The core loads `data/menu.yaml`, `data/contacts.yaml`, and `data/profile.yaml` a
 to start on a bad file. A menu level holds at most 5 items; the core adds "Other..." as the sixth
 tile on every level. `--reload` only watches `.py` files; restart the core after editing the YAML.
 Every pick, confirmed send, cancelled confirm, and help alert is written to `data/clench.db` (delete
-the file to start fresh). The board starts in the profile's language (Spanish for Luis).
+the file to start fresh). The board starts in the profile's language (`lang` in `data/profile.yaml`, English by default).
 
 Without internet at `npm ci` time, run `npm --prefix web run assets` later; until then the board
 says face tracking could not start and Auto scans.
@@ -368,12 +368,13 @@ those processes.
 1. Start from Day 1 (`uv run python scripts/seed_demo.py --reset`) so the menu is in `menu.yaml`
    order. Start the core and the web app. Open the board in Chrome or Edge.
 2. Click "Click to start". The status dot (top right) and the "Dev" pill dot (bottom left) turn
-   green, and the home board shows six Spanish tiles (Sugerencias, Necesito, Personas, Cómo me
-   siento, Cuarto and the dashed "Otro...") with the highlight on Sugerencias (the click sends RESET),
+   green, and the home board shows six English tiles (Suggested, I need, People, How I feel, Room
+   and the dashed "Other...") with the highlight on Suggested (the click sends RESET),
    then moving about once a second. The
    browser asks for the camera (Auto mode): for steps 3 to 10 press backtick and click Scan, so the
    highlight keeps scanning whoever sits in front of the laptop.
-3. Press backtick and click EN/ES in the dev panel: the tiles switch to English. Press backtick again.
+3. Press backtick and click EN/ES twice in the dev panel: the tiles switch to Spanish and back to
+   English. Press backtick again.
 4. When "I need" is highlighted press Space, then do the same for Pain, Back and A lot. Each tile's
    label is said softly as you pick it. The breadcrumb reads Home › I need › Pain › Back. With no
    Gemini key the "Say this?" screen then shows "My back hurts a lot. Can you help me turn over?".
@@ -398,8 +399,8 @@ those processes.
 10. Learning: run `uv run python scripts/seed_demo.py --load` (the core keeps running). Open the
     dev panel and click Day 1 mode to On: the board goes Home in `menu.yaml` order. Text María as
     in step 6: the Last message line reads "Took 5 clenches, 6 s waiting" with a Gemini key (4
-    clenches, 3 s without). Click Day 1 mode to Off and pick Suggested (Sugerencias): the confirm
-    screen shows "Mija, estoy bien, llámame a las seis." at once; confirm: "Took 2 clenches, 0 s
+    clenches, 3 s without). Click Day 1 mode to Off and pick Suggested: the confirm
+    screen shows "Honey, I'm okay, call me at six." at once; confirm: "Took 2 clenches, 0 s
     waiting (Day 1: 5 clenches, 6 s)". Pick Suggested again and press B, then Space, on the confirm screen: the
     full Suggested list opens, the María text first.
 11. Webcam: in the dev panel click Auto and allow the camera. The red "Cámara encendida" light
