@@ -752,3 +752,9 @@ for Spanish explicitly instead of relying on the profile.
   at once, and lost eyes clear it at once. With the hold, the clench look-back (250 ms) never reaches
   past the moment the current highlight appeared, the fix agreed for the board's gaze (decisions 18),
   so a quick clench on a just-shown highlight picks it, not the one before.
+- **Calibration check:** after a saved calibration loads, one dot on a random point of the
+  calibration area's 3 x 3 grid (not the centre); 0.8 s to settle, then 1.5 s of samples; the median
+  gaze must land within 15 mm (the snap radius) with at least 10 samples, as on the board
+  (gazeCheck.ts). A miss only says "press F7"; it never forces a recalibration. A double blink skips it.
+- **Launcher:** `scripts/start_desktop.ps1` checks the SDK, the key's name in `.env`, the Core's
+  health and whether real sends are on, then starts the agent. Arguments after `--` go to the agent.

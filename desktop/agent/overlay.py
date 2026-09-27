@@ -89,7 +89,7 @@ class Overlay(QWidget):
         s = ctl.screen
         if a.help_countdown is not None:
             self.paint_help(p, a.help_countdown, lang)
-        elif a.calib.running:
+        elif a.dots is not None:
             self.paint_calibration(p, lang)
         elif ctl.active:
             self.paint_desktop(p, lang, mm)
@@ -120,17 +120,18 @@ class Overlay(QWidget):
         p.setPen(GRAY)
         p.setFont(self._font(4 * mm))
         p.drawText(QRectF(s.left, s.bottom - 16 * mm, s.width, 8 * mm), Qt.AlignmentFlag.AlignCenter, hint)
-        if a.calib.point is None:
+        dots = a.dots
+        if dots is None or dots.point is None:
             return
-        x, y = a.calib.point
+        x, y = dots.point
         c = QPointF(x, y)
-        if a.calib.collecting:
+        if dots.collecting:
             p.setPen(QPen(GREEN, 1.6 * mm))
             p.setBrush(Qt.BrushStyle.NoBrush)
             r = 8 * mm
-            p.drawArc(QRectF(x - r, y - r, 2 * r, 2 * r), 90 * 16, -int(360 * 16 * a.calib.progress))
+            p.drawArc(QRectF(x - r, y - r, 2 * r, 2 * r), 90 * 16, -int(360 * 16 * dots.progress))
         else:  # settling: a ring closing in on the dot
-            left = max(0.0, 1 - (time.time() - a.calib_point_at))
+            left = max(0.0, 1 - (time.time() - a.dot_since))
             r = (3 + 9 * left) * mm
             p.setPen(QPen(SKY, 0.8 * mm))
             p.setBrush(Qt.BrushStyle.NoBrush)

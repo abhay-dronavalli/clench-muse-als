@@ -155,3 +155,40 @@ def test_the_board_gets_the_gaze_and_other_web_pages_are_refused():
         assert json.loads(ws.recv(2))["x"] == 100.0
     with pytest.raises(InvalidStatus):
         connect(url, origin="https://some-website.example")
+
+
+# --- the one-dot check of a loaded calibration ----------------------------------------------------
+
+from desktop.agent.calibration import CHECK_SAMPLE_S, CHECK_SETTLE_S, Check, check_points  # noqa: E402
+
+
+def run_check(gaze, dot=(100.0, 100.0)):
+    c = Check(dot, LAPTOP.px_per_mm, now=0.0)
+    t, result = 0.0, None
+    while result is None and t < 5:
+        result = c.feed(t, gaze(t))
+        t += 1 / 30
+    return c, result
+
+
+def test_a_check_passes_when_the_eyes_land_on_the_dot():
+    c, ok = run_check(lambda t: (110.0, 95.0))  # 11 px off: well inside 15 mm
+    assert ok is True and not c.running
+    assert len(c.samples) >= CHECK_SAMPLE_S * 30 - 2  # only after the settle
+
+
+def test_a_check_fails_when_they_land_elsewhere_or_are_not_seen():
+    assert run_check(lambda t: (400.0, 100.0))[1] is False  # 300 px off
+    assert run_check(lambda t: None)[1] is False  # eyes never seen
+
+
+def test_the_eyes_settling_on_the_dot_do_not_count():
+    # far away while settling, then on the dot: passes
+    assert run_check(lambda t: (900.0, 900.0) if t < CHECK_SETTLE_S else (100.0, 100.0))[1] is True
+
+
+def test_check_dots_avoid_the_centre_and_stay_in_the_calibration_area():
+    pts = check_points(LAPTOP)
+    left, top, right, bottom = calibration.area(LAPTOP)
+    assert len(pts) == 8 and (960.0, 540.0) not in pts
+    assert all(left <= x <= right and top <= y <= bottom for x, y in pts)

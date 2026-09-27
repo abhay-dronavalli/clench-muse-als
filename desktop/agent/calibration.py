@@ -115,3 +115,63 @@ class Flow:
         self.running, self.point, self.collecting = False, None, False
         self._token += 1
         self.on_end(how)
+
+
+CHECK_SETTLE_S = 0.8  # the board's gazeCheck.ts: the eyes land and steady...
+CHECK_SAMPLE_S = 1.5  # ...then this long of samples
+CHECK_MIN_SAMPLES = 10
+CHECK_RADIUS_MM = 15.0  # the median gaze must land this close to the dot (the snap radius)
+
+
+def check_points(display: Display) -> list[tuple[float, float]]:
+    """Where the check dot may go: the calibration area's 3 x 3 grid without its centre (the centre
+    is the easiest place to be right by luck)."""
+    left, top, right, bottom = area(display)
+    xs = (left, (left + right) / 2, right)
+    ys = (top, (top + bottom) / 2, bottom)
+    return [(x, y) for y in ys for x in xs if (x, y) != (xs[1], ys[1])]
+
+
+class Check:
+    """One dot to check a loaded calibration, as the board and the tablet do (decisions 18, 19).
+    Shows like a calibration dot (`point`, `collecting`, `progress`), so the overlay draws either."""
+
+    def __init__(self, point: tuple[float, float], px_per_mm: float, now: float) -> None:
+        self.point: tuple[float, float] | None = point
+        self.radius = CHECK_RADIUS_MM * px_per_mm
+        self.started = now
+        self.samples: list[tuple[float, float]] = []
+        self.running = True
+        self.collecting = False
+        self.progress = 0.0
+        self.passed: bool | None = None
+
+    def feed(self, now: float, gaze: tuple[float, float] | None) -> bool | None:
+        """Every frame. Returns the verdict (True = the calibration still holds) once, then None."""
+        if not self.running:
+            return None
+        elapsed = now - self.started
+        self.collecting = elapsed >= CHECK_SETTLE_S
+        if not self.collecting:
+            return None
+        if gaze is not None:
+            self.samples.append(gaze)
+        self.progress = min(1.0, (elapsed - CHECK_SETTLE_S) / CHECK_SAMPLE_S)
+        if self.progress < 1.0:
+            return None
+        self.running = False
+        self.passed = verdict(self.samples, self.point or (0.0, 0.0), self.radius)
+        return self.passed
+
+    def cancel(self) -> None:
+        self.running = False
+
+
+def verdict(samples: list[tuple[float, float]], dot: tuple[float, float], radius: float) -> bool:
+    """The median gaze lands within `radius` of the dot, with enough samples to say so."""
+    if len(samples) < CHECK_MIN_SAMPLES:
+        return False
+    xs = sorted(x for x, _ in samples)
+    ys = sorted(y for _, y in samples)
+    mx, my = xs[len(xs) // 2], ys[len(ys) // 2]
+    return ((mx - dot[0]) ** 2 + (my - dot[1]) ** 2) ** 0.5 <= radius

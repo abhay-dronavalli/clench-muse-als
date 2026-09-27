@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import logging
 import queue
+import random
 import sys
 import time
 from typing import Any
@@ -74,6 +75,7 @@ class Agent:
         self.eyedid_ready = False
         self.calib = calibration.Flow(self.source.command, self._later, self._calibration_ended)
         self.calib_point_at = 0.0
+        self.check: calibration.Check | None = None  # the one-dot check of a loaded calibration
         self.uia = UiaFinder(lambda kind, c: self.inbox.put(("uia", (kind, c))))
         self.bridge = GazeBridge((d.width_px, d.height_px), args.bridge_port, args.bridge_origin)
         self._bridged_at = float("-inf")  # the last gaze sample sent to the board
@@ -121,13 +123,20 @@ class Agent:
         self.stand_in.tick(now)
         fresh = self.gaze.fresh(now)
         self.gaze_point = self.gaze.point if fresh else None
+        if self.check is not None and self.check.running:
+            passed = self.check.feed(now, self.gaze_point)
+            if passed is not None:
+                self.ctl.calibration_ended()
+                self.ctl.toast = (("Eye calibration checked: good" if passed
+                                   else "Eye calibration looks off here: press F7 to recalibrate"), now + (4 if passed else 8))
+                log.info("calibration check %s", "passed" if passed else "failed")
         self._run(self.ctl.tick(now, self.gaze.point, fresh))
         self._ask_uia(now)
         if self.gaze.last_sample_at > self._bridged_at:
             self._bridged_at = self.gaze.last_sample_at
-            state = "CALIBRATING" if self.calib.running else self.gaze.state
+            state = "CALIBRATING" if self.dots is not None else self.gaze.state
             self.bridge.publish(gaze_message(self.gaze.last_sample_at, self.gaze_point,
-                                             fresh and not self.calib.running, state))
+                                             fresh and self.dots is None, state))
         if now - self._top_at > 2.0:
             self._top_at = now
             self.overlay.keep_on_top()  # another topmost window may have come up over us
@@ -190,6 +199,7 @@ class Agent:
                 if data:
                     self.source.command({"cmd": "set_calibration", "data": data})
                     self.ctl.toast = (f"Eye calibration loaded ({self.args.person})", now + 4)
+                    self._later(1.5, self._start_check)  # is it still right from this seat?
                 else:
                     self.ctl.toast = ("Eyes not calibrated yet: press F7", now + 8)
             elif state == "error":
@@ -236,7 +246,11 @@ class Agent:
                 elif isinstance(e, Calibrate):
                     self._start_calibration()
                 elif isinstance(e, CancelCalibration):
-                    self.calib.cancel()
+                    if self.check is not None and self.check.running:
+                        self.check.cancel()
+                        self.ctl.toast = ("Calibration check skipped", time.time() + 3)
+                    else:
+                        self.calib.cancel()
                 elif isinstance(e, Compose):
                     self._compose()
             except OSError as err:
@@ -297,7 +311,30 @@ class Agent:
 
         QTimer.singleShot(200, type_now)  # let the window take the focus back first
 
+    @property
+    def dots(self) -> "calibration.Flow | calibration.Check | None":
+        """The calibration or the check on screen, if any (the overlay draws either the same way)."""
+        if self.calib.running:
+            return self.calib
+        if self.check is not None and self.check.running:
+            return self.check
+        return None
+
+    @property
+    def dot_since(self) -> float:
+        """When the dot on screen appeared (its settle ring closes from then)."""
+        return self.calib_point_at if self.calib.running else self.check.started if self.check else 0.0
+
+    def _start_check(self) -> None:
+        if self.dots is not None or self.ctl.mode == "calibrating" or not self.eyedid_ready:
+            return
+        point = random.choice(calibration.check_points(self.display))
+        self.check = calibration.Check(point, self.display.px_per_mm, time.time())
+        self.ctl.hold_still()
+
     def _start_calibration(self) -> None:
+        if self.check is not None and self.check.running:
+            self.check.cancel()  # F7 during the check: calibrate instead
         if self.source_kind != "eyedid" or not self.eyedid_ready:
             self.ctl.calibration_ended()
             self.ctl.toast = ("Calibration needs the eye tracker running", time.time() + 4)

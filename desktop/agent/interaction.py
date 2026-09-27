@@ -280,6 +280,11 @@ class Controller:
         self._to("calibrating")
         return [Calibrate()]
 
+    def hold_still(self) -> None:
+        """The one-dot calibration check: like calibrating, nothing happens until it ends (a double
+        blink skips it)."""
+        self._to("calibrating")
+
     def calibration_ended(self) -> None:
         if self.mode == "calibrating":
             self._to("pointing")

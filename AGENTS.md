@@ -32,7 +32,7 @@ Human setup and service details also live in `docs/RUNBOOK.md`.
 | `data/` | `menu.yaml`, `contacts.yaml`, `profile.yaml`, `seed_demo_week.json`, `recordings/` (CSVs git-ignored), `clench.db` and `audio_cache/` (git-ignored). |
 | `docs/` | The PRD and project docs: `contracts.md` (event formats), `decisions.md` (running log of every change from the PRD), `RUNBOOK.md` (human setup). |
 | `scripts/` | One-off tools. Every script only prints what it would do unless you pass `--send`. |
-| `desktop/` | Desktop control for all of Windows (`docs/desktop-control.md`): `eyedid/` runs the Eyedid Windows SDK through its C API (ctypes) in a worker process; `agent/` is the overlay (PySide6), snapping (UI Automation), zoom, clicks (SendInput), the F8/F9 keyboard stand-in and the `/ws/desktop` link. Run: `uv run --extra desktop python -m desktop.agent`. |
+| `desktop/` | Desktop control for all of Windows (`docs/desktop-control.md`): `eyedid/` runs the Eyedid Windows SDK through its C API (ctypes) in a worker process; `agent/` is the overlay (PySide6), snapping (UI Automation), zoom, clicks (SendInput), the F8/F9 keyboard stand-in and the `/ws/desktop` link. Run: `.\scripts\start_desktop.ps1` (`-Mouse` without a tracker). |
 | `tests/` | pytest tests for `core/`, `sensor/` and the pure parts of `desktop/`. |
 
 Components talk over WebSocket with small JSON events: `/ws/board`, `/ws/console`, `/ws/input`,

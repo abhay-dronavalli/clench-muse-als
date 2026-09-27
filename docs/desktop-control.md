@@ -1,7 +1,7 @@
 # Desktop control: eyes and jaw for all of Windows
 
-Status: chunks 1 to 4 built (branch `desktop-control`), chunks 5 and 6 to do. Decision log:
-`docs/decisions.md` section 20.
+Status: chunks 1 to 6 built (branch `desktop-control`); a gaze keyboard and packaging are next.
+Decision log: `docs/decisions.md` sections 20, 22 and 23 (21: English by default).
 
 The Eyedid gaze and the Muse gestures used to work only inside the board tab. Now they also drive
 all of Windows: the eyes point, a clench clicks, and a double blink then a clench goes back. The
@@ -13,16 +13,24 @@ and the rest of Windows with the same gestures.
 ```powershell
 uv sync --extra desktop --extra sensor        # once: PySide6, opencv-python, comtypes, websockets
 uv run uvicorn core.main:app --port 8000      # the Core (the demo machine already runs it)
-uv run --extra desktop python -m desktop.agent --person taher                  # Eyedid gaze
-uv run --extra desktop python -m desktop.agent --gaze mouse                    # the mouse stands in for the eyes
-uv run --extra desktop python -m desktop.agent --url ws://127.0.0.1:8001/ws/desktop   # a test Core
+.\scripts\start_desktop.ps1 -Person taher      # checks the setup, then starts the agent (Eyedid gaze)
+.\scripts\start_desktop.ps1 -Mouse             # the mouse stands in for the eyes
+.\scripts\start_desktop.ps1 -Url ws://127.0.0.1:8001/ws/desktop -- --sg-window-ms 600   # a test Core, agent flags
 ```
 
+The launcher runs `uv run --extra desktop python -m desktop.agent ...` (`--help` lists every flag).
 On start the agent asks the Core to send gestures to the desktop (`input_target: desktop`). The
 first run with Eyedid has no calibration: press **F7** (or open the Clench tab > Calibrate eyes) and
 follow the five dots. The calibration is saved per person and per screen in
-`data/desktop/eyedid.<person>.json` and loaded at the next start. Recalibrate after moving the laptop
-or the chair. Close the agent with Ctrl+C in its terminal.
+`data/desktop/eyedid.<person>.json` and loaded at the next start, then checked with one dot: look
+at it until its ring fills; if the gaze lands off it the agent says to press F7 (a double blink
+skips the check). Recalibrate after moving the laptop or the chair. Ctrl+C quits.
+
+The board and the agent together: open the board (http://localhost:5173, full screen with F11 for
+the best gaze on it) while the agent runs. The board takes its gaze from the agent (Eyedid web and
+the head camera stay off; the dev panel says "agent connected"). **Room > Computer** hands the
+gestures to the desktop (the board says "Using the computer"); the Clench tab's **Clench board**, or
+Ctrl+F8, hands them back.
 
 | Key (global, swallowed) | Does |
 |---|---|
@@ -87,12 +95,23 @@ same, tested against its formula.
 The calibration dots sit at the centre and 14 mm in from each corner (the SDK puts them on the
 corners of the area it is given, so the agent insets that area).
 
-The **Clench tab** sits on the right edge. Looking at it and clenching opens the **palette**: six
-big tiles in the middle of the screen (Right click, Double click, Clench board, Calibrate eyes,
-Pause / Resume clicks, Close), the nearest tile highlighted as on the board. Right click and Double
-click arm the next click only. Clench board switches the input target and brings the board
-window forward. A palette in the middle of the screen replaced the planned dock column: a column on
-the edge would cover scrollbars of maximized windows, and big centered tiles are easier to hit.
+The **Clench tab** sits on the right edge. Looking at it and clenching opens the **palette**: nine
+big tiles in the middle of the screen, the nearest one highlighted as on the board. A palette in the
+middle replaced the planned dock column: a column on the edge would cover scrollbars of maximized
+windows, and big centered tiles are easier to hit.
+
+| Tile | Does |
+|---|---|
+| Right click, Double click | the next clench clicks that way, once |
+| Scroll | the next clench puts an Up / Down control on that spot; looking into a zone scrolls the window under it (faster past the zone); a clench or double blink ends it |
+| Drag | the next clench presses there; the pointer follows the eyes; a clench drops, a double blink cancels (Esc, release where it started). Help, a switch to the board or quitting always let go |
+| Type | click into a text box first. The board comes forward to compose a sentence (menus, AI, as usual); its confirm screen asks "Type this?", and the confirming clench types it into that box and hands the gestures back. Nothing is typed without that clench |
+| Clench board | the gestures go to the board, and its window comes forward |
+| Calibrate eyes, Pause / Resume clicks, Close | as named |
+
+The highlight holds: it moves to another element only after 200 ms on it, so jitter at the edge of
+two buttons does not flicker it; a clench never looks back past the moment the current highlight
+appeared.
 
 Snap rule: with d1 <= d2 the distances from the gaze to the two nearest elements, the nearest is
 sure when d2 - d1 >= 8 mm and d2 >= 1.5 x d1 (webcam gaze is off by 1 to 2 cm, more than the gap
@@ -129,13 +148,14 @@ is the input target.
 4. **Eyedid** (done). The ctypes worker, supervised with restarts (it gives up after three failed
    starts, e.g. a refused key); calibration with five dots drawn by the overlay, saved per person
    and screen.
-5. **Board integration** (to do). One camera owner: while the agent runs, the board takes gaze from
-   the agent instead of starting Eyedid web (the rule `ClenchNative` follows on the tablet). A "Use
-   the computer" item in Room and a dev panel toggle; a board banner while desktop mode is on. New
-   action `type_text`: compose with the AI, confirm, and the agent types it into the window that
-   had focus. A calibration check dot, as on the board.
-6. **Scroll, drag, keyboard, packaging** (to do). Scroll and drag from the palette. A large-key
-   gaze keyboard with word prediction. A `scripts/start_desktop.ps1` launcher, and later PyInstaller.
+5. **Board integration** (done). One camera owner (the board takes the agent's gaze over
+   ws://127.0.0.1:8766, board origins only), Room > Computer, the "Using the computer" banner, the
+   dev panel's Input switch, Type (COMPOSE / "Type this?" / TYPE_TEXT), the one-dot calibration
+   check, English by default.
+6. **Scroll, drag, launcher** (done). Scroll and drag from the palette, the 200 ms highlight hold,
+   `scripts/start_desktop.ps1`.
+7. **Next.** A large-key gaze keyboard for text the board's phrases cannot make (addresses,
+   passwords are out of scope), and a packaged build (PyInstaller) so the laptop needs no uv.
 
 ## The Eyedid SDK
 
