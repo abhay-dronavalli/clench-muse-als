@@ -15,6 +15,8 @@ While it runs:  X = the rep I just cued did NOT happen (drops that label)
                 Q = stop early and keep what has been recorded
 
 Outputs in recordings/, all sharing one <stamp>_<label> prefix:
+    *_live_*.csv       raw waveforms streamed to disk DURING the run (backup)
+    *_progress.json    cue progress, saved as actions happen (Unix timestamps)
     *_default.csv      EEG @ 256 Hz -- the only file the detector reads
     *_auxiliary.csv    accelerometer + gyro
     *_ancillary.csv    PPG
@@ -180,19 +182,33 @@ def countdown(seconds, label, session, bar=False):
 class Session:
     """Collects cue times as unix seconds; converts to sample time at the end."""
 
-    def __init__(self):
+    def __init__(self, progress_path=None):
         self.phases = []
         self.actions = []
         self.markers = []
         self.baseline = None
+        self.progress_path = progress_path
+        self.checkpoint()
+
+    def checkpoint(self):
+        """Keep cue intent recoverable even if the console is closed early."""
+        if self.progress_path is None:
+            return
+        temporary = self.progress_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(dict(timebase="unix_seconds",
+            phases=self.phases, actions=self.actions, markers=self.markers,
+            baseline=self.baseline), indent=2) + "\n")
+        temporary.replace(self.progress_path)
 
     def mark(self, note):
         self.markers.append(dict(t_unix=time.time(), note=note))
+        self.checkpoint()
         print(f"\n  marker noted ({note})")
 
     def phase(self, spec, start_unix, end_unix):
         self.phases.append(dict(name=spec["name"], kind=spec["kind"],
                                 t_start_unix=start_unix, t_end_unix=end_unix))
+        self.checkpoint()
 
     def action(self, spec, index, start_unix, hold, margin=RELEASE_MARGIN):
         self.actions.append(dict(event=spec["event"], phase=spec["name"], rep=index,
@@ -200,6 +216,7 @@ class Session:
                                  t_end_unix=start_unix + hold + margin,
                                  release_margin_seconds=margin,
                                  happened=True))
+        self.checkpoint()
 
 
 def run_protocol(session, sound, speed, protocol=PROTOCOL):
@@ -238,6 +255,7 @@ def run_protocol(session, sound, speed, protocol=PROTOCOL):
                 keys += countdown(0.8 / speed, "relax", session)
                 if "x" in keys:
                     session.actions[-1]["happened"] = False
+                    session.checkpoint()
                     print(f"  rep {index} marked as NOT DONE (label dropped)")
             phase_end = time.time()
 
@@ -255,6 +273,35 @@ def total_seconds(speed, protocol=PROTOCOL):
 
 
 # -------------------------------------------------------------------- outputs
+
+def start_waveform_backups(board, stamp, tag):
+    """Stream raw samples and timestamps to disk before the final export.
+
+    Separate backup paths are never rewritten by the final buffered export.
+    """
+    paths = []
+    for preset in available_presets(board.board_id):
+        name = preset_name(preset).replace("_PRESET", "").lower()
+        path = RECORDINGS / f"{stamp}{tag}_live_{name}.csv"
+        if path.exists():
+            raise FileExistsError(f"Refusing to overwrite waveform backup: {path}")
+        board.add_streamer(f"file://{path.resolve().as_posix()}:w", preset)
+        paths.append(path)
+        print(f"  live waveform backup -> {path.name}")
+    return paths
+
+
+def snapshot_calibration(board, stamp, tag, profile):
+    suffix = ".synthetic" if board_label(board) == "SYNTHETIC_BOARD" else ""
+    source = HERE / f"calibration.{profile}{suffix}.json"
+    snapshot = RECORDINGS / f"{stamp}{tag}_calibration.json"
+    if not snapshot.exists():
+        if source.exists():
+            shutil.copy2(source, snapshot)
+        else:
+            print(f"\n  ! no {source.name}: current-detector comparison needs a matching profile.")
+    return snapshot
+
 
 def write_outputs(board, session, stamp, tag, label, profile, speed, aborted):
     """Save one CSV per preset, plus the labels and the evaluator manifest."""
@@ -322,14 +369,7 @@ def write_outputs(board, session, stamp, tag, label, profile, speed, aborted):
     labels_path.write_text(json.dumps(labels, indent=2) + "\n")
 
     # The evaluator wants its own flatter shape, with the profile beside it.
-    suffix = ".synthetic" if board_label(board) == "SYNTHETIC_BOARD" else ""
-    profile_src = HERE / f"calibration.{profile}{suffix}.json"
-    profile_snapshot = RECORDINGS / f"{stamp}{tag}_calibration.json"
-    if profile_src.exists():
-        shutil.copy2(profile_src, profile_snapshot)
-    else:
-        print(f"\n  ! no {profile_src.name} to copy: calibrate this profile, then "
-              f"copy its JSON to {profile_snapshot.name} before evaluating.")
+    profile_snapshot = snapshot_calibration(board, stamp, tag, profile)
     manifest = [dict(recording=written["default"].name, profile=profile_snapshot.name,
                      board_id=int(board_id), baseline=baseline or [2, 28],
                      actions=actions)]
@@ -393,7 +433,7 @@ def main():
 
     RECORDINGS.mkdir(exist_ok=True)
     label = args.label or args.profile
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     tag = f"_{label}" if label else ""
 
     board = get_board(args)
@@ -405,25 +445,27 @@ def main():
         return 1
 
     aborted = False
-    session = Session()
+    session = Session(RECORDINGS / f"{stamp}{tag}_progress.json")
     try:
         enable_ppg(board)
+        snapshot_calibration(board, stamp, tag, args.profile)
+        start_waveform_backups(board, stamp, tag)
         board.start_stream()
         # A few seconds of settling before the first label: the BLE stream often
         # stutters on its first packets.
-        countdown(3.0, "starting in", session)
         try:
+            countdown(3.0, "starting in", session)
             run_protocol(session, sound, speed, protocol)
-        except Aborted:
+        except (Aborted, KeyboardInterrupt):
             aborted = True
-            print("\n  Q pressed: stopping the protocol, keeping what was recorded")
+            print("\n  Stopping early, keeping waveforms and cue progress")
         beep(sound, 1320, 200)
         print("\nDone. Stopping the stream...")
         board.stop_stream()
         written = write_outputs(board, session, stamp, tag, label, args.profile,
                                 speed, aborted)
     except KeyboardInterrupt:
-        print("\n  Ctrl+C -- this recording is lost; press Q instead to keep one.")
+        print("\n  Interrupted. Any live waveform backups and cue progress remain on disk.")
         return 1
     finally:
         board.release_session()

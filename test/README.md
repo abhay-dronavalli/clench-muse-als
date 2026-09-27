@@ -9,6 +9,12 @@ this experiment. To capture gentle versus firm blinks and false clenches, use
 `record_protocol.py --protocol blink-comparison --profile taher` after disconnecting
 Station from the headband. This takes about 2.5 minutes and saves a separate
 calibration snapshot with the recording. Repeat with the friend's own profile.
+Raw waveforms also stream to `*_live_default.csv` (EEG), `*_live_auxiliary.csv`
+(movement) and `*_live_ancillary.csv` (PPG when available) throughout acquisition.
+`*_progress.json` saves cue intent as it happens, using Unix timestamps aligned
+with the raw timestamp rows. These backups remain if the console closes early;
+use Q or Ctrl+C for an orderly stop and final labeled exports. An abrupt exit
+can lose the latest buffered samples and leaves progress requiring recovery.
 
 ## Reliability update (2026-09-26)
 
