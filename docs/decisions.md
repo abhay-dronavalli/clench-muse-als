@@ -892,6 +892,11 @@ hardware tracker (2026-09-27).
   unchanged under isolation.
 - A new internet dependency, optional like the others: the SDK checks the key online and downloads
   its engine at start. If either fails the camera goes back to the head.
+- Calibration copies the tablet shell's flow, because uncalibrated gaze could not reach one side of
+  the board: at start the board asks for a calibration when none is saved, and checks a saved one
+  with one dot (median gaze on the dot's tile), offering to recalibrate on a miss. Dots settle 1 s
+  before sampling, as on the tablet. A tablet calibration cannot be copied over: it belongs to that
+  camera and screen.
 - Calibration is five points, the SDK's default accuracy, saved in the browser. Gaze only: the SDK's
   blink, attention and drowsiness signals are off (blinks come from the headband, MNE).
 - The SDK's license says it is granted "solely for commercial purposes"; fine for this prototype,

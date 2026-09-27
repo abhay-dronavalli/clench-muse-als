@@ -6,6 +6,7 @@ import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { EyeCalibrationOverlay } from '../facetrack/EyeCalibrationOverlay'
+import { EyeSetupOverlay } from '../facetrack/EyeSetupOverlay'
 import { loadHeadRange, saveHeadRange } from '../facetrack/headRange'
 import { tracker } from '../facetrack/tracker'
 import {
@@ -264,6 +265,7 @@ export default function BoardPage() {
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />
       )}
+      {started && !eyeCalibrating && <EyeSetupOverlay lang={lang} onCalibrate={() => setEyeCalibrating(true)} />}
       {eyeCalibrating && <EyeCalibrationOverlay lang={lang} onClose={() => setEyeCalibrating(false)} />}
       <DevPanel
         voiceSource={voiceSource}

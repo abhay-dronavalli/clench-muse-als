@@ -152,10 +152,16 @@ applies unchanged.
   page, so the web dev server sends `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` (`web/vite.config.ts`). Everything the board loads is
   same-origin and the CDN allows cross-origin loads, so nothing else changes.
-- Calibrate: dev panel (backtick) > "Calibrate eyes": five dots, look at each until its ring fills.
-  Saved in this browser (`localStorage` `clench.eyedidWeb.calibration`) and loaded at every start.
-  Recalibrate after moving the laptop or the chair. Full screen (F11) keeps the page where the SDK
-  expects it.
+- Calibration, the same flow as the tablet shell (`BoardActivity.kt`): when the tracker comes on
+  with nothing saved, the board asks "The eye tracker is not calibrated yet: Calibrate now / Later".
+  Uncalibrated, the SDK's guess of the screen (a 15.5" screen, camera centered on top, 50 cm away)
+  does not reach the whole board. With a calibration saved it is loaded and checked with one dot on a
+  random tile (`gazeCheck.ts`, the tablet's `validationPasses`: after 0.8 s, 1.5 s of samples, the
+  median must land on that tile); a miss asks "Recalibrate / Try the check again / Keep it". The board
+  holds still during both. Five dots, each sampled after a 1 s settle, as on the tablet. Also from the
+  dev panel (backtick) > "Calibrate eyes". Saved in this browser (`localStorage`
+  `clench.eyedidWeb.calibration`). Recalibrate after moving the laptop or the chair. Full screen (F11)
+  keeps the page where the SDK expects it.
 - `/gaze-test` runs it too when its source is "Gaze slot".
 
 ## Gaze test (`/gaze-test`)

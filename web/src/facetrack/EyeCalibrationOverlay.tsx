@@ -7,11 +7,13 @@ import { eyedidWeb } from './eyedidWeb'
 // result is saved in this browser (eyedidWeb.ts). Esc cancels. The board gets no gaze meanwhile.
 
 const TEXT = {
-  en: { look: 'Look at the dot until its ring fills', saved: 'Eye calibration saved', off: 'Eyedid web is not running', esc: 'Esc = cancel' },
-  es: { look: 'Mira el punto hasta que se llene el círculo', saved: 'Calibración de ojos guardada', off: 'Eyedid web no está funcionando', esc: 'Esc = cancelar' },
+  en: { waiting: 'Face the screen: the first dot appears once your eyes are seen', look: 'Look at the dot until its ring fills', saved: 'Eye calibration saved', off: 'Eyedid web is not running', esc: 'Esc = cancel' },
+  es: { waiting: 'Mira la pantalla: el primer punto aparece cuando se vean tus ojos', look: 'Mira el punto hasta que se llene el círculo', saved: 'Calibración de ojos guardada', off: 'Eyedid web no está funcionando', esc: 'Esc = cancelar' },
 } as const
 
-const SETTLE_MS = 400 // eyes need a moment to land on a new target before samples count
+// The eyes need a moment to land on a new target before samples count. 1 s, as on the tablet
+// (BoardActivity SETTLE_BEFORE_SAMPLES_MS, from VisualCamp's own sample).
+const SETTLE_MS = 1000
 
 type Phase =
   | { kind: 'point'; x: number; y: number; progress: number }
@@ -83,6 +85,7 @@ export function EyeCalibrationOverlay({ lang, onClose }: { lang: Lang; onClose: 
         </div>
       )}
       <div className="pointer-events-none absolute inset-x-0 bottom-10 text-center">
+        {phase.kind === 'starting' && <p className="text-3xl font-semibold text-zinc-300">{t.waiting}</p>}
         {phase.kind === 'point' && <p className="text-3xl font-semibold text-zinc-300">{t.look}</p>}
         {phase.kind === 'saved' && <p className="text-4xl font-bold text-emerald-400">{t.saved}</p>}
         {phase.kind === 'failed' && <p className="text-3xl font-semibold text-amber-300">{t.off} ({phase.reason})</p>}
