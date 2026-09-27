@@ -9,7 +9,7 @@ import {
   type ShortcutDebug,
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
-import { gazeConnected, showCursor } from '../facetrack/stores'
+import { gazeConnected, gazeTuning, showCursor } from '../facetrack/stores'
 import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
 import { tracker } from '../facetrack/tracker'
 import { useTrackerStatus } from '../facetrack/useTrackerStatus'
@@ -150,6 +150,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const camera = useTrackerStatus()
   const cursorDot = useSyncExternalStore(showCursor.subscribe, showCursor.get)
   const eyeTracker = useSyncExternalStore(gazeConnected.subscribe, gazeConnected.get)
+  const tuning = useSyncExternalStore(gazeTuning.subscribe, gazeTuning.get)
 
   const emit = useCallback(
     (msg: Message) => {
@@ -405,6 +406,25 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
           <span className={cursorDot ? 'text-yellow-300' : 'text-zinc-400'}>On</span>
           {' / '}
           <span className={cursorDot ? 'text-zinc-400' : 'text-yellow-300'}>Off</span>
+        </button>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <span
+          className="text-xs text-zinc-400"
+          title={`Gaze only: looking at a menu tile for ${tuning.dwellMs} ms picks it. Never on the confirm screen or the help countdown. Filter and hold settings: /gaze-test`}
+        >
+          Dwell select (gaze)
+        </span>
+        <button
+          type="button"
+          className={btn}
+          onMouseDown={noFocus}
+          onClick={() => gazeTuning.set({ ...tuning, dwell: !tuning.dwell })}
+        >
+          <span className={tuning.dwell ? 'text-yellow-300' : 'text-zinc-400'}>On</span>
+          {' / '}
+          <span className={tuning.dwell ? 'text-zinc-400' : 'text-yellow-300'}>Off</span>
         </button>
       </div>
 

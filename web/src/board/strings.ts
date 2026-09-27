@@ -16,6 +16,7 @@ export const STRINGS = {
       headtilt: 'Head tilt is not ready yet: scanning',
       cameraOn: 'Camera on',
       noGaze: 'No eye tracker connected. Set Pointing mode to Auto or Scan.',
+      eyesLost: 'Eyes not detected',
     },
     camera: {
       denied: 'Camera blocked. Allow the camera for this page (camera icon in the address bar) and in Windows camera privacy settings.',
@@ -79,6 +80,7 @@ export const STRINGS = {
       headtilt: 'Inclinar la cabeza aún no está listo: escaneando',
       cameraOn: 'Cámara encendida',
       noGaze: 'No hay seguimiento de ojos conectado. Pon el modo de señalar en Auto o Escaneo.',
+      eyesLost: 'No se detectan los ojos',
     },
     camera: {
       denied: 'Cámara bloqueada. Permite la cámara para esta página (ícono de cámara en la barra de direcciones) y en la privacidad de cámara de Windows.',

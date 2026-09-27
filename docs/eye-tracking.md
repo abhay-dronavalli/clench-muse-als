@@ -34,8 +34,10 @@ Rules:
   not the camera image. Map your calibrated screen point with `x = px / innerWidth`,
   `y = py / innerHeight`. The tracker owns its calibration (the 9-point regression in
   `kushagra/`); the board's head calibration does not apply to gaze.
-- Smooth in the tracker (the prototype's Savitzky-Golay filter is fine); the board adds no smoothing
-  to gaze, only the sticky tile edges (`tile_switch_margin`, 5% by default, dev panel slider).
+- The board smooths gaze itself: a One Euro filter, then the sticky tile edges (`tile_switch_margin`,
+  5% by default, dev panel slider), then a 300 ms hold (a new tile must stay the candidate that long
+  before the highlight moves). All three are in `tilePointer.ts` and tunable on `/gaze-test` (see
+  "Gaze test" below). A tracker may smooth too; measure the combination there.
 - A sample counts as seen when `found` is true and `confidence >= 0.5` (`GAZE_MIN_CONFIDENCE`).
   Gaze is "available" while such a sample is at most 500 ms old (`GAZE_STALE_MS`). Keep feeding
   (with `found: false` when the eyes are lost) so the board knows the tracker is alive.
@@ -73,3 +75,68 @@ Rules:
 
    Tile 4 (Room) is highlighted; press Space to pick it. `clearInterval(id)` stops the feed: after
    about half a second the board says no eye tracker is connected.
+
+## Gaze pipeline, dwell select, "eyes not detected"
+
+`web/src/facetrack/tilePointer.ts` is the one path from points to a highlighted tile, used by the
+board (`usePointing.ts`) and by `/gaze-test`, so the test measures what the board does:
+
+1. One Euro filter (`oneEuro.ts`; on by default for gaze, min cutoff 1 Hz, beta 10 in window units).
+   It starts over after a 250 ms gap.
+2. `chooseTile` with the sticky margin.
+3. Hold: the highlight moves only after the new tile has been the candidate for 300 ms. A glance
+   away and back does not move it.
+4. Dwell select (off by default; dev panel "Dwell select (gaze)" or `/gaze-test` settings): the same
+   highlighted tile for 1.5 s picks it. The board sends CLENCH on `/ws/input`, as the headband does,
+   and shows a ring filling over the tile. Dwell only runs on a menu screen that is not loading, so it
+   never confirms a message and never touches the help countdown: those still need a clench. It
+   fires once, then waits for the highlight to move or a new screen.
+
+The head keeps its old path (smoothed in `tracker.ts`, no hold). Gaze settings are kept in the browser
+(`localStorage` `clench.gazeTuning`), not in the Core.
+
+While the gaze drives the highlight and a live tracker reports `found: false`, the board shows a small
+"Eyes not detected" / "No se detectan los ojos" badge. A tracker that stops feeding gets the "No eye
+tracker connected" notice instead.
+
+## Native shell (Android tablet, `kushagra/tablet`)
+
+The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns the front camera.
+
+- Page to shell: `window.ClenchNative` (an Android `JavascriptInterface`, `web/src/facetrack/native.ts`):
+  `gazeActive()`, `calibrate(person)`, `person()`, `gazeFilter()`, `setGazeFilter(on)`.
+- Shell to page: `window.clenchGaze.feed({ x, y, found, confidence, state })` about 30 times a second,
+  with `x`, `y` already fractions of the WebView (the shell subtracts the WebView's position on the
+  screen and divides by its size). `state` is Eyedid's tracking state (`SUCCESS`, `GAZE_MISSING`,
+  `FACE_MISSING`), shown on `/gaze-test`. And `window.clenchNativeEvent({ type: 'blink' | 'tracker' |
+  'calibration', ... })`. Blinks are only counted on `/gaze-test`; nothing is picked with them.
+- One camera owner: while `ClenchNative.gazeActive()` is true the page never opens the camera. Auto
+  and Webcam then follow the gaze (there is no head); Auto still scans after 3 s of lost eyes.
+
+## Gaze test (`/gaze-test`)
+
+How we judge a tracker. Open `http://localhost:5173/gaze-test` (5174 for your own dev server; the
+tablet shell can load it too). It needs no Core.
+
+- A 2x3 grid laid out like the board (3 across in landscape, 2 across in portrait), the raw gaze
+  (small gray dot), the filtered point (blue dot) and the highlighted tile (yellow ring).
+- Type the person's name, pick the source (Gaze slot, Head, or Mouse to check the page), then
+  "Start 10-target test". Each prompt is a blue dashed tile with "Look here"; it is a hit when the
+  highlight lands on it within 2 s. Esc stops.
+- Results: hit rate, average time to highlight (prompt to highlight, including the 300 ms hold),
+  wrong highlights on the way, blinks. Kept per person in this browser, with JSON and CSV export.
+  A person passes with a run at 90% or better; the goal is three of the four of us, with the tablet
+  mounted at a fixed distance.
+- Settings: One Euro on/off and its parameters, the Eyedid SDK filter (tablet only), the hold, the
+  sticky margin (this page only), and the dwell ring. The board uses the same gaze settings.
+
+Without a tracker, a simulated eye in the browser console checks the page:
+
+```js
+setInterval(() => {
+  const t = document.querySelector('[data-test-tile].outline-dashed')
+  if (!t) return
+  const r = t.getBoundingClientRect()
+  window.clenchGaze.feed({ x: (r.left + r.width / 2) / innerWidth, y: (r.top + r.height / 2) / innerHeight, found: true, confidence: 1 })
+}, 33)
+```

@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
-import { CameraLight, CameraNotice, CursorDot, GazeNotice, PointerBadge } from '../facetrack/indicators'
+import {
+  CameraLight,
+  CameraNotice,
+  CursorDot,
+  DwellRing,
+  EyesNotice,
+  GazeNotice,
+  PointerBadge,
+} from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
+import { nativeGazeActive, subscribeNativeGaze } from '../facetrack/native'
+import { gazeTuning } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
@@ -38,7 +48,14 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
-  const [view, setView] = useState<View>({ kind: 'waiting' })
+  const [view, setViewState] = useState<View>({ kind: 'waiting' })
+  // What is on screen as of the last Core message, updated synchronously (not after a render), so
+  // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
+  const shown = useRef<View>({ kind: 'waiting' })
+  const setView = (v: View) => {
+    shown.current = v
+    setViewState(v)
+  }
   const [lang, setLang] = useState<Lang>('en')
   const [mode, setMode] = useState<PointingMode | null>(null)
   const [margin, setMargin] = useState(STICKY_MARGIN) // SETTINGS tile_switch_margin
@@ -119,10 +136,23 @@ export default function BoardPage() {
     }
   }, [connected])
 
+  // Re-render when the tablet shell's tracker starts or stops: it decides who owns the camera.
+  useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
-  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
+
+  // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
+  // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
+  // screen or the help countdown.
+  const dwellOn = useSyncExternalStore(gazeTuning.subscribe, gazeTuning.get).dwell
+  const input = useSocket('/ws/input', { enabled: started && dwellOn })
+  const pick = (seq: number) => {
+    const v = shown.current
+    if (v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
+    return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
+  }
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
 
   const start = () => {
     unlockSpeech()
@@ -135,6 +165,7 @@ export default function BoardPage() {
       {!started && <StartOverlay onStart={start} />}
       <div className="fixed right-4 top-4 z-30 flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
+          {pointing && <EyesNotice lang={lang} />}
           {screen && <PointerBadge screen={screen} mode={mode} />}
           <CameraLight lang={lang} />
           <StatusDot status={started ? status : 'closed'} label="Core" />
@@ -154,6 +185,7 @@ export default function BoardPage() {
           <Breadcrumb screen={screen} />
           <TileGrid screen={screen} />
           {pointing && <CursorDot />}
+          {pointing && <DwellRing />}
         </>
       )}
       {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}

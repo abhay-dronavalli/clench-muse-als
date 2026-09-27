@@ -448,3 +448,39 @@ Status: **done** = built, **planned** = agreed, not built yet.
 - `test_a_recent_cancel_turns_the_shortcut_off` only passed before 18:30 on 2026-09-26 (the cancel is
   logged at the wall clock, the ranker's clock was fixed at 18:30 that day); it now moves the cancel
   next to the ranker's clock.
+
+## 16. Eyedid gaze on the tablet, step 1: gaze pipeline and test bench (branch android/eyedid)
+
+- Eyedid (VisualCamp, formerly SeeSo) is the primary eye tracker for the Android tablet; improving
+  our MediaPipe iris path is the fallback. Step 1 is the web side only; the native shell is step 2.
+- The board now smooths gaze (One Euro) and holds 300 ms before the highlight moves to a new tile
+  (`tilePointer.ts`). This replaces "the board adds no smoothing to gaze" from section 15. The head
+  path is unchanged.
+- Dwell select: off by default, gaze only, 1.5 s, only on a menu screen that is not loading. It sends
+  CLENCH on `/ws/input`, so the Core records it as a clench (METRICS count it as one). Settings live
+  in the browser (`localStorage`), not in `data/profile.yaml`, to keep the Core out of this branch.
+- Known gap, "gaze-only confirm": dwell never confirms (hard rule 1 in spirit: a stare must not send a
+  message) and never acts during the help countdown. A person with only an eye tracker and no
+  headband therefore cannot confirm a message. Closing it needs a deliberate confirm gesture, not a
+  longer stare.
+- Known issue, clench look-back with the hold: the Core picks the tile highlighted
+  `clench_lookback_ms` (250 ms) before a clench (`core/session.py`, `_pick_index`). With the 300 ms
+  hold, the highlight reaches the Core about 300 ms after the eyes arrive, so a clench within 250 ms
+  of the highlight moving picks the previous tile. Agreed fix: for gaze, look back only to when the
+  highlight changed (the hold already filters clench-induced eye movement). It is a `core/` change,
+  which this branch does not touch; until then a quick clench after a gaze move can pick the wrong tile.
+- One camera owner: when the tablet shell's tracker is active (`window.ClenchNative.gazeActive()`),
+  the page never opens the camera, and Auto and Webcam follow the gaze.
+- Blinks from the SDK are forwarded and counted on `/gaze-test` only; nothing is mapped to them until
+  their timing is measured.
+- The board's grid is 2 across x 3 down on a portrait screen (Tailwind `portrait:`), for the case
+  where Eyedid needs the tablet upright. Landscape is unchanged.
+- `/gaze-test` is a third page (`web/src/gazetest/`). Results stay in the browser with JSON/CSV
+  export; nothing goes to the Core.
+- Known issue, dwell plus a real clench: CLENCH carries no screen `seq`, so if the person clenches
+  (headband) just as the dwell ring completes, the Core gets two CLENCHes: the first picks the tile and
+  opens the confirm screen, the second confirms it. The board guards its own side (dwell only sends if
+  the menu `seq` it measured is still the one on show, updated synchronously from the Core's messages),
+  but the network race needs a Core fix: CLENCH carrying the screen `seq` (contracts change) or the Core
+  ignoring a CLENCH for about 500 ms after it shows the confirm screen. Until then keep dwell off
+  whenever the headband is in use.
