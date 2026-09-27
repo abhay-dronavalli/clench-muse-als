@@ -1009,3 +1009,23 @@ choices below are Taher's.
   help works.
 - Car mode always opens in **Split**; the Car button switches until Car mode is left.
 - The ride controls (Comfort, Trip changes) share the full width.
+
+## 31. A Back button on every screen, and Reset app
+
+- **Back button.** Every menu, suggestions and trip level below the top shows a large "‹ Back" button
+  beside its breadcrumb, and a plain confirm screen shows one top left. It sends TAP `cancel` (no new
+  field): up one level at once on a menu or trip level ("Other..." pages leave with their level, as a
+  double blink does), or off the confirm screen. A touch is deliberate, so there is no "Go back?"
+  prompt; that prompt stays for double blinks, which can be accidental. It is a button, not a tile: the
+  scan and the eyes never land on it, and trip levels keep their Back tile for clench users. Nothing at
+  the top level, on a Support question, or while "Finding options..." shows. The TAP section of the
+  contracts now also lists the help countdown's Cancel and the prompt's Stay here (#30), which it had
+  left out.
+- **Reset app** (dev panel, after a confirm dialog) puts the app back to a first run: `POST /api/reset`
+  stops the headband, deletes the history (every pick and confirmed sentence, so also a loaded demo
+  week) and the calibrated head range, and returns the session to the settings it started with, at
+  Home. The board then disconnects the tablet's Muse, the tablet forgets its saved eye calibrations and
+  gaze settings (and restarts its tracker so the SDK drops the calibration it holds), the browser's
+  own settings are cleared, and the page reloads to the start screen and the onboarding. The
+  ElevenLabs audio cache is kept: it costs credits to make and holds nothing about the person. The
+  reset is refused (409) during a help countdown, so it can never cancel a call for help.

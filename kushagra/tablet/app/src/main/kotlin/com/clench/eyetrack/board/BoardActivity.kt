@@ -404,6 +404,30 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             main.post { stopMuse() }
             return museStatusJson()
         }
+
+        /**
+         * The dev panel's Reset app (web/src/lib/resetApp.ts), just before the page reloads: back to a
+         * first run. The Muse disconnects, the saved eye calibrations, the person and the gaze filter
+         * setting are forgotten, and a running tracker restarts so the SDK drops the calibration it holds.
+         */
+        @JavascriptInterface fun resetApp() {
+            museWanted = false
+            onboarding = false
+            main.post {
+                if (destroyed) return@post
+                stopMuse()
+                cancelTrackerScreens()
+                dropTrackerScreens()
+                prefs.edit().clear().apply()
+                person = ""
+                startupChecked = false // the reloaded page is checked like a first start
+                car.setPreview(false)
+                car.show(false)
+                gazeOverlay.onboardingCar = false
+                if (gaze.running) gaze.start(true) // the default filter; a fresh tracker, no calibration
+                Log.i(TAG, "app reset: calibration and settings forgotten, Muse stopped")
+            }
+        }
     }
 
     // --- tracker ----------------------------------------------------------------------------
