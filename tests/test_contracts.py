@@ -43,6 +43,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
     "READY": (contracts.Ready, {"type": "READY"}),
     "RESET": (contracts.Reset, {"type": "RESET"}),
     "AUDIO_DONE": (contracts.AudioDone, {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}),
+    "TAP": (contracts.Tap, {"type": "TAP", "tile": 3, "seq": 42, "t": 1727300011.2}),
     "SETTINGS": (
         contracts.Settings,
         {

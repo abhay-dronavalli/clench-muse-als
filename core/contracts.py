@@ -130,6 +130,24 @@ class AudioDone(_Msg):
     id: str = Field(min_length=1)  # the SPEAK / PLAY_AUDIO id
 
 
+class Tap(_Msg):
+    """A touch or mouse press on the board (a caregiver, or testing without a headband). On a tile:
+    pick tile `tile` of the SCREEN numbered `seq`, as a CLENCH would with that tile highlighted. On the
+    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would. The Core ignores a TAP for an
+    older screen, one while the go-back prompt is open, and one on the help countdown."""
+
+    type: Literal["TAP"] = "TAP"
+    tile: int | None = Field(ge=0)
+    seq: int | None = Field(ge=0)
+    t: float
+
+    @model_validator(mode="after")
+    def _card_or_tile(self) -> "Tap":
+        if (self.tile is None) != (self.seq is None):
+            raise ValueError("TAP: tile and seq are both set (a tile) or both null (the confirm card)")
+        return self
+
+
 # --- Console -> Core, and Core -> every client ----------------------------------
 
 
@@ -335,6 +353,7 @@ Message = Annotated[
         Ready,
         Reset,
         AudioDone,
+        Tap,
         Settings,
         Screen,
         Confirm,

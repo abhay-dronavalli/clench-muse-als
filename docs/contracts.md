@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
@@ -49,6 +49,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | READY | Board | Core | Board connected; Core replies with the current view |
 | RESET | Board ("Click to start"), web dev panel ("Reset to Home") | Core | Back to Home, highlight on the first tile |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
+| TAP | Board (touch or mouse) | Core | Pick this tile, or confirm the "Say this?" card, like a CLENCH |
 | SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks, learning; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
@@ -216,6 +217,33 @@ matching AUDIO_DONE wins and later ones are ignored.
 
 ```json
 {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}
+```
+
+### TAP
+
+A touch or mouse press on the board: a caregiver helping, or testing without a headband (the tablet
+has no keyboard for the stand-in). On a tile it picks that tile, exactly as a CLENCH would with that
+tile highlighted (no clench look-back: the finger says which tile). On the "Say this?" sentence it
+confirms, exactly as a CLENCH would. Everything else about a CLENCH applies (the 300 ms debounce, the
+confirm step: a tap on a tile never speaks or sends).
+
+The Core ignores a TAP whose `seq` is not the current screen's, a tile TAP when the board is not
+scanning, a card TAP when nothing is waiting for confirmation, and any TAP while the go-back prompt
+is open or the help countdown runs (a stray touch can neither answer the prompt nor stop a call for
+help).
+
+| Field | Type | Notes |
+|---|---|---|
+| `tile` | int or null | 0-based tile index on SCREEN `seq`; null = the "Say this?" card |
+| `seq` | int or null | the SCREEN `seq` the tile belongs to; null with a null `tile` (both or neither) |
+| `t` | float | epoch seconds when tapped |
+
+```json
+{"type": "TAP", "tile": 3, "seq": 42, "t": 1727300011.2}
+```
+
+```json
+{"type": "TAP", "tile": null, "seq": null, "t": 1727300015.0}
 ```
 
 ## Console -> Core, and Core -> every client

@@ -96,6 +96,7 @@ from core.contracts import (
     Settings,
     ShortcutDebug,
     State,
+    Tap,
     Tile,
     TileKind,
 )
@@ -398,11 +399,13 @@ class Session:
         )
 
     def handle(self, msg: Message) -> None:
-        if isinstance(msg, (Clench, DoubleBlink, LongClench)):
+        if isinstance(msg, (Clench, DoubleBlink, LongClench, Tap)):
             self._moves += 1
         match msg:
             case Clench():
                 self._on_clench()
+            case Tap():
+                self._on_tap(msg)
             case DoubleBlink():
                 self._on_double_blink()
             case LongClench():
@@ -436,7 +439,28 @@ class Session:
 
     # --- gestures -------------------------------------------------------------
 
-    def _on_clench(self) -> None:
+    def _on_tap(self, msg: Tap) -> None:
+        """A touch on the board: a CLENCH aimed at one tile (or at the confirm card). Everything a
+        CLENCH must pass (debounce, the go-back prompt's aftermath) applies; the help countdown and the
+        go-back prompt ignore taps, so a stray touch can neither cancel help nor answer the prompt."""
+        if self._back is not None:
+            log.info("TAP ignored: the go-back prompt is open (a clench answers it)")
+            return
+        if msg.tile is None:
+            if self.state is SessionState.CONFIRMING:
+                self._on_clench()
+            else:
+                log.info("TAP on the confirm card ignored while %s", self.state.value)
+            return
+        if msg.seq != self._seq:
+            log.info("TAP for screen %s ignored: the board shows screen %d now", msg.seq, self._seq)
+        elif self.state is not SessionState.SCANNING:
+            log.info("TAP on tile %d ignored while %s", msg.tile, self.state.value)
+        else:
+            self._on_clench(index=msg.tile)
+
+    def _on_clench(self, index: int | None = None) -> None:
+        """Pick (or confirm, or answer the go-back prompt). `index`: a TAP's tile instead of the highlight."""
         now = self._scheduler.now()
         if self._last_clench is not None and now - self._last_clench < CLENCH_DEBOUNCE_S:
             log.info("CLENCH ignored: within %d ms of the previous one", CLENCH_DEBOUNCE_S * 1000)
@@ -456,7 +480,7 @@ class Session:
             return
         if self.state is SessionState.SCANNING:
             self._effort.select()
-            self._pick()
+            self._pick(index)
         elif self.state is SessionState.CONFIRMING:
             self._confirm_pending()
         else:
@@ -554,9 +578,10 @@ class Session:
             )
         return picked
 
-    def _pick(self) -> None:
+    def _pick(self, index: int | None = None) -> None:
         frame = self.frame
-        index = self._pick_index()
+        if index is None:
+            index = self._pick_index()
         if index == len(frame.items):
             self._pick_other(frame)
             return

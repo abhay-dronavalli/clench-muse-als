@@ -336,6 +336,23 @@ export interface ShortcutDebug {
   reason: string
 }
 
+// --- Board -> Core (touch) ---
+
+/**
+ * A touch or mouse press on the board (a caregiver, or testing without a headband). On a tile: pick
+ * tile `tile` of the SCREEN numbered `seq`, as a CLENCH would with that tile highlighted. On the "Say
+ * this?" card (`tile` and `seq` null): confirm, as a CLENCH would. The Core ignores a TAP for an older
+ * screen, one while the go-back prompt is open, and one on the help countdown.
+ */
+export interface Tap {
+  type: 'TAP'
+  /** 0-based, >= 0; null = the confirm card */
+  tile: number | null
+  /** the SCREEN `seq` the tile belongs to; null with a null `tile` */
+  seq: number | null
+  t: number
+}
+
 // --- Union ---
 
 export type Message =
@@ -349,6 +366,7 @@ export type Message =
   | Ready
   | Reset
   | AudioDone
+  | Tap
   | Settings
   | Screen
   | Confirm
