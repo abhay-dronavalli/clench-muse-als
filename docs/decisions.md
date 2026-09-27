@@ -528,3 +528,22 @@ Status: **done** = built, **planned** = agreed, not built yet.
   menu bounds at 1000x650 / 800x480 / 390x650, duplicate video controls, blocked labels hidden by
   friendly titles, and selection stability after layout shifts. The real YouTube visual checks
   use Playwright MCP; automated network tests remain opt-in.
+
+## Patient feedback and follow-up order (2026-09-27)
+
+User testing of the managed Chromium browser found these remaining gaps:
+
+- Backtick does not open the Dev panel inside Chromium. Add access to the Dev panel and its
+  settings in the foreground managed browser, including the backtick shortcut.
+- Chromium currently uses scanning only. Extend patient pointing to head/webcam, gaze and
+  eye-tracker input so these modes can select website controls as they do on the board. Preserve
+  clench selection, back and the independent help path. Do not present an unconnected eye tracker
+  as working gaze input.
+- The user dislikes the Group 1 / Group 2 interaction and the current overlay appearance. The
+  earlier visual repair is not accepted as the final UI. Revisit the grouping interaction and
+  redesign the browser UI after the functional work.
+
+Requested order: finish Computer mode Part 2 (smart search suggestions and keyboard; full Part 2
+instructions still pending), then implement the foreground Dev panel and pointing support, then
+the broader UI changes. These are recorded follow-ups, not implemented capabilities. Defer the UI
+redesign now; the immediate request is to retain this feedback for work after Part 2.
