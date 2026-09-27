@@ -637,3 +637,33 @@ choices below are Taher's.
   is open and during the help countdown, so a stray touch can neither answer the prompt nor cancel a
   call for help; going back stays the Dev panel's Double blink (then Clench). Always on, also with a
   mouse on the laptop.
+
+## 21. The trip screen: car controls and the 3D car (branch muse-on-android)
+
+- The communication menus are the pre-trip flow. A dev panel button (Start trip / End trip, SETTINGS
+  `trip`) switches to the trip screen: exactly six controls (Window up, Window down, Warmer, Cooler,
+  Music, Pull over), no "Other...", no ranking, fixed order so the eyes learn the places
+  (`core/trip.py`). It is a Core screen like any other, so scan, head, gaze, dwell, clench, tap and
+  help all work unchanged. A real "Start trip" tile can replace the dev button later.
+- Routine controls act as soon as they are picked, with no confirm screen (the brief: they repeat
+  often and must stay under a second). PRD D5 still holds: nothing is spoken or sent for them. The
+  Core sends CAR_ACTION and locks input for its `ms` (0.9 s; state ACTING): clenches, taps and
+  pointing are ignored so a stray clench cannot land on a tile as the others fade back. LONG_CLENCH
+  still starts the help countdown during the lock.
+- Pull over is a safety action: it opens its own confirm screen ("Pull over here?", Confirm and
+  Cancel buttons; a clench confirms, a double blink cancels through the usual go-back prompt, a tap
+  on Cancel cancels at once: TAP `cancel`). Confirmed, it says "Please pull over here." and runs a mock
+  `pull_over` action (ACTION_RESULT toast).
+- Trip events are logged but never reach the sentence history or the Suggested list
+  (`node_id` `trip.*` excluded like `help`).
+- The 3D car is drawn natively with SceneView 2.3.0 (Filament) behind the see-through board WebView,
+  full screen, framed in the page's car area. 2.3.0 because it is built with Kotlin 2.0 (the app is on
+  Kotlin 2.1); SceneView 4.x needs Kotlin 2.4. The page drives it over the bridge (`carScene`,
+  `carEffect`); in a normal browser the car area shows a soft placeholder.
+- Motion (CarMotion, unit tested): a slow idle sway, a small camera push toward the car, and plain
+  line particles per control (windows trace the door up or down, warm lines rise and spread, cool lines
+  settle, music pulses outward in three beats). Every line grows from and shrinks to nothing; no
+  flashing, no hard cuts. Pull over has no particles: the car eases to still, the page takes a warm
+  copper tint, and the sequence is shorter (0.6 s).
+- The model (`kushagra/tablet/app/src/main/assets/jaguar_i-pace.glb`, 8.9 MB) is git-ignored like the
+  face model; without it the car area stays dark and the screen works the same.
