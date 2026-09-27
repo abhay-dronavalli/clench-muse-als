@@ -705,3 +705,13 @@ redesign now; the immediate request is to retain this feedback for work after Pa
   feedback above remains queued after search.
 - Main's sensor tests require the optional dependencies: use `uv sync --extra sensor` before
   running the full Python suite in a fresh environment.
+
+## Computer search panel (2026-09-27)
+
+- Picking a query is the explicit confirmation to fill and submit it, as requested for Part 2.
+  The adapter retains the chosen field rather than trusting the page's current focus. Detached
+  fields, changed pages, URLs and blocked action labels cannot be submitted.
+- The panel opens with local choices immediately. A pending search is cancelled when help starts
+  or computer mode exits; cancelling help resumes the panel. Suggestions are echoed through the
+  existing session queue and respect speak-picks. No board contract changed.
+- Keyboard entry is exposed here as a reserved panel and completed in the keyboard chunk below.

@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Thread
 
 from core.computer.policy import Policy
+from core.computer.search import clean_query
 
 log = logging.getLogger("clench.computer")
 ASSETS = Path(__file__).parent
@@ -24,6 +25,8 @@ class Browser:
         self.overlay = {}
         self.input_contexts = set()
         self.cdp = None
+        self.field = None
+        self.field_url = None
         self.script = (ASSETS / "bridge.js").read_text(encoding="utf-8").replace(
             "state = {}", "state = " + json.dumps({"blockedWords": policy.blocked_words}))
 
@@ -135,11 +138,31 @@ class Browser:
             return {"error": "Navigation blocked: this site is not allowed."}
         if target["exit"] and self.page.url.split("#")[0] != self.policy.start_url:
             return {"error": "Exit is available in Browser menu."}
+        if self.field:
+            await self.field.dispose()
+            self.field = None
+        if target["text"]:
+            self.field = (await self.page.evaluate_handle("id => window.__clench?.field(id)", target_id)).as_element()
+            self.field_url = self.page.url
         await self.page.mouse.click(target["x"] + target["width"] / 2,
                                     target["y"] + target["height"] / 2)
         if target["exit"]:
             self.on_event({"kind": "exit"})
         return {"text": target["text"]}
+
+    async def submit(self, query):
+        text = clean_query(query)
+        if not text or not self.policy.allows_label(text):
+            return {"error": "Use search words only, without URLs or blocked actions."}
+        if not self.field or self.page.url != self.field_url or not self.policy.allows_url(self.page.url):
+            return {"error": "The search field changed. Cancel and choose it again."}
+        if not await self.field.evaluate("el => el.isConnected && !el.readOnly && !el.disabled && (el.matches('textarea,input[type=search],input[type=text],input:not([type])') || el.isContentEditable)"):
+            return {"error": "This field cannot accept a search. Cancel and choose another."}
+        await self.field.fill(text)
+        if self.page.url != self.field_url or not await self.field.evaluate("el => el.isConnected"):
+            return {"error": "The page changed before submission. Choose the search field again."}
+        await self.field.press("Enter")
+        return {"submitted": True}
 
     async def command(self, key):
         if key in ("down", "up"):
@@ -183,6 +206,9 @@ class BrowserWorker:
 
     async def click(self, target_id):
         return await self._call("click", target_id)
+
+    async def submit(self, query):
+        return await self._call("submit", query)
 
     async def command(self, key):
         return await self._call("command", key)

@@ -218,7 +218,8 @@ def test_text_cancel_echo_toggle_settings_and_frequent_dom_updates():
         c.browser.result = {"text": True}
         c.pick()
         await settle()
-        assert c.selection.level == "text" and c.selection.items() == [("cancel", "Cancel")]
+        assert c.selection.level == "text" and c.items()[-1] == ("cancel", "Cancel")
+        c.selection.index = len(c.items()) - 1
         c.pick()
         assert c.selection.level == "targets"
         s.handle(Settings(pointing_mode="webcam", scan_ms=500, speak_picks=False, long_clench_ms=1000))

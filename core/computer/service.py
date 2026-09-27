@@ -7,6 +7,7 @@ import logging
 from core.computer.browser import BrowserWorker
 from core.computer.model import MENU, Selection, Target
 from core.computer.policy import Policy
+from core.computer.search import DEFAULT_QUERIES, SearchPanel, unique_queries
 from core.contracts import Clench, DoubleBlink, LongClench
 from core.pointer.scan import ScanPointer
 
@@ -31,6 +32,10 @@ class Computer:
         self.tasks = set()
         self.open_task = None
         self.close_task = None
+        self.search = None
+        self.lang = "es"
+        self.search_pool = DEFAULT_QUERIES
+        self.submit_task = None
 
     def _spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -46,6 +51,7 @@ class Computer:
         self.selection = Selection()
         self.document = self.url = None
         self.help = None
+        self.search = None
         self.message = "Opening browser…"
         self.configure(settings)
         self.open_task = self._spawn(self._open(self.generation))
@@ -70,6 +76,7 @@ class Computer:
 
     def configure(self, settings):
         self.scan.apply_settings(settings)
+        self.lang = settings.lang or self.lang
         self.long_clench_ms = settings.long_clench_ms or self.long_clench_ms
         if self.active:
             self._render()
@@ -100,7 +107,10 @@ class Computer:
                 navigation = self.document != event["documentId"] or self.url != event["url"]
                 self.document, self.url = event["documentId"], event["url"]
                 previous_level = self.selection.level
-                self.selection.update(targets, max(1, float(event["height"])), navigation=navigation)
+                if navigation:
+                    self.search = None
+                if not self.search:
+                    self.selection.update(targets, max(1, float(event["height"])), navigation=navigation)
                 self._refresh(restart=navigation or previous_level != self.selection.level)
             except (ValueError, TypeError, KeyError):
                 log.warning("invalid computer target snapshot ignored")
@@ -110,7 +120,7 @@ class Computer:
         self._render()
 
     def _refresh(self, *, restart=False):
-        self.scan.place(len(self.selection.items()), self.selection.index)
+        self.scan.place(len(self.items()), self.selection.index)
         if self.ready and not self.busy and self.help is None:
             if restart or not self.scan.running:
                 self.scan.start()
@@ -118,11 +128,16 @@ class Computer:
             self.scan.stop()
         self._render()
 
+    def items(self):
+        return self.search.items() if self.search else self.selection.items()
+
     def _render(self):
         if not self.browser or not self.active:
             return
-        items = self.selection.items()
-        state = dict(level=self.selection.level, band=self.selection.band, bands=list(self.selection.bands),
+        items = self.items()
+        state = dict(level=self.search.mode if self.search else self.selection.level,
+                     lang=self.lang, searchPage=self.search.page if self.search else 0,
+                     band=self.selection.band, bands=list(self.selection.bands),
                      groups=self.selection.groups(), page=self.selection.page, busy=self.busy,
                      items=items, selected=items[self.selection.index][0], help=self.help,
                      message=self.message, blockedWords=self.policy.blocked_words, longClenchMs=self.long_clench_ms)
@@ -130,6 +145,9 @@ class Computer:
 
     def pick(self):
         if not self.active or not self.ready or self.busy or self.help is not None:
+            return
+        if self.search:
+            self._pick_search()
             return
         key, label = self.selection.pick()
         self.echo(label)
@@ -161,6 +179,7 @@ class Computer:
                     self.selection.back_to_bands()
                 elif result and result.get("text") and (document, url) == (self.document, self.url):
                     self.selection.level, self.selection.index = "text", 0
+                    self.search = SearchPanel(unique_queries(self.search_pool, self.policy), self.lang)
         except Exception:
             log.exception("computer action failed")
             self.message = "Page did not respond. Use Browser menu to try again or exit."
@@ -172,17 +191,71 @@ class Computer:
 
     def back(self):
         if self.active and not self.busy and self.help is None:
-            self.selection.back()
+            if self.search:
+                if self.search.mode == "keyboard":
+                    self.search.mode = "search"
+                else:
+                    self.search = None
+                    self.selection.back()
+                self.selection.index = 0
+            else:
+                self.selection.back()
             self._refresh(restart=True)
+
+    def _pick_search(self):
+        key, label = self.items()[self.selection.index]
+        self.echo(label)
+        if key == "cancel":
+            self.back()
+        elif key == "other":
+            self.search.more(unique_queries(self.search_pool, self.policy))
+            self.selection.index = 0
+            self._refresh(restart=True)
+        elif key == "keyboard":
+            self.search.mode = "keyboard"
+            self.selection.index = 0
+            self._refresh(restart=True)
+        elif key.startswith("query:"):
+            self.busy = True
+            self.scan.stop()
+            self._render()
+            self.submit_task = self._spawn(self._submit_search(label, self.generation))
+
+    async def _submit_search(self, query, generation):
+        try:
+            if self.help is not None or not self.active or generation != self.generation:
+                return
+            result = await asyncio.wait_for(self.browser.submit(query), 5)
+            if generation != self.generation or not self.active:
+                return
+            if result and result.get("error"):
+                self.message = result["error"]
+            elif result and result.get("submitted"):
+                self.search = None
+                self.selection.back_to_bands()
+            else:
+                self.message = "Search was not submitted. Try again or cancel."
+        except Exception:
+            log.exception("computer search failed")
+            self.message = "Search could not be submitted. Try again or cancel."
+        finally:
+            if generation == self.generation and self.active:
+                self.busy = False
+                self._refresh(restart=True)
 
     def set_help(self, seconds):
         self.help = seconds
+        if seconds is not None and self.submit_task and not self.submit_task.done():
+            self.submit_task.cancel()
         self._refresh()
 
     def exit(self):
         if not self.active:
             return
         self.active = self.ready = self.busy = False
+        self.search = None
+        if self.submit_task and not self.submit_task.done():
+            self.submit_task.cancel()
         self.generation += 1
         self.scan.stop()
         browser, self.browser = self.browser, None

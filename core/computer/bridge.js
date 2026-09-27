@@ -117,6 +117,8 @@
         box-shadow:0 12px 60px #0008; font:22px/1.4 'Segoe UI',sans-serif; }
       .panel-title { font-size:28px; font-weight:650; margin-bottom:16px; }
       .option { padding:10px 16px; margin:6px 0; border:2px solid transparent; border-radius:8px; }
+      .panel.search { top:45%; max-height:calc(100vh - 150px); overflow:auto; width:min(760px,calc(100% - 32px)); }
+      .search .option { padding:7px 12px; margin:2px 0; font-size:20px; }
       .help { position:fixed; top:12px; left:12px; right:12px; border:3px solid white; padding:18px;
         background:#ae1737; color:white; border-radius:12px; text-align:center; font:700 26px/1.4 'Segoe UI',sans-serif; }
       .message { position:fixed; bottom:120px; left:16px; right:16px; padding:12px 18px;
@@ -134,7 +136,7 @@
     const choices=make('choices'), hint=make('hint','Clench: select  |  Double blink: back  |  Hold: help');
     const chips=Array.from({length:5},()=>make('choice'));
     choices.append(...chips);line.append(title,step);row.append(choices);dock.append(line,row,hint);
-    const panel=make('panel'), panelTitle=make('panel-title'), options=Array.from({length:5},()=>make('option'));
+    const panel=make('panel'), panelTitle=make('panel-title'), options=Array.from({length:8},()=>make('option'));
     panel.append(panelTitle,...options);
     const help=make('help'), message=make('message');
     root.append(style,shade,...peers,outline,dock,panel,message,help);
@@ -172,10 +174,14 @@
     ui.row.style.display=bandItems.length?'flex':'none';
     ui.chips.forEach((el,i)=>{const item=bandItems[i];el.style.display=item?'block':'none';
       el.textContent=item?.[1]||'';el.className='choice'+(item?.[0]===s.selected?' chosen':'');});
-    ui.panel.style.display=['menu','text'].includes(s.level)&&!s.help?'block':'none';
-    ui.panelTitle.textContent=s.level==='text'?'Search options coming next':'Browser menu';
+    const searching=['search','keyboard'].includes(s.level);
+    ui.panel.className='panel'+(searching?' search':'');
+    ui.panel.style.display=['menu','text','search','keyboard'].includes(s.level)&&!s.help?'block':'none';
+    ui.panelTitle.textContent=s.level==='search'?(s.lang==='es'?'Buscar':'Search'):
+      s.level==='keyboard'?'Keyboard coming next':s.level==='text'?'Search options coming next':'Browser menu';
     ui.options.forEach((el,i)=>{const item=items[i];el.style.display=item?'block':'none';
       el.textContent=item?.[1]||'';el.className='option'+(item?.[0]===s.selected?' chosen':'');});
+    if(searching) ui.options[index]?.scrollIntoView({block:'nearest'});
     ui.help.style.display=s.help!=null?'block':'none';ui.help.textContent=`Help / Ayuda: ${s.help}     Double blink to cancel`;
     ui.message.style.display=s.message?'block':'none';ui.message.textContent=s.message||'';
   };
@@ -183,6 +189,7 @@
   const render=s=>{state=s;paintSoon();};
   Object.defineProperty(window,'__clench',{configurable:false,writable:false,value:Object.freeze({
     render,discover,
+    field:id=>{const el=elements.get(id);return el && info(el)?.text ? el : null;},
     prepare:id=>{
       const el=elements.get(id);if(!el)return null;
       el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
