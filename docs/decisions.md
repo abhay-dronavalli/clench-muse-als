@@ -623,3 +623,25 @@ hardware tracker (2026-09-27).
   blink, attention and drowsiness signals are off (blinks come from the headband, MNE).
 - The SDK's license says it is granted "solely for commercial purposes"; fine for this prototype,
   worth reading before anything ships.
+
+## 20. Desktop control: eyes and jaw for all of Windows (branch desktop-control)
+
+Plan and chunks: `docs/desktop-control.md`. Taher asked (2026-09-27) for the Eyedid gaze and the
+Muse gestures to control all of Windows, not only the board tab.
+
+- Split: a small C++ program (`desktop/eyedid/`) runs only the camera, Eyedid and calibration
+  callbacks, and talks JSON lines on stdin and stdout. A Python agent (`desktop/agent/`) handles
+  the overlay, UI Automation, clicks and the Core connection. Taher chose "whatever's most reliable
+  and easiest".
+- Targeting: snap to the nearest clickable UI Automation element, and zoom 3x when that is not
+  certain (Taher's choice over always zooming or snapping only).
+- Back outside the agent's own screens: a double blink opens "Go back?", and a clench within 3 s
+  sends Alt+Left (Taher's choice over Escape or a context-dependent key). Inside the agent's zoom
+  or an armed dock mode, a double blink steps back at once, because that is harmless.
+- The Core stays the owner of gestures. SETTINGS gets `input_target` (board or desktop). In desktop
+  mode CLENCH and DOUBLE_BLINK go to the agent. LONG_CLENCH and the help countdown stay in the Core,
+  unchanged, and never depend on the agent or the AI.
+- Desktop clicks have no confirm step (hard rule 1 covers what Clench says and sends). Text Clench
+  composes for another app still goes through the board's confirm screen. Flagged for Taher.
+- Gaze never goes to the Core. The board gets it from the agent's local bridge (chunk 5), the same
+  way the tablet shell feeds it.
