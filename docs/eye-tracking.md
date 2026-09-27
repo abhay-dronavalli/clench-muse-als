@@ -131,6 +131,33 @@ The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns 
   `found: false` with state `CALIBRATING`, so the board holds still.
 - Build, install and run: `kushagra/tablet/README.md`, "Board shell with Eyedid gaze".
 
+## Eyedid web (laptop)
+
+On a laptop the board runs VisualCamp's browser eye tracker (npm `seeso`, Eyedid's web SDK from
+before the rename) on the webcam: `web/src/facetrack/eyedidWeb.ts`. It feeds the gaze slot like any
+tracker, so everything above (One Euro filter, sticky edges, the 300 ms hold, dwell, `/gaze-test`)
+applies unchanged.
+
+- It runs in **Auto** and **Gaze** mode only, after "Click to start", when `VITE_EYEDID_WEB_KEY` is
+  set in the repo's `.env` (a browser key from https://console.seeso.io, with this origin allowed),
+  and never inside the tablet shell (which has its own Eyedid). Webcam mode stays head pointing.
+- One camera owner, as in the tablet shell: while it starts or runs it owns the webcam and the head
+  tracker stays off (`cameraOwner.ts`). Auto follows the gaze, and after 3 s of lost eyes scans. If
+  it cannot start (no network, a refused key, no camera) it gives the camera back and Auto points
+  with the head. The dev panel shows `Eyedid web: on / starting / off / error (why)`.
+- Network: at start the SDK checks the key at console.seeso.io and downloads its engine (about
+  14 MB, then cached by the browser) from cdn.seeso.io. Gaze itself is computed in the browser; no
+  video or gaze leaves the laptop.
+- The engine is multithreaded WebAssembly, which browsers only allow on a cross-origin isolated
+  page, so the web dev server sends `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (`web/vite.config.ts`). Everything the board loads is
+  same-origin and the CDN allows cross-origin loads, so nothing else changes.
+- Calibrate: dev panel (backtick) > "Calibrate eyes": five dots, look at each until its ring fills.
+  Saved in this browser (`localStorage` `clench.eyedidWeb.calibration`) and loaded at every start.
+  Recalibrate after moving the laptop or the chair. Full screen (F11) keeps the page where the SDK
+  expects it.
+- `/gaze-test` runs it too when its source is "Gaze slot".
+
 ## Gaze test (`/gaze-test`)
 
 How we judge a tracker. Open `http://localhost:5173/gaze-test` (5174 for your own dev server; the

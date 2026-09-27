@@ -17,7 +17,8 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "seeso": "0.2.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

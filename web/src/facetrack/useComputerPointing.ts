@@ -4,7 +4,7 @@ import type { Send } from '../lib/useSocket'
 import { ComputerPointer } from './computerPointer'
 import { gaze } from './gaze'
 import { gazePointerTuning } from './gazeTuning'
-import { nativeGazeActive } from './native'
+import { gazeOwnsCamera } from './cameraOwner'
 import { chooseSource, fromHead, type PointSample } from './source'
 import { gazeTuning, showCursor } from './stores'
 import { DwellTimer, HEAD_TUNING } from './tilePointer'
@@ -35,7 +35,7 @@ export function useComputerPointing(options: Options) {
     let lastSeq = -1, progress = 0
     const sample = (s: PointSample) => {
       const { state, mode, margin, send, paused } = latest.current
-      if (!state?.active || s.source !== chooseSource(mode, gaze.available(s.t), !nativeGazeActive())) return
+      if (!state?.active || s.source !== chooseSource(mode, gaze.available(s.t), !gazeOwnsCamera())) return
       const tuning = s.source === 'gaze' ? gazePointerTuning(gazeTuning.get(), margin) : { ...HEAD_TUNING, margin }
       const status = s.found ? 'tracking' : s.source === 'gaze' ? (gaze.connected(s.t) ? 'lost' : 'no_tracker') :
         tracker.status.kind === 'error' ? 'camera_error' : tracker.status.kind === 'starting' ? 'starting' : 'lost'
@@ -52,7 +52,7 @@ export function useComputerPointing(options: Options) {
     const eyes = gaze.subscribe(sample)
     const watch = window.setInterval(() => {
       const now = performance.now()
-      const source = chooseSource(latest.current.mode, gaze.available(now), !nativeGazeActive())
+      const source = chooseSource(latest.current.mode, gaze.available(now), !gazeOwnsCamera())
       if (!source) { pointer.point = null; progress = 0; dwell.reset() }
       if (source === 'gaze' && !gaze.connected(now)) sample({ source, t: now, point: null, found: false, confidence: 0 })
       if (source === 'head' && now - tracker.sample.t > 500) sample({ source, t: now, point: null, found: false, confidence: 0 })

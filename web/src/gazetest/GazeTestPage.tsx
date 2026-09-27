@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { eyedidWeb } from '../facetrack/eyedidWeb'
 import type { HeadRange } from '../contracts'
 import { gaze } from '../facetrack/gaze'
 import { DEFAULT_GAZE_TUNING, gazePointerTuning, LIMITS, type GazeTuning } from '../facetrack/gazeTuning'
@@ -120,8 +121,12 @@ export default function GazeTestPage() {
   const nativeOn = useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
   useEffect(() => {
     reportPointingMode(source === 'gaze' ? 'gaze' : 'off')
+    eyedidWeb.setMode(source === 'gaze' ? 'gaze' : 'off') // Eyedid web on a laptop
   }, [source])
-  useEffect(() => () => reportPointingMode('off'), [])
+  useEffect(() => () => {
+    reportPointingMode('off')
+    eyedidWeb.setMode('off')
+  }, [])
 
   // The head needs this page's camera: only once the shell has let go of it.
   useEffect(() => {
