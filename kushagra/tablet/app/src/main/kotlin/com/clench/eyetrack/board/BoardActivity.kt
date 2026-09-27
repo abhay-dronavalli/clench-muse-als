@@ -76,6 +76,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     /** The page's pointing mode needs the camera (set from the page's thread, acted on in reconcile). */
     @Volatile private var cameraWanted = false
     private var calPoint: Pair<Float, Float>? = null
+    private var calText = ""
+    /** The page's onboarding is running (it calibrates the eyes itself; no startup prompt meanwhile). */
+    @Volatile private var onboarding = false
     private var startupChecked = false
     private var validation: Validation? = null
 
@@ -330,7 +333,13 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         }
 
         @JavascriptInterface fun calibrate(who: String) {
-            main.post { calibrate(who.trim().ifEmpty { DEFAULT_PERSON }) }
+            // The activity's calibrate, not this bridge method (a bare call re-posted itself forever).
+            main.post { this@BoardActivity.calibrate(who.trim().ifEmpty { DEFAULT_PERSON }) }
+        }
+
+        /** The page's onboarding started (true) or ended: no startup calibration prompt meanwhile. */
+        @JavascriptInterface fun setOnboarding(on: Boolean) {
+            onboarding = on
         }
 
         // Android's voice for the page's "browser speech" (web/src/board/nativeSpeech.ts).
@@ -397,7 +406,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         if (state != "on") return
         if (!startupChecked) {
             startupChecked = true
-            checkSavedCalibration()
+            // The page's onboarding calibrates the eyes itself: then no startup prompt, just the last
+            // calibration quietly loaded until the new one is done.
+            if (onboarding) savedCalibration(person)?.let { gaze.setCalibrationData(it) } else checkSavedCalibration()
         } else {
             savedCalibration(person)?.let { gaze.setCalibrationData(it) } // after a restart (filter switch)
         }
@@ -426,16 +437,26 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     private fun calibrate(who: String) {
         if (gaze.state != EyedidGaze.State.ON) {
             gazeOverlay.prompt("The eye tracker is not running (${gaze.state}).", "OK" to { gazeOverlay.hide() })
+            calibrationEvent("canceled", who)
             return
         }
         validation = null
         calibratingFor = who
         calSession++
-        gazeOverlay.showDot(-1f, -1f, 0f, "Calibrating $who: look at each dot until it fills")
+        calText = "Look at each dot until its ring fills"
+        gazeOverlay.showDot(-1f, -1f, 0f, calText, CAL_STEP)
+        // Points inside a safe margin: every target is drawn whole, never cut off by the screen's edge.
         val r = gazeOverlay.screenRect()
-        if (!gaze.startCalibration(r.left, r.top, r.left + r.width, r.top + r.height)) {
+        val mx = maxOf(gazeOverlay.targetReach(), r.width * CAL_MARGIN)
+        val my = maxOf(gazeOverlay.targetReach(), r.height * CAL_MARGIN)
+        val inset = gaze.startCalibration(r.left + mx, r.top + my, r.left + r.width - mx, r.top + r.height - my)
+        // If the SDK will not take the inset area, the whole screen (its targets may then touch the edges).
+        val started = inset || gaze.startCalibration(r.left, r.top, r.left + r.width, r.top + r.height)
+        Log.i(TAG, "calibration for $who: ${if (inset) "inset area" else if (started) "whole screen (inset refused)" else "refused"}")
+        if (!started) {
             calibratingFor = null
             gazeOverlay.prompt("Calibration could not start.", "OK" to { gazeOverlay.hide() })
+            calibrationEvent("canceled", who)
             return
         }
         calibrationEvent("started", who)
@@ -443,13 +464,13 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     override fun onCalibrationPoint(x: Float, y: Float) {
         calPoint = x to y
-        gazeOverlay.showDot(x, y, 0f)
+        gazeOverlay.showDot(x, y, 0f, calText, CAL_STEP)
         val session = calSession
         main.postDelayed({ if (calibratingFor != null && session == calSession && calPoint == (x to y)) gaze.collectSamples() }, SETTLE_BEFORE_SAMPLES_MS)
     }
 
     override fun onCalibrationProgress(progress: Float) {
-        calPoint?.let { (x, y) -> gazeOverlay.showDot(x, y, progress) }
+        calPoint?.let { (x, y) -> gazeOverlay.showDot(x, y, progress, calText, CAL_STEP) }
     }
 
     override fun onCalibrationFinished(data: DoubleArray) {
@@ -548,5 +569,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         private const val VALIDATE_SETTLE_MS = 800L
         private const val VALIDATE_COLLECT_MS = 1_500L
         private const val MUSE_LOG_LINES = 60
+        private const val CAL_MARGIN = 0.08f // calibration points stay this share of the screen inside its edges
+        private const val CAL_STEP = "Step 1 of 2 · Your eyes"
     }
 }
