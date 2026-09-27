@@ -106,6 +106,9 @@ dependencies {
     // The Muse sensor's WebSocket to the Core
     implementation(libs.okhttp)
 
+    // The trip screen's 3D car (Filament), drawn behind the board WebView
+    implementation(libs.sceneview)
+
     testImplementation(libs.junit)
     testImplementation(libs.json) // org.json is Android's; the JVM unit tests need a real one
 }
