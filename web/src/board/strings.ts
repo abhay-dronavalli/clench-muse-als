@@ -1,30 +1,134 @@
 import type { ActionName, Lang } from '../contracts'
+import type { Step } from '../facetrack/calibrate'
+import type { CameraProblem } from '../facetrack/camera'
+
+type ToastText = Record<ActionName, (who: string) => string>
 
 export const STRINGS = {
   en: {
     home: 'Home',
     connecting: 'Connecting to Clench…',
     speaking: 'Speaking…',
+    finding: 'Finding options…',
     hint: 'Clench = send  |  Double blink = cancel',
+    pointing: {
+      scanning: 'Scanning',
+      headtilt: 'Head tilt is not ready yet: scanning',
+      cameraOn: 'Camera on',
+      noGaze: 'No eye tracker connected. Set Pointing mode to Auto or Scan.',
+    },
+    camera: {
+      denied: 'Camera blocked. Allow the camera for this page (camera icon in the address bar) and in Windows camera privacy settings.',
+      none: 'No camera found. Plug in a webcam or turn the laptop camera on.',
+      busy: 'The camera is in use by another app. Close Teams, Zoom or the Camera app.',
+      insecure: 'The camera needs http://localhost (or https).',
+      model: 'Face tracking could not start. Run npm --prefix web run assets, then reload.',
+      error: 'The camera stopped working.',
+      scanning: 'Scanning instead.',
+      switch: 'Set Pointing mode to Auto or Scan.',
+    } satisfies Record<CameraProblem | 'scanning' | 'switch', string>,
+    calibrate: {
+      ready: 'Head range: get ready',
+      look: 'Look at the dot',
+      steps: { center: 'Center', left: 'Left edge', right: 'Right edge', up: 'Top edge', down: 'Bottom edge' } satisfies Record<Step, string>,
+      saving: 'Saving…',
+      saved: 'Head range saved',
+      noFace: (step: string) => `Could not see the face at "${step}". Face the camera and try again.`,
+      tooSmall: { yaw: 'Turn a little further left and right, then try again.', pitch: 'Tilt a little further up and down, then try again.' },
+      saveFailed: 'Could not save the head range (is the Core running?).',
+      cameraOff: 'The camera is off. Set Pointing mode to Auto or Webcam first.',
+      cancel: 'Esc = cancel',
+    },
     confirm: {
       speak: 'Say this?',
-      send_text: 'Send this text?',
+      send_message: 'Send this message?',
       place_call: 'Place this call?',
       room_control: 'Do this?',
       help_alert: 'Call for help?',
     } satisfies Record<ActionName, string>,
+    help: {
+      title: 'Calling for help',
+      cancel: 'Double blink to cancel',
+    },
+    toast: {
+      ok: {
+        speak: () => 'Said',
+        send_message: (who) => `Message sent to ${who}`,
+        place_call: (who) => `Calling ${who}`,
+        room_control: () => 'Done',
+        help_alert: (who) => `Calling ${who}`,
+      } satisfies ToastText,
+      demo: {
+        speak: () => '(demo mode) would say it',
+        send_message: (who) => `(demo mode) would message ${who}`,
+        place_call: (who) => `(demo mode) would call ${who}`,
+        room_control: () => '(demo mode) would do it',
+        help_alert: (who) => `(demo mode) would call ${who}`,
+      } satisfies ToastText,
+      failed: "Couldn't send",
+    },
   },
   es: {
     home: 'Inicio',
     connecting: 'Conectando con Clench…',
     speaking: 'Hablando…',
+    finding: 'Buscando opciones…',
     hint: 'Apretar = enviar  |  Doble parpadeo = cancelar',
+    pointing: {
+      scanning: 'Escaneando',
+      headtilt: 'Inclinar la cabeza aún no está listo: escaneando',
+      cameraOn: 'Cámara encendida',
+      noGaze: 'No hay seguimiento de ojos conectado. Pon el modo de señalar en Auto o Escaneo.',
+    },
+    camera: {
+      denied: 'Cámara bloqueada. Permite la cámara para esta página (ícono de cámara en la barra de direcciones) y en la privacidad de cámara de Windows.',
+      none: 'No hay cámara. Conecta una webcam o enciende la cámara de la laptop.',
+      busy: 'Otra aplicación está usando la cámara. Cierra Teams, Zoom o la app Cámara.',
+      insecure: 'La cámara necesita http://localhost (o https).',
+      model: 'El seguimiento de la cara no pudo iniciar. Ejecuta npm --prefix web run assets y recarga.',
+      error: 'La cámara dejó de funcionar.',
+      scanning: 'Escaneando en su lugar.',
+      switch: 'Pon el modo de señalar en Auto o Escaneo.',
+    } satisfies Record<CameraProblem | 'scanning' | 'switch', string>,
+    calibrate: {
+      ready: 'Rango de la cabeza: prepárate',
+      look: 'Mira el punto',
+      steps: { center: 'Centro', left: 'Borde izquierdo', right: 'Borde derecho', up: 'Borde de arriba', down: 'Borde de abajo' } satisfies Record<Step, string>,
+      saving: 'Guardando…',
+      saved: 'Rango de la cabeza guardado',
+      noFace: (step: string) => `No se vio la cara en "${step}". Mira a la cámara e inténtalo de nuevo.`,
+      tooSmall: { yaw: 'Gira un poco más a la izquierda y a la derecha e inténtalo de nuevo.', pitch: 'Inclina un poco más arriba y abajo e inténtalo de nuevo.' },
+      saveFailed: 'No se pudo guardar el rango de la cabeza (¿está corriendo el Core?).',
+      cameraOff: 'La cámara está apagada. Primero pon el modo de señalar en Auto o Webcam.',
+      cancel: 'Esc = cancelar',
+    },
     confirm: {
       speak: '¿Decir esto?',
-      send_text: '¿Enviar este mensaje?',
+      send_message: '¿Enviar este mensaje?',
       place_call: '¿Hacer esta llamada?',
       room_control: '¿Hacer esto?',
       help_alert: '¿Pedir ayuda?',
     } satisfies Record<ActionName, string>,
+    help: {
+      title: 'Pidiendo ayuda',
+      cancel: 'Doble parpadeo para cancelar',
+    },
+    toast: {
+      ok: {
+        speak: () => 'Dicho',
+        send_message: (who) => `Mensaje enviado a ${who}`,
+        place_call: (who) => `Llamando a ${who}`,
+        room_control: () => 'Hecho',
+        help_alert: (who) => `Llamando a ${who}`,
+      } satisfies ToastText,
+      demo: {
+        speak: () => '(modo demo) lo diría',
+        send_message: (who) => `(modo demo) enviaría un mensaje a ${who}`,
+        place_call: (who) => `(modo demo) llamaría a ${who}`,
+        room_control: () => '(modo demo) lo haría',
+        help_alert: (who) => `(modo demo) llamaría a ${who}`,
+      } satisfies ToastText,
+      failed: 'No se pudo enviar',
+    },
   },
 } satisfies Record<Lang, unknown>

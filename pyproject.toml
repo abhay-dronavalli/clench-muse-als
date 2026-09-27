@@ -9,12 +9,13 @@ dependencies = [
     "pydantic>=2",
     "pyyaml",
     "python-dotenv",
+    "httpx",
+    "google-genai>=2.25.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",
 ]
 
 [tool.uv]

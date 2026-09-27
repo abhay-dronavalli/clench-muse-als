@@ -1,4 +1,4 @@
-import type { Confirm, Lang, Screen } from '../contracts'
+import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
 
 export function Breadcrumb({ screen }: { screen: Screen }) {
@@ -15,28 +15,86 @@ export function Breadcrumb({ screen }: { screen: Screen }) {
   )
 }
 
-/** Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are. */
-export function TileGrid({ screen }: { screen: Screen }) {
+/** Circular arrows: "Other..." brings new options. */
+function RefreshIcon() {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 p-8">
-      {screen.tiles.map((tile, i) => {
-        const on = i === screen.highlight
-        return (
-          <div
-            key={tile.id}
-            aria-current={on}
-            className={[
-              'flex items-center justify-center rounded-3xl p-6 text-center font-bold leading-tight',
-              'text-5xl break-words transition-transform duration-150 xl:text-6xl',
-              on
-                ? 'relative z-10 scale-105 bg-zinc-800 text-yellow-200 ring-[12px] ring-yellow-300'
-                : 'bg-zinc-900 text-zinc-100 ring-2 ring-zinc-700',
-            ].join(' ')}
-          >
-            {tile.label}
-          </div>
-        )
-      })}
+    <svg viewBox="0 0 24 24" className="h-[0.9em] w-[0.9em] shrink-0" fill="none" stroke="currentColor"
+      strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8" />
+      <path d="M4 3v5h5" />
+      <path d="M4 13a8 8 0 0 0 14.3 4.9L20 16" />
+      <path d="M20 21v-5h-5" />
+    </svg>
+  )
+}
+
+const TEXT: Record<Tile['kind'], string> = {
+  branch: 'text-5xl leading-tight xl:text-6xl',
+  leaf: 'text-5xl leading-tight xl:text-6xl',
+  // A whole sentence: smaller so it wraps onto a few lines and is never cut off.
+  suggestion: 'text-3xl leading-snug xl:text-4xl',
+  other: 'text-5xl leading-tight xl:text-6xl',
+}
+
+function tileLook(tile: Tile, on: boolean): string {
+  if (tile.kind === 'other') {
+    // Outlined, no fill: clearly not one of the options themselves.
+    return on
+      ? 'relative z-10 scale-105 border-4 border-dashed border-yellow-300 bg-transparent text-yellow-200 ring-[12px] ring-yellow-300'
+      : 'border-4 border-dashed border-zinc-500 bg-transparent text-zinc-300'
+  }
+  return on
+    ? 'relative z-10 scale-105 bg-zinc-800 text-yellow-200 ring-[12px] ring-yellow-300'
+    : 'bg-zinc-900 text-zinc-100 ring-2 ring-zinc-700'
+}
+
+/**
+ * Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are.
+ * The deeper bottom padding keeps the collapsed dev panel pill clear of the highlighted tile's ring.
+ *
+ * While the Core is loading AI options (`screen.loading`) the picked tile pulses gently and a
+ * "Finding options…" line shows; the Core has paused the scan.
+ */
+export function TileGrid({ screen }: { screen: Screen }) {
+  const loading = screen.loading === true
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8">
+        {screen.tiles.map((tile, i) => {
+          const on = i === screen.highlight
+          return (
+            <div
+              key={tile.id}
+              data-tile-index={i} // webcam pointing measures the tiles on screen (facetrack/)
+              aria-current={on}
+              aria-busy={on && loading}
+              className={[
+                'flex items-center justify-center gap-4 rounded-3xl p-6 text-center font-bold',
+                'break-words transition-transform duration-150',
+                TEXT[tile.kind],
+                tileLook(tile, on),
+                on && loading ? 'animate-pulse' : '',
+              ].join(' ')}
+            >
+              {tile.kind === 'other' && <RefreshIcon />}
+              <span>{tile.label}</span>
+            </div>
+          )
+        })}
+      </div>
+      {loading && (
+        <div role="status" className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+          <span className="flex items-center gap-4 rounded-full bg-zinc-800/95 px-8 py-3 text-3xl font-semibold text-yellow-200 ring-2 ring-yellow-300/60">
+            <span className="flex gap-2" aria-hidden>
+              {[0, 200, 400].map((delay) => (
+                <span key={delay} className="h-3 w-3 animate-pulse rounded-full bg-yellow-300"
+                  style={{ animationDelay: `${delay}ms` }} />
+              ))}
+            </span>
+            {STRINGS[screen.lang].finding}
+          </span>
+        </div>
+      )}
     </div>
   )
 }
@@ -70,6 +128,21 @@ export function SpeakingView({ text, lang }: { text: string; lang: Lang }) {
         {STRINGS[lang].speaking}
       </p>
       <p className="max-w-6xl text-6xl font-bold leading-tight xl:text-7xl">{text}</p>
+    </div>
+  )
+}
+
+/** Full-screen red help countdown (PRD D3): a huge number and how to cancel. */
+export function HelpCountdownView({ countdown, lang }: { countdown: number; lang: Lang }) {
+  const s = STRINGS[lang].help
+  return (
+    <div
+      role="alert"
+      className="fixed inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-red-700 p-12 text-center text-white"
+    >
+      <p className="text-6xl font-bold">{s.title}</p>
+      <p className="text-[18rem] font-black leading-none tabular-nums">{countdown}</p>
+      <p className="text-5xl font-semibold">{s.cancel}</p>
     </div>
   )
 }

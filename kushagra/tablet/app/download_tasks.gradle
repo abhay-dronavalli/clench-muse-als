@@ -1,0 +1,18 @@
+// Auto-download MediaPipe face_landmarker.task into assets during build.
+
+task downloadFaceLandmarker {
+    def destFile = file("${projectDir}/src/main/assets/face_landmarker.task")
+    outputs.file(destFile)
+    doLast {
+        if (!destFile.exists()) {
+            destFile.parentFile.mkdirs()
+            new URL('https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task')
+                .withInputStream { src -> destFile.withOutputStream { it << src } }
+            println "Downloaded face_landmarker.task (${destFile.length()} bytes)"
+        } else {
+            println "face_landmarker.task already exists, skipping download"
+        }
+    }
+}
+
+preBuild.dependsOn downloadFaceLandmarker

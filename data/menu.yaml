@@ -1,18 +1,26 @@
 # Clench menu tree (PRD section 8), English and Spanish.
 #
-# Every node has: id (lowercase, unique among its siblings), label_en, label_es.
-# A node is either
-#   - a branch: `children` (1 to 6 nodes, PRD D8), or `from_contacts: true` (children are built
-#     from data/contacts.yaml: one branch per contact with Call / Text / Say out loud), or
-#   - a leaf: phrase_en, phrase_es and action (speak | send_text | place_call | room_control).
-# Nothing is spoken or sent until the person confirms the phrase (PRD D5).
-# The AI reorders each level in a later chunk; the tree itself stays hand-written (PRD D6).
+# Every node has: id (lowercase, unique among its siblings; "other" and "spell" are reserved),
+# label_en, label_es. A node is either
+#   - a branch: `children` (1 to 5 nodes), or `from_contacts: true` (children are built from
+#     data/contacts.yaml: one branch per contact with Call / Text / Say out loud), or
+#   - a leaf: phrase_en, phrase_es and action (speak | send_message | place_call | room_control).
+# Any node may say `urgent: true` (pain, bathroom, help): when the body state is elevated it moves
+# up (PRD D10: body state only reorders, never acts). A branch counts as urgent if anything in it is.
+# The session adds "Other..." as the sixth tile on every level (PRD D8: at most 6 tiles). It asks the
+# AI for new options on the same path; a branch's optional `more` list (1 to 5 nodes, same shape as
+# children) is what "Other..." shows when the AI has nothing (no key, offline, slow). The top-level
+# `more` is for the home "Other...".
+# Picking a leaf shows the AI's sentences for it, then its fixed phrase (PRD section 5 step 6).
+# Nothing is spoken or sent until the person confirms the phrase (PRD D5). The tree itself stays
+# hand-written, so everything works with no AI (PRD D6).
 
 home:
   - id: suggested
     label_en: Suggested
     label_es: Sugerencias
-    # Fixed for now; becomes the AI's top guesses for right now in chunk 5.
+    # The AI's top guesses for right now (hour and history) go first; these are the fallback.
+    ai_now: true
     children:
       - id: hungry
         label_en: I'm hungry
@@ -31,6 +39,18 @@ home:
         label_es: Voltéame
         phrase_en: "Can you help me turn over?"
         phrase_es: "¿Me ayudas a voltearme?"
+        action: speak
+      - id: thank_you
+        label_en: Thank you, I love you
+        label_es: Gracias, te quiero
+        phrase_en: "Thank you for today. I love you."
+        phrase_es: "Gracias por todo hoy. Te quiero."
+        action: speak
+      - id: how_are_you
+        label_en: How are you?
+        label_es: ¿Cómo estás?
+        phrase_en: "How are you?"
+        phrase_es: "¿Cómo estás?"
         action: speak
 
   - id: need
@@ -55,9 +75,11 @@ home:
         phrase_en: "I need to use the bathroom."
         phrase_es: "Necesito ir al baño."
         action: speak
+        urgent: true
       - id: pain
         label_en: Pain
         label_es: Dolor
+        urgent: true
         children:
           - id: head
             label_en: Head
@@ -139,6 +161,7 @@ home:
                 phrase_en: "My legs hurt a lot. Can you move them for me?"
                 phrase_es: "Me duelen mucho las piernas. ¿Me las puedes mover?"
                 action: speak
+        more:
           - id: arms
             label_en: Arms
             label_es: Brazos
@@ -183,6 +206,7 @@ home:
             phrase_en: "Please fix my pillow."
             phrase_es: "Por favor, arréglame la almohada."
             action: speak
+    more:
       - id: temperature
         label_en: Too hot or cold
         label_es: Calor o frío
@@ -239,53 +263,12 @@ home:
         phrase_en: "I'm frustrated. Give me a minute."
         phrase_es: "Esto me frustra. Dame un minuto."
         action: speak
+    more:
       - id: happy
         label_en: Happy
         label_es: Feliz
         phrase_en: "I'm happy. Thank you."
         phrase_es: "Me siento feliz. Gracias."
-        action: speak
-
-  - id: say
-    label_en: Say something
-    label_es: Decir algo
-    # AI phrases from context and "Spell it" come in later chunks.
-    children:
-      - id: thank_you
-        label_en: Thank you, I love you
-        label_es: Gracias, te quiero
-        phrase_en: "Thank you for today. I love you."
-        phrase_es: "Gracias por todo hoy. Te quiero."
-        action: speak
-      - id: "yes"
-        label_en: "Yes"
-        label_es: Sí
-        phrase_en: "Yes."
-        phrase_es: "Sí."
-        action: speak
-      - id: "no"
-        label_en: "No"
-        label_es: "No"
-        phrase_en: "No."
-        phrase_es: "No."
-        action: speak
-      - id: good_morning
-        label_en: Good morning
-        label_es: Buenos días
-        phrase_en: "Good morning!"
-        phrase_es: "¡Buenos días!"
-        action: speak
-      - id: wait
-        label_en: Wait a moment
-        label_es: Un momento
-        phrase_en: "Please wait a moment."
-        phrase_es: "Espera un momento, por favor."
-        action: speak
-      - id: how_are_you
-        label_en: How are you?
-        label_es: ¿Cómo estás?
-        phrase_en: "How are you?"
-        phrase_es: "¿Cómo estás?"
         action: speak
 
   - id: room
@@ -356,3 +339,30 @@ home:
             phrase_en: "Please close the blinds."
             phrase_es: "Por favor, cierra las persianas."
             action: room_control
+
+# Home "Other..." when the AI has nothing (the old "Say something" phrases).
+more:
+  - id: "yes"
+    label_en: "Yes"
+    label_es: Sí
+    phrase_en: "Yes."
+    phrase_es: "Sí."
+    action: speak
+  - id: "no"
+    label_en: "No"
+    label_es: "No"
+    phrase_en: "No."
+    phrase_es: "No."
+    action: speak
+  - id: good_morning
+    label_en: Good morning
+    label_es: Buenos días
+    phrase_en: "Good morning!"
+    phrase_es: "¡Buenos días!"
+    action: speak
+  - id: wait
+    label_en: Wait a moment
+    label_es: Un momento
+    phrase_en: "Please wait a moment."
+    phrase_es: "Espera un momento, por favor."
+    action: speak

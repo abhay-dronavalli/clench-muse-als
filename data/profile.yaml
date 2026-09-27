@@ -1,0 +1,35 @@
+# The person using Clench (PRD A7 `profile`). Loaded by the core at startup.
+#
+#   name          used in messages and calls ("Luis: ...", "Mensaje de Luis: ...")
+#   lang          language the board starts in: en | es (switchable live)
+#   help_contact  contact id from contacts.yaml called and messaged by the long-clench help alert
+#   speak_picks   say each picked tile's label aloud as it is picked (true | false, switchable live)
+#   learning      rank by the patient's history (true), or "Day 1 mode" (false): menu.yaml order,
+#                 the fixed Suggested list, no one-clench shortcut, no Jev. Switchable live.
+#   clench_lookback_ms  when the highlight follows the head (Webcam, Auto on webcam), a clench picks
+#                 the tile that was highlighted this many ms before it: clenching the jaw can move
+#                 the head slightly (PRD 3a "freeze on clench"). 0 = the tile at the clench.
+#   long_clench_ms  how long a clench must be held to call for help (LONG_CLENCH), in ms. The dev
+#                 panel's hold-Space uses the same value; the 5 s cancel countdown follows it.
+#   tile_switch_margin  webcam pointing: how far (share of a tile's size, 0 to 0.2) the head's point
+#                 must be inside a new tile before the highlight moves there. Switchable live.
+#   ranking       PRD section 9 score weights (normalized, so only their ratios matter) and the
+#                 stability margin: a menu item moves above the one before it only when its score
+#                 is `hysteresis` times higher.
+
+name: Luis
+lang: es
+help_contact: maria
+speak_picks: true
+learning: true
+clench_lookback_ms: 250
+long_clench_ms: 2500
+tile_switch_margin: 0.05
+ranking:
+  weights:
+    use: 0.4
+    time: 0.2
+    state: 0.1
+    ai: 0.3
+    reject: 0.3
+  hysteresis: 1.5

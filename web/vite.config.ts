@@ -2,6 +2,10 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+// The Core the dev server proxies to. CORE_URL runs a second copy side by side, e.g.
+//   $env:CORE_URL = 'http://127.0.0.1:8100'; npm --prefix web run dev -- --port 5273
+const core = process.env.CORE_URL ?? 'http://127.0.0.1:8000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -11,9 +15,13 @@ export default defineConfig({
     proxy: {
       // WebSocket to the Core server (core/, FastAPI)
       '/ws': {
-        target: 'ws://127.0.0.1:8000',
+        target: core.replace(/^http/, 'ws'),
         ws: true,
       },
+      // Cached ElevenLabs audio named in PLAY_AUDIO
+      '/audio': core,
+      // REST: the calibrated head range (GET / PUT /api/head-range)
+      '/api': core,
     },
   },
 })

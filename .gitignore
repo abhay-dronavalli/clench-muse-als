@@ -22,6 +22,9 @@ data/recordings/*.csv
 test/recordings/*.csv
 *.sqlite3
 *.db
+data/clench.db*
+data/audio_cache/*
+!data/audio_cache/.gitkeep
 
 # Editors / OS
 .vscode/
