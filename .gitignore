@@ -34,3 +34,4 @@ Thumbs.db
 
 # Browser test artifacts
 .playwright-mcp/
+.gstack/

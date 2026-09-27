@@ -449,6 +449,12 @@ Status: **done** = built, **planned** = agreed, not built yet.
   logged at the wall clock, the ranker's clock was fixed at 18:30 that day); it now moves the cancel
   next to the ranker's clock.
 
+## Default language
+
+- `data/profile.yaml` now starts the board in English (`lang: en`, was `es`). Luis still has Spanish
+  one click away (EN/ES in the dev panel); the help-alert test pins Spanish itself instead of relying
+  on the profile file.
+
 ## 16. Muse input in the main app: connect button, double blink, input log
 
 - **The console starts the Sensor Service.** `core/sensor_service.py` supervises one
