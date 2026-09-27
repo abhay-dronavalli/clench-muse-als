@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clench Insights</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="viz-root">
+    <header class="page-head">
+      <h1>Clench Insights</h1>
+      <p class="lede">How well the headband is reading jaw clenches, day by day. Counts and timings only:
+        no message text and no contact names are stored.</p>
+      <div class="legend-key" aria-label="Data sources">
+        <span class="key"><span class="swatch sim"></span><strong>Simulated 4 weeks</strong>
+          an illustration loaded by the seed, not a real person</span>
+        <span class="key"><span class="swatch live"></span><strong>Live today</strong>
+          recorded from this laptop's Clench core</span>
+      </div>
+    </header>
+
+    <div id="status" class="status" hidden></div>
+
+    <section id="suggestion" class="card suggestion" hidden aria-live="polite">
+      <div class="suggestion-head">
+        <span class="badge">Suggestion</span>
+        <h2 id="suggestion-text"></h2>
+      </div>
+      <p id="suggestion-reason" class="muted"></p>
+      <p id="suggestion-sim" class="muted" hidden>Based partly on the simulated history.</p>
+      <p class="fine">A suggestion only. Nothing here changes a Clench setting.</p>
+    </section>
+    <p id="no-suggestion" class="muted small" hidden></p>
+
+    <section class="tiles" aria-label="Live today">
+      <div class="tile"><span class="tile-label">Headband clenches today</span><span class="tile-value" id="t-clenches">-</span></div>
+      <div class="tile"><span class="tile-label">Refused today</span><span class="tile-value" id="t-refused">-</span></div>
+      <div class="tile"><span class="tile-label">Messages today</span><span class="tile-value" id="t-messages">-</span></div>
+      <div class="tile"><span class="tile-label">Keyboard stand-in gestures</span><span class="tile-value" id="t-keyboard">-</span>
+        <span class="tile-note">not charted: always full strength</span></div>
+    </section>
+
+    <div class="grid">
+      <figure class="card chart" data-chart="strength">
+        <figcaption><h2>Median clench strength</h2>
+          <p class="muted">Daily median, 0 to 1 of the calibrated range. Headband clenches only.</p></figcaption>
+        <div class="canvas-wrap"><canvas role="img" aria-label="Median clench strength per day"></canvas></div>
+        <details><summary>Table</summary><div class="table-wrap"></div></details>
+      </figure>
+      <figure class="card chart" data-chart="margin">
+        <figcaption><h2>Signal above threshold at a clench</h2>
+          <p class="muted">Daily median of each clench's peak EMG divided by the calibrated threshold. 1.0 is the threshold.</p></figcaption>
+        <div class="canvas-wrap"><canvas role="img" aria-label="Median clench margin over threshold per day"></canvas></div>
+        <details><summary>Table</summary><div class="table-wrap"></div></details>
+      </figure>
+      <figure class="card chart" data-chart="refusal">
+        <figcaption><h2>Refused gestures, by reason</h2>
+          <p class="muted">Share of headband gestures the core refused each day.</p></figcaption>
+        <div class="canvas-wrap"><canvas role="img" aria-label="Refusal rate per day, stacked by reason"></canvas></div>
+        <details><summary>Table</summary><div class="table-wrap"></div></details>
+      </figure>
+      <figure class="card chart" data-chart="clenches">
+        <figcaption><h2>Clenches per message</h2>
+          <p class="muted">Every pick plus the confirm, averaged per confirmed message. Hover for the Day 1 mode cost.</p></figcaption>
+        <div class="canvas-wrap"><canvas role="img" aria-label="Clenches per message per day"></canvas></div>
+        <details><summary>Table</summary><div class="table-wrap"></div></details>
+      </figure>
+      <figure class="card chart" data-chart="seconds">
+        <figcaption><h2>Seconds to compose a message</h2>
+          <p class="muted">From the first accepted clench to the confirm, averaged per message.</p></figcaption>
+        <div class="canvas-wrap"><canvas role="img" aria-label="Seconds per message per day"></canvas></div>
+        <details><summary>Table</summary><div class="table-wrap"></div></details>
+      </figure>
+    </div>
+
+    <footer class="muted small">Charts read TimescaleDB continuous aggregates on Tiger Data. Refreshes every minute.</footer>
+  </main>
+  <script src="/static/vendor/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
