@@ -32,6 +32,7 @@ function RefreshIcon() {
 const TEXT: Record<Tile['kind'], string> = {
   branch: 'text-5xl leading-tight xl:text-6xl',
   leaf: 'text-5xl leading-tight xl:text-6xl',
+  answer: 'text-5xl leading-tight xl:text-6xl', // a Support question's answer (core/car)
   // A whole sentence: smaller so it wraps onto a few lines and is never cut off.
   suggestion: 'text-3xl leading-snug xl:text-4xl',
   other: 'text-5xl leading-tight xl:text-6xl',

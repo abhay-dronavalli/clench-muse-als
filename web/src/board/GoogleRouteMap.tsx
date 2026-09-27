@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react'
 import type { CarState, Lang } from '../contracts'
-import { loadGoogleMaps, onMapsAuthFailure, TRIP_DESTINATION, TRIP_ORIGIN, type LatLng, type MapsApi } from './googleMaps'
+import { loadGoogleMaps, onMapsAuthFailure, tripRoute, type LatLng, type MapsApi } from './googleMaps'
 import { useRideProgress } from './rideProgress'
 import { STRINGS } from './strings'
 
 /**
- * The trip map on Google Maps: the driving route between TRIP_ORIGIN and TRIP_DESTINATION (Directions),
- * the part already driven in grey, and the car as a blue arrow moving along the route as the ride goes
+ * The trip map on Google Maps: our open-data route from /api/geo/trip (OSRM, FIU to the MDC Kendall
+ * drop-off; no Google Directions, decisions #23), the part already driven in grey, and the car as a blue arrow moving along the route as the ride goes
  * on. The map cannot be dragged or zoomed (a stray touch must not move it). If the script, the key or
- * the directions fail, `onFail` hands over to the drawn map.
+ * the route fail, `onFail` hands over to the drawn map.
  */
 
 const EARTH_M = 6_371_000
@@ -51,8 +51,8 @@ export function GoogleRouteMap({ car, lang, apiKey, onFail }: { car: CarState | 
   useEffect(() => {
     let live = true
     const stop = onMapsAuthFailure(() => failRef.current('Google refused the Maps key'))
-    loadGoogleMaps(apiKey, lang)
-      .then((api) => {
+    Promise.all([loadGoogleMaps(apiKey, lang), tripRoute()])
+      .then(([api, route]) => {
         if (!live || !box.current) return
         const map = new api.Map(box.current, {
           center: { lat: 25.76, lng: -80.3 },
@@ -62,28 +62,21 @@ export function GoogleRouteMap({ car, lang, apiKey, onFail }: { car: CarState | 
           keyboardShortcuts: false,
           clickableIcons: false,
         })
-        new api.DirectionsService().route(
-          { origin: TRIP_ORIGIN, destination: TRIP_DESTINATION, travelMode: api.TravelMode.DRIVING },
-          (result, status) => {
-            if (!live) return
-            if (status !== 'OK' || !result?.routes.length) {
-              failRef.current(`no directions (${status})`)
-              return
-            }
-            new api.DirectionsRenderer({
-              map,
-              directions: result,
-              preserveViewport: false,
-              polylineOptions: { strokeColor: '#2563eb', strokeWeight: 7, strokeOpacity: 0.9 },
-            })
-            const path = result.routes[0].overview_path
-            const cumulative = [0]
-            for (let i = 1; i < path.length; i++) cumulative.push(cumulative[i - 1] + metres(path[i - 1], path[i]))
-            const driven = new api.Polyline({ map, path: [path[0]], strokeColor: '#9ca3af', strokeWeight: 7, zIndex: 5 })
-            const marker = new api.Marker({ map, position: path[0], zIndex: 10, icon: arrow(api, 0) })
-            drawn.current = { api, path, cumulative, car: marker, driven }
-          },
-        )
+        const path = route.path.map(([la, ln]) => new api.LatLng(la, ln))
+        if (path.length < 2) {
+          failRef.current('the route has no points')
+          return
+        }
+        new api.Polyline({ map, path, strokeColor: '#2563eb', strokeWeight: 7, strokeOpacity: 0.9 })
+        const bounds = new api.LatLngBounds()
+        path.forEach((p) => bounds.extend(p))
+        map.fitBounds(bounds, 24)
+        if (route.dropoff) new api.Marker({ map, position: new api.LatLng(route.dropoff[0], route.dropoff[1]), zIndex: 8 })
+        const cumulative = [0]
+        for (let i = 1; i < path.length; i++) cumulative.push(cumulative[i - 1] + metres(path[i - 1], path[i]))
+        const driven = new api.Polyline({ map, path: [path[0]], strokeColor: '#9ca3af', strokeWeight: 7, zIndex: 5 })
+        const marker = new api.Marker({ map, position: path[0], zIndex: 10, icon: arrow(api, 0) })
+        drawn.current = { api, path, cumulative, car: marker, driven }
       })
       .catch((e: unknown) => live && failRef.current(String(e)))
     return () => {

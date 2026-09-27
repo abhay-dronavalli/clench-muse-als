@@ -1,7 +1,8 @@
 /**
  * Loading Google's Maps JavaScript API once, only when a key is set (VITE_GOOGLE_MAPS_API_KEY in the
  * repository's .env). The key goes to the browser, as with any Maps JavaScript key: restrict it in
- * Google Cloud to the Maps JavaScript API and Directions, and to http://localhost:5173/* and 5174.
+ * Google Cloud to the Maps JavaScript API, and to http://localhost:5173/* and 5174. No Directions: the
+ * route drawn is our own open-data route (OSRM, /api/geo/trip), docs/decisions.md #23.
  *
  * Only the handful of Maps classes the trip map uses are typed here (no @types/google.maps).
  */
@@ -13,18 +14,11 @@ export interface LatLng {
 
 export interface MapsApi {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => { fitBounds(b: unknown, padding?: number): void }
-  DirectionsService: new () => {
-    route(
-      req: Record<string, unknown>,
-      done: (result: { routes: { overview_path: LatLng[]; bounds: unknown }[] } | null, status: string) => void,
-    ): void
-  }
-  DirectionsRenderer: new (opts: Record<string, unknown>) => unknown
+  LatLngBounds: new () => { extend(p: LatLng): void }
   Polyline: new (opts: Record<string, unknown>) => { setPath(path: LatLng[]): void }
   Marker: new (opts: Record<string, unknown>) => { setPosition(p: LatLng): void; setIcon(icon: Record<string, unknown>): void }
   LatLng: new (lat: number, lng: number) => LatLng
   SymbolPath: { FORWARD_CLOSED_ARROW: unknown }
-  TravelMode: { DRIVING: unknown }
 }
 
 declare global {
@@ -36,8 +30,23 @@ declare global {
 }
 
 export const MAPS_KEY: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? ''
-export const TRIP_ORIGIN: string = import.meta.env.VITE_TRIP_ORIGIN || 'Florida International University, Miami, FL'
-export const TRIP_DESTINATION: string = import.meta.env.VITE_TRIP_DESTINATION || 'Miami International Airport, FL'
+
+/** The trip's route (the first route tile: fastest and smoothest) and drop-off point, from /api/geo/trip. */
+export async function tripRoute(): Promise<{ path: [number, number][]; dropoff: [number, number] | null }> {
+  const res = await fetch('/api/geo/trip')
+  if (!res.ok) throw new Error(`no trip route (HTTP ${res.status})`)
+  const trip = (await res.json()) as {
+    ride: { routes: { id: string; polyline: string }[]; tiles: { route_id: string }[] } | null
+    dropoff: { request: { point: { latitude: number; longitude: number } } | null } | null
+  }
+  const id = trip.ride?.tiles[0]?.route_id
+  const route = trip.ride?.routes.find((r) => r.id === id)
+  if (!route) throw new Error('the trip has no route')
+  const p = trip.dropoff?.request?.point
+  return { path: decodePolyline(route.polyline), dropoff: p ? [p.latitude, p.longitude] : null }
+}
+
+import { decodePolyline } from '../trip/format'
 
 let loading: Promise<MapsApi> | null = null
 const authListeners = new Set<() => void>()

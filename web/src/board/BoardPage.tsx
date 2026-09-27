@@ -143,6 +143,10 @@ export default function BoardPage() {
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
+      case 'CAR_RESULT':
+        // The car's answer (core/car). The Core says it when it matters; the toast shows every one.
+        push({ tone: msg.status === 'REJECTED' ? 'error' : msg.status === 'DELAYED' ? 'demo' : 'ok', text: msg.message })
+        break
       case 'SETTINGS':
         // The language and the pointing mode (camera on or off); the dev panel shows the rest.
         if (msg.lang) setLang(msg.lang)
@@ -202,7 +206,8 @@ export default function BoardPage() {
     if (cur) send({ type: 'SETTINGS', pointing_mode: cur.pointing_mode, scan_ms: cur.scan_ms, trip_layout: next })
   }
   const tripShared = { car: carState, nativeCar, layout, onLayout: changeLayout }
-  const tripScreen = screen?.screen === 'trip' ? screen : null
+  // A Support question (core/car) is drawn on the trip screen too: its answers are big tiles.
+  const tripScreen = screen?.screen === 'trip' || screen?.screen === 'support_question' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
   const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
   const seeThrough = tripShown && nativeCar

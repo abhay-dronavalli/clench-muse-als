@@ -200,6 +200,12 @@ export function TripView({
       {screen.path.length > 0 && (
         <p className="mb-4 text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
       )}
+      {screen.prompt && (
+        // A Support question, or the Trip level's route trade-offs and drop-off reason (core/car).
+        <p className={`mb-4 max-w-6xl text-center font-semibold text-white ${screen.screen === 'support_question' ? 'text-4xl' : 'text-lg text-white/85'}`}>
+          {screen.prompt}
+        </p>
+      )}
       <div className={`grid w-full max-w-6xl flex-1 auto-rows-fr gap-6 ${cols}`}>
         {screen.tiles.map((tile, i) => {
           const on = !locked && i === screen.highlight
