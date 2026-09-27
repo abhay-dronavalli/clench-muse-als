@@ -21,6 +21,7 @@ from core.rank.jev import (
     jev_access,
 )
 from core.session import Session
+from tests.gestures import go_back
 
 CRITERIA = {"suggested.water": "I'd like some water, please.", "people.maria.text": "Honey, I'm okay, call me at six."}
 
@@ -228,7 +229,7 @@ def test_jev_answer_is_ignored_after_a_gesture(menu, profile):
     n = len(sent)
     loop.run()
     assert all(not isinstance(m, Screen) or m.path == ["I need"] for m in sent[n:])
-    s.handle(DoubleBlink(t=0.0))  # back home: the answer Jev gave meanwhile is used at once
+    go_back(s)  # back home: the answer Jev gave meanwhile is used at once
     assert ids(sent) == ["suggested", "room", "need", "people", "feel", "other"]
 
 

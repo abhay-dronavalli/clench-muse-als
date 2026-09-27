@@ -52,4 +52,6 @@ def test_scripts_do_nothing_without_send(name, argv, no_network, monkeypatch, ca
     assert module.main(argv) == 0
     out = capsys.readouterr().out
     assert "--send" in out
-    assert "OK" not in out
+    # The help text may name CLOUDFLARE_API_TOKEN (which contains "OK").
+    # Only a success-result line would claim that a real request completed.
+    assert not any(line.startswith("OK") for line in out.splitlines())

@@ -19,6 +19,7 @@ dist/
 
 # Local data
 data/recordings/*.csv
+test/recordings/*.csv
 *.sqlite3
 *.db
 data/clench.db*

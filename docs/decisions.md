@@ -449,7 +449,86 @@ Status: **done** = built, **planned** = agreed, not built yet.
   logged at the wall clock, the ranker's clock was fixed at 18:30 that day); it now moves the cancel
   next to the ranker's clock.
 
-## 16. Eyedid gaze on the tablet, step 1: gaze pipeline and test bench (branch android/eyedid)
+## 16. Muse input in the main app: connect button, double blink, input log
+
+- **The console starts the Sensor Service.** `core/sensor_service.py` supervises one
+  `python -m sensor.main` subprocess behind `GET /api/sensor`, `POST /api/sensor/start` and
+  `POST /api/sensor/stop`. The Muse panel (board bottom bar and `/console`) has a profile picker
+  (the `test/calibration.*.json` files), Connect / Disconnect, a demo-source button and the
+  service's last output lines. Starting replaces a running service (BrainFlow allows one BLE client
+  per headband). Stopping pauses Muse input. The Core kills the subprocess on shutdown.
+- **A brief headband dropout no longer pauses Muse.** Before, every `SIGNAL` with
+  `connected: false` set `muse_enabled` to false. The sensor sends one before every reconnect try,
+  so the switch flapped Paused / Ready every ~12 s and the caregiver had to press Enable again. The
+  command gate already refuses gestures while the signal is disconnected, blocked or stale, so the
+  pause now happens only after 10 s without the headband (`MUSE_LOSS_GRACE_S`). A service
+  disconnect or the last board closing still pauses at once.
+- **Reconnect backs off.** 5, 10, 20, 40 s, then 40 s, instead of a try every 5 s. Resets on success.
+- **DOUBLE_BLINK from the headband, by MNE; clenches by the person's calibration.** The same split
+  the Tkinter bench uses (`--blink-detector mne`, its default). Clenches: the calibrated jaw detector
+  (`emg_threshold`, `emg_rest` from `test/calibration.<name>.json`). Blinks: MNE
+  `find_eog_events` on the last 20 s of AF7/AF8, run in a background thread every 0.25 s, peaks
+  committed 0.5 s behind real time, two peaks within 700 ms = DOUBLE_BLINK (a single blink sends
+  nothing). The bench's `mne_blinks.py` moved to `sensor/detect/mne_blinks.py` so the app and the
+  bench share one copy (`test/mne_blinks.py` re-exports it); `sensor/detect/eyes.py` drives it from
+  the service loop. MNE uses no saved eye threshold, so a profile's `blink_enabled: false` does not
+  turn it off. `/ws/sensor` now accepts DOUBLE_BLINK. `mne==1.13.2` (the bench's pin) joined the
+  `sensor` extra. It needs 20 s of continuous data after connecting before the first blink counts.
+  DOUBLE_BLINK is stamped when sent, not at the peak: MNE commits a peak at least 0.5 s late and the
+  Core refuses gestures more than 1 s old. A clench wins a tick that also completes a double blink.
+  If MNE is missing or fails, blinks stop and clenches keep working. `--blink off` (panel: "Double
+  blink: off") turns it off.
+- **MNE thresholds each window against itself.** In a 20 s window with no real blink, noise peaks
+  become "blinks". A wearer blinks every few seconds so this does not happen in use, but an unworn
+  band can produce DOUBLE_BLINKs (the Core refuses them while the band reports poor contact). The
+  demo source blinks every 4 s, like a wearer, for the same reason.
+- **INPUT_EVENT and the input log.** The Core sends one INPUT_EVENT per gesture (headband or
+  keyboard stand-in) to consoles and input clients, with `accepted` and the reason when it refused
+  one (paused, no board, headband not connected, blocked, stale, clock skew). Pressing `/` on the
+  board or console opens a short full-width strip at the top listing them with per-kind counts; Esc
+  or `/` closes it. Refused gestures are shown (amber) because "the detector never fired" and "the
+  Core ignored it" look the same otherwise.
+- **Muse panel moved to a left-side debug panel on ",".** The bottom-bar widget is gone.
+  `web/src/sensor/MusePanel.tsx` is a full-height strip on the left (Esc also closes it; open by
+  default on `/console`) with four sections in the order you use them: headband (profile, double
+  blink, Connect / Disconnect, demo source), live signal (per-channel spread with flat / noisy
+  flags, jaw level against the threshold, sample age), the Enable / Pause switch, and the service's
+  output. Closed, only a small "Muse" tab with a status dot stays on the left edge.
+- **The panel no longer flickers Disconnected / Paused.** It required a sample's time to be at or
+  before the page clock, but the page clock ticks every 250 ms and a sample arrives every ~285 ms,
+  so the newest sample was routinely "from the future" and read as Disconnected several times a
+  second, disabling the Enable button with it. A sample up to 2 s ahead now counts as fresh.
+- **The detector keeps running while Muse is paused or blocked.** Gestures go to the Core, which
+  refuses them and reports them as INPUT_EVENT with the reason, so the input log is not silently
+  empty while paused. Any change of the pause or block state still resets and re-arms the detector,
+  so a clench held across Enable, or a crossing during head motion, never fires.
+
+## 17. Going back needs a clench to confirm
+
+With the headband, blinks turned out far too easy to make by accident, and twice: a stray double
+blink went back a level, and a few in a row raced up through the menus. Asked 2026-09-27; the
+choices below are Taher's.
+
+- **Menus:** a DOUBLE_BLINK opens a "Go back?" prompt (BACK_PROMPT, `kind: "menu"`) and pauses
+  scanning. A CLENCH within 3 s (`BACK_CONFIRM_S`) goes up one level. Doing nothing closes it and
+  nothing changes: in a one-muscle interface, "no" has to cost nothing. More double blinks while it
+  is open are ignored, so the menus can no longer be raced through.
+- **"Say this?" screen:** the same prompt (`kind: "confirm"`, "Cancel this message?"); a CLENCH
+  cancels. A clench on that screen normally means SEND, so after the prompt closes on its own every
+  CLENCH is ignored for 1 s (`LATE_CLENCH_S`): a clench meant for a prompt that had just run out must
+  never send a real message. The same 1 s applies after a menu prompt, where it would pick a tile.
+- **Help countdown:** unchanged, a DOUBLE_BLINK cancels it at once (Taher's choice: stopping a false
+  alarm stays one gesture). The spoken line and the red screen say "Double blink to cancel" again,
+  now that the headband sends double blinks ("Press B to cancel" was a stop-gap from before).
+- **"Finding options…" (LOADING, at most 4 s):** unchanged, a DOUBLE_BLINK stops waiting at once;
+  it only returns to the same screen.
+- A LONG_CLENCH during a prompt closes it and starts the help countdown at once (rule 2). RESET, and
+  any new screen, close it too.
+- The keyboard stand-in's B is a DOUBLE_BLINK like any other, so the same prompt shows: B then Space
+  goes back. The Core still cannot tell the two apart.
+- Contracts: new Core -> board and console message BACK_PROMPT (`open`, `kind`, `timeout_ms`).
+
+## 18. Eyedid gaze on the tablet, step 1: gaze pipeline and test bench (branch android/eyedid)
 
 - Eyedid (VisualCamp, formerly SeeSo) is the primary eye tracker for the Android tablet; improving
   our MediaPipe iris path is the fallback. Step 1 is the web side only; the native shell is step 2.
@@ -485,7 +564,7 @@ Status: **done** = built, **planned** = agreed, not built yet.
   ignoring a CLENCH for about 500 ms after it shows the confirm screen. Until then keep dwell off
   whenever the headband is in use.
 
-## 17. Eyedid gaze on the tablet, step 2: the native board shell (branch android/eyedid-shell)
+## 19. Eyedid gaze on the tablet, step 2: the native board shell (branch android/eyedid-shell)
 
 - `kushagra/tablet` gains `board/BoardActivity` ("Clench Board" launcher entry): the board in a
   WebView plus the Eyedid SDK (`camp.visual.eyedid.android.gazetracker:eyedid-gazetracker:1.0.0-beta5`,

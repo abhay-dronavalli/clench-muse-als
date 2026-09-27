@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
+import { InputLog } from '../sensor/InputLog'
+import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
 import {
@@ -23,7 +25,7 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { ToastStack } from './ToastStack'
-import { Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
+import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
 type View =
   | { kind: 'waiting' }
@@ -62,9 +64,17 @@ export default function BoardPage() {
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
+  const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
+
+  useEffect(() => {
+    if (!backPrompt) return
+    const timer = window.setTimeout(() => setBackPrompt(null), backPrompt.ms + 1000)
+    return () => window.clearTimeout(timer)
+  }, [backPrompt])
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
@@ -75,6 +85,9 @@ export default function BoardPage() {
         break
       case 'CONFIRM':
         setView({ kind: 'confirm', confirm: msg })
+        break
+      case 'BACK_PROMPT':
+        setBackPrompt(msg.open ? { kind: msg.kind, ms: msg.timeout_ms, at: Date.now() } : null)
         break
       case 'SPEAK':
       case 'PLAY_AUDIO': {
@@ -98,6 +111,8 @@ export default function BoardPage() {
       case 'CLICK':
         click() // a picked "Other...": no word, a soft click in the sound queue
         break
+      case 'SIGNAL':
+        break // MusePanel displays sensor telemetry through its console socket.
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
@@ -194,7 +209,12 @@ export default function BoardPage() {
       {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
       {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
+      {connected && backPrompt && view.kind !== 'help' && (
+        <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />
+      )}
       <ToastStack toasts={toasts} />
+      <MusePanel />
+      <InputLog />
 
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />
