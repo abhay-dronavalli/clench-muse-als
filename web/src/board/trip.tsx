@@ -204,8 +204,9 @@ export function TripView({
         <p className="mb-4 text-2xl font-semibold text-white/90">{screen.path.join('  ›  ')}</p>
       )}
       {screen.prompt && (
-        // A Support question, or the Trip level's route trade-offs and drop-off reason (core/car).
-        <p className={`mb-4 max-w-6xl text-center font-semibold text-white ${screen.screen === 'support_question' ? 'text-4xl' : 'text-lg text-white/85'}`}>
+        // "Plan a trip", a routes screen's drop-off (and why), or a Support question (core/car): large,
+        // high contrast, one short line each.
+        <p className={`mb-5 max-w-6xl whitespace-pre-line rounded-3xl bg-black/60 px-8 py-4 text-center font-bold leading-snug text-white ${screen.screen === 'support_question' || screen.prompt.indexOf('\n') < 0 ? 'text-5xl' : 'text-3xl'}`}>
           {screen.prompt}
         </p>
       )}
@@ -256,12 +257,14 @@ export function TripView({
  */
 export function TripConfirm({
   action,
+  text,
   lang,
   onConfirm,
   onCancel,
   ...shared
 }: Shared & {
-  action: 'pull_over' | 'support'
+  action: 'pull_over' | 'support' | 'route'
+  text?: string // the route confirm: destination, route, time, drop-off (from the Core)
   lang: Lang
   onConfirm: () => void
   onCancel: () => void
@@ -272,8 +275,8 @@ export function TripConfirm({
   return (
     <TripShell lang={lang} tint={pull} {...shared}>
       <div className="flex flex-col items-center rounded-[2.5rem] bg-white/95 px-12 py-10 shadow-2xl shadow-black/15">
-        <p className={`mb-8 text-center text-6xl font-bold ${pull ? 'text-[#7a2e0e]' : 'text-zinc-900'}`}>
-          {pull ? s.pullOver : s.support}
+        <p className={`mb-8 max-w-5xl text-center font-bold ${action === 'route' ? 'text-5xl leading-tight' : 'text-6xl'} ${pull ? 'text-[#7a2e0e]' : 'text-zinc-900'}`}>
+          {action === 'route' && text ? text : pull ? s.pullOver : s.support}
         </p>
         <div className={`flex gap-8 ${narrow ? 'flex-col' : ''}`}>
           <button

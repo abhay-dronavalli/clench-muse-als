@@ -311,10 +311,10 @@ export default function BoardPage() {
           {pointing && <DwellRing />}
         </>
       )}
-      {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support') && (
-        <TripConfirm action={view.confirm.action} lang={lang} onConfirm={tapConfirm} onCancel={tapCancel} {...tripShared} />
+      {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support' || view.confirm.action === 'route') && (
+        <TripConfirm action={view.confirm.action} text={view.confirm.text} lang={lang} onConfirm={tapConfirm} onCancel={tapCancel} {...tripShared} />
       )}
-      {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && (
+      {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && view.confirm.action !== 'route' && (
         <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
       )}
       {connected && view.kind === 'speaking' && trip && (

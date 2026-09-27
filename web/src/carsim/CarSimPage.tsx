@@ -14,6 +14,8 @@ const QUESTIONS: { text: string; options: string[]; urgent: boolean }[] = [
   { text: 'Is the temperature okay?', options: ['Yes', 'No', 'Not sure'], urgent: false },
 ]
 const MAX_LOG = 200
+// The typed-address planner is hidden for the demo: the board uses the saved places' committed trips.
+const SHOW_ADDRESS_BOX = false
 
 export default function CarSimPage() {
   const [state, setState] = useState<CarState | null>(null)
@@ -116,7 +118,7 @@ export default function CarSimPage() {
           <p className="text-xs text-zinc-500">The rider sees Yes / No / Not sure and confirms the answer. No answer in 30 s is sent as "no response".</p>
         </section>
 
-        <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
+        {SHOW_ADDRESS_BOX && <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
           <h2 className="font-semibold">Plan a trip to any address</h2>
           <form
             className="flex gap-2"
@@ -136,7 +138,7 @@ export default function CarSimPage() {
           <p className="text-xs text-zinc-500">
             From the pickup, computed live from open map data (up to 20 s). If it is slower or the services fail, the rider is told and the demo trip stays.
           </p>
-        </section>
+        </section>}
 
         {last && (
           <p className="text-sm text-zinc-400">
