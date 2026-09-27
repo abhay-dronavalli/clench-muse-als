@@ -377,3 +377,26 @@ def test_setup_timeout_cannot_confirm_an_existing_outward_action(in_trip, sched,
     assert not any(isinstance(m, (ActionResult, CarResult)) for m in sent)
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=False))
     assert in_trip.state is SessionState.CONFIRMING
+
+
+def test_split_stays_available_while_scanning(in_trip, sched, sent):
+    # Scan mode (no eyes, no head): the rider can still choose Split and keeps it.
+    in_trip.handle(Settings(pointing_mode="scan", scan_ms=1000, trip_layout="split"))
+    assert in_trip.settings().trip_layout == "split"
+    assert labels(sent) == TOP
+    sched.advance(2 * 1.0)
+    assert in_trip.settings().trip_layout == "split" and last_screen(sent).pointer == "scan"
+
+
+def test_a_reset_ends_the_ride_and_the_next_car_mode_plans_a_new_trip(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Comfort", "Cooler")
+    sched.advance(1.0)
+    assert in_trip.ride_active and in_trip.ride_started
+    assert in_trip.factory_reset() is True
+    assert in_trip.trip is False and not in_trip.ride_active and not in_trip.ride_started
+    home = last_screen(sent)
+    assert home.screen == "menu" and home.path == []
+    in_trip.handle(trip())
+    plan = last_screen(sent)
+    assert plan.prompt == "Plan a trip" and "MDC Kendall" in [t.label for t in plan.tiles]  # not the old ride
+    assert in_trip.car.cabin_temp_f == Car().cabin_temp_f  # a fresh car, not the old ride's

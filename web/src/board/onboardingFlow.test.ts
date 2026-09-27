@@ -64,9 +64,9 @@ describe('setup double blinks', () => {
   })
 })
 
-it('restores the preferred layout after scanning without changing the preference', () => {
+it('keeps the chosen layout whatever the pointer, so Split is always available', () => {
   for (const preferred of ['car', 'split', 'map'] as const) {
-    expect(effectiveTripLayout(preferred, 'scan')).toBe('car')
+    expect(effectiveTripLayout(preferred, 'scan')).toBe(preferred)
     expect(effectiveTripLayout(preferred, 'gaze')).toBe(preferred)
   }
 })

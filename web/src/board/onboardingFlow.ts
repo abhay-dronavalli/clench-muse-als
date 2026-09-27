@@ -44,8 +44,8 @@ export function canEnableMuse(clenched: boolean, signal: Signal | null, now: num
 }
 
 /** A scan needs the complete board. The chosen layout is retained for when pointing resumes. */
-export function effectiveTripLayout(preferred: TripLayout, pointer: ActivePointer | null): TripLayout {
-  return pointer === 'scan' ? 'car' : preferred
+export function effectiveTripLayout(preferred: TripLayout, _pointer: ActivePointer | null): TripLayout {
+  return preferred // Split is always available, scanning included (decisions #33)
 }
 
 /** Pair deliberate bilateral blinks, reject stale tracking and a pair spanning different options. */

@@ -1043,3 +1043,17 @@ choices below are Taher's.
 - `start-demo` pins the web app to 5173 (`--strictPort`: Vite used to move to the next free port
   silently, and the tablet and laptop 2 would then miss it) and points a tablet plugged in over USB at
   the same servers.
+
+## 33. Split is always available; Reset app ends the ride too
+
+- **Split always.** #26 dropped the layout to Car while the scan runs (the board then showed the whole
+  top level). Now the rider's choice holds whatever the pointer: Split while scanning shows the same
+  SPLIT_TOP controls as with the eyes (the map is already on screen, so nothing is lost), and the
+  scan covers exactly the tiles shown.
+- **Reset app is a first run, not a pause.** Leaving Car mode keeps a ride going (#30), but a reset
+  now also ends it: the ride and its minute clock stop, a Support question is dropped, a live trip plan
+  still running is discarded when it finishes (a generation counter), the demo trip and its routes come
+  back, and the mock car gets a fresh state. The next Car mode starts on Plan a trip. Calibrations
+  reset with it: the head range (Core) and the tablet's eye calibration (tablet app). The Muse jaw
+  profile is not touched: the tablet's is built into the app (MUSE_PROFILE), the laptop's are files
+  made at the Muse bench.

@@ -369,6 +369,7 @@ class Session:
 
         self.place_trips = load_places()  # saved places' committed trips: every pick is instant
         self._plan_note: str | None = None  # why the last plan fell back to the demo trip
+        self._plan_gen = 0  # a reset makes a plan still running stale: its result is dropped
         self._acting_timer: TimerHandle | None = None
         self._ride_timer: TimerHandle | None = None
         self.tile_switch_margin = profile.tile_switch_margin
@@ -404,6 +405,7 @@ class Session:
         self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
         self._first_settings = self.settings()  # what factory_reset() goes back to
+        self._first_geo_trip = self.geo_trip
 
     # --- public ---------------------------------------------------------------
 
@@ -440,7 +442,22 @@ class Session:
         if self.state is SessionState.HELP_COUNTDOWN:
             log.warning("factory reset refused: a help countdown is running")
             return False
-        log.info("factory reset: first settings, home")
+        log.info("factory reset: no ride, no plan, first settings, home")
+        # A first run has no ride and no trip: end the ride (not just leave its screen), drop a Support
+        # question and any plan still running, and give the car a fresh state with the demo trip's routes.
+        self._close_question()
+        self._cancel_ride()
+        self.ride_active = False
+        self.ride_started = False
+        self._changing_trip = False
+        self._plan_gen += 1
+        self._planning = None
+        self._plan_note = None
+        self.geo_trip = self._first_geo_trip
+        if isinstance(self.car_link, MockCar):
+            t = self.geo_trip
+            self.car_link.routes = {r.route_id: r.label for r in t.ride.tiles} if t is not None and t.ride is not None else {}
+        self.car_link.start_ride()  # a fresh car; its state reaches no board while trip mode is off
         self._apply_settings(self._first_settings)
         self._reset()
         return True
@@ -914,9 +931,9 @@ class Session:
         self._plan_note = None
         self._voice.speak(("Planning your trip to " if self.lang == "en" else "Planeando tu viaje a ") + label + ".", self.lang, "system")
         self._redraw_trip()
-        self._spawn(self._plan_task(query, label))
+        self._spawn(self._plan_task(query, label, self._plan_gen))
 
-    async def _plan_task(self, query: str, label: str) -> None:
+    async def _plan_task(self, query: str, label: str, gen: int = 0) -> None:
         trip = None
         why = ""
         try:
@@ -931,7 +948,7 @@ class Session:
                     trip = await asyncio.wait_for(asyncio.shield(work), PLAN_TIMEOUT_S)
                 except asyncio.TimeoutError:
                     # Keep the demo trip now; if the plan still finishes, offer it then (and it is cached).
-                    work.add_done_callback(lambda f: self._late_plan(f, label))
+                    work.add_done_callback(lambda f: self._late_plan(f, label, gen))
                     raise
                 if trip.dropoff is None or trip.ride is None:
                     why = "; ".join(trip.notes) or "the map services did not answer"
@@ -941,6 +958,9 @@ class Session:
         except Exception as e:  # a planning failure must never break the session
             log.exception("trip planning failed")
             why = type(e).__name__
+        if gen != self._plan_gen:
+            log.info("trip plan to %s dropped: the app was reset meanwhile", label)
+            return
         self._planning = None
         if trip is not None and trip.dropoff is not None and trip.ride is not None:
             self.geo_trip = trip
@@ -955,10 +975,10 @@ class Session:
         self._voice.speak(text, self.lang, "system")
         self._redraw_trip()
 
-    def _late_plan(self, work: "asyncio.Future[GeoTrip]", label: str) -> None:
+    def _late_plan(self, work: "asyncio.Future[GeoTrip]", label: str, gen: int = 0) -> None:
         """A plan that missed PLAN_TIMEOUT_S finished after all: use it, and say so (unless another
-        plan started meanwhile)."""
-        if self._planning is not None or work.cancelled() or work.exception() is not None:
+        plan started meanwhile, or the app was reset)."""
+        if gen != self._plan_gen or self._planning is not None or work.cancelled() or work.exception() is not None:
             return
         trip = work.result()
         if trip.dropoff is None or trip.ride is None:
@@ -1269,7 +1289,7 @@ class Session:
             assert trip.ride is not None
             return [TripNode(f"route_{i + 1}", t.label, t.label, car_id=f"go:{key}:{t.route_id}", confirm=True)
                     for i, t in enumerate(trip.ride.tiles[:3])]
-        if self.trip_layout == "split" and self.pointer.source != "scan" and len(self._trip_path) == 1:
+        if self.trip_layout == "split" and len(self._trip_path) == 1:
             return [n for n in level.children if n.key in SPLIT_TOP]
         music_off = self.car_link.state().music_playing is False
         return [TripNode(*MUSIC_ON[:3], action=MUSIC_ON[3], car_id=MUSIC_ON[4]) if n.key == "music" and music_off else n  # type: ignore[arg-type]
