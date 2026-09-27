@@ -7,7 +7,7 @@ rem   run-tablet.bat test         the same on a separate test copy (Core 8001, w
 rem   run-tablet.bat mediapipe    open the standalone MediaPipe app instead (no servers needed)
 rem
 rem Ports: the tablet always loads http://localhost:5173/ (the app's BOARD_URL); adb reverse forwards
-rem it to this laptop. By default that is the demo's own servers, the same ones scripts\start-demo.bat
+rem it to this laptop. By default that is the demo's own servers, the same ones start-demo.bat (next to this file)
 rem starts (the Core on 8000, the web app on 5173, open to laptop 2 on the Wi-Fi), so the tablet, the
 rem laptop and laptop 2's /car-sim share one Core. "test" keeps a separate copy on 8001 / 5174.
 rem Run it again any time: servers that are already up are left alone; the app is rebuilt.

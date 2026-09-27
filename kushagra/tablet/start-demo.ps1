@@ -1,17 +1,17 @@
 # Start the demo on this laptop (laptop 1): the Core on 8000 and the web app on 5173, each in its own
 # window, then print (and copy) the address laptop 2 opens.
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1     (or double-click start-demo.bat)
+#   powershell -ExecutionPolicy Bypass -File kushagra\tablet\start-demo.ps1   (or double-click start-demo.bat)
 #
 # It stops whatever is already listening on 8000 / 5173 first. If Windows asks "Allow Node.js to
 # communicate", tick BOTH Private and Public, then click Allow.
 #
 # One set of servers for everything: laptop 2 (/car-sim), this laptop and the tablet all use this Core.
 # A tablet plugged in over USB is pointed at it too (adb reverse 5173 -> 5173); after installing a new
-# build, kushagra\tablet\run-tablet.bat reuses these servers instead of starting its own.
+# build, run-tablet.bat (next to this file) reuses these servers instead of starting its own.
 
 $ErrorActionPreference = 'Stop'
-$repo = Split-Path -Parent $PSScriptRoot
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path  # this file is in kushagra\tablet
 
 # 4. Stop any old servers.
 $old = Get-NetTCPConnection -LocalPort 8000, 5173 -State Listen -ErrorAction SilentlyContinue
