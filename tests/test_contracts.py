@@ -100,6 +100,10 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.ActionResult,
         {"type": "ACTION_RESULT", "action": "send_message", "ok": True, "detail": "sent", "contact": "María"},
     ),
+    "BACK_PROMPT": (
+        contracts.BackPrompt,
+        {"type": "BACK_PROMPT", "open": True, "kind": "menu", "timeout_ms": 3000},
+    ),
     "INPUT_EVENT": (
         contracts.InputEvent,
         {

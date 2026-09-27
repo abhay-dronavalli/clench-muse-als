@@ -22,6 +22,7 @@ from core.pointer import (
 )
 from core.profile import load_profile
 from core.session import CLENCH_DEBOUNCE_S, Session, SessionState
+from tests.gestures import go_back
 
 SCAN_S = 1.0
 HOME = ["suggested", "need", "people", "feel", "room", "other"]
@@ -218,7 +219,7 @@ def test_auto_falls_back_while_confirming_and_scans_when_back(menu, profile, sch
     session.handle(FaceOk(ok=False))
     sched.advance(FACE_LOST_S + 1)
     assert session.pointer.source == "scan" and session.state is SessionState.CONFIRMING
-    session.handle(DoubleBlink(t=0.0))  # back to the TV level: scanning, badge on
+    go_back(session)  # back to the TV level: scanning, badge on
     assert last_screen(sent).pointer == "scan"
     h = last_screen(sent).highlight
     sched.advance(SCAN_S)

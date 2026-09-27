@@ -197,6 +197,20 @@ export interface Confirm {
 }
 
 /**
+ * A DOUBLE_BLINK asked to go back (a menu) or to cancel the "Say this?" screen. It only happens if a
+ * CLENCH follows within `timeout_ms`; doing nothing closes the prompt and nothing changes. Sent again
+ * with `open` false when the prompt closes, for any reason.
+ */
+export interface BackPrompt {
+  type: 'BACK_PROMPT'
+  open: boolean
+  /** menu = up one level; confirm = cancel the "Say this?" screen */
+  kind: 'menu' | 'confirm'
+  /** how long it stays open; 0 when closing */
+  timeout_ms: number
+}
+
+/**
  * Say `text` with the browser's speech synthesis (no cloud audio for it right now).
  * A phrase is only ever sent after a confirming clench (PRD D5).
  */
@@ -338,6 +352,7 @@ export type Message =
   | Settings
   | Screen
   | Confirm
+  | BackPrompt
   | Speak
   | PlayAudio
   | Click

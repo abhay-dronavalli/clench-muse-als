@@ -47,6 +47,13 @@ that goes up when its tiles change, and a POINT for any other `seq` is ignored, 
 never lands on a new screen. When the highlight follows the head, a CLENCH picks the tile that was
 highlighted `clench_lookback_ms` (250 ms) before it arrived: clenching can move the head.
 
+Going back (docs/decisions.md 17): a DOUBLE_BLINK on a menu or on the "Say this?" screen only opens a
+"Go back?" / "Cancel this message?" prompt (BACK_PROMPT) and pauses scanning. A CLENCH within
+BACK_CONFIRM_S (3 s) goes back or cancels; doing nothing closes the prompt and nothing changes, and
+clenches are then ignored for LATE_CLENCH_S (1 s) so a clench meant for the prompt cannot pick a tile
+or send the message. More blinks while it is open are ignored. A LONG_CLENCH still starts help at once.
+The help countdown itself is still cancelled by a DOUBLE_BLINK straight away.
+
 Help alert (PRD D3): LONG_CLENCH while SCANNING, LOADING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one
 SCREEN per second, and the board says "Calling for help. Double blink to cancel.". DOUBLE_BLINK
 cancels back to where the person was. At 0 the help contact gets a call and a message (the countdown
@@ -74,6 +81,7 @@ from core.contracts import (
     BodyStateLevel,
     Clench,
     Confirm,
+    BackPrompt,
     DoubleBlink,
     FaceOk,
     Lang,
@@ -108,6 +116,8 @@ from core.voice import Voice
 log = logging.getLogger("clench.session")
 
 CLENCH_DEBOUNCE_S = 0.3  # a CLENCH within 300 ms of the last accepted one is ignored
+BACK_CONFIRM_S = 3.0  # the go-back prompt stays open this long; a CLENCH inside it goes back
+LATE_CLENCH_S = 1.0  # after the prompt closes on its own, clenches are ignored this long
 SPEAK_TIMEOUT_S = 10.0  # back to home if the board never sends AUDIO_DONE
 HELP_COUNTDOWN_S = 5  # PRD D3: 5 second cancel window
 LOADING_MAX_S = 4.0  # longest the board waits for AI options after a pick
@@ -118,8 +128,8 @@ HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
 HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
 HELP_START: dict[Lang, str] = {
-    "en": "Calling for help. Press B to cancel.",
-    "es": "Pidiendo ayuda. Pulsa B para cancelar.",
+    "en": "Calling for help. Double blink to cancel.",
+    "es": "Pidiendo ayuda. Parpadea dos veces para cancelar.",
 }
 OTHER_LABEL: dict[Lang, str] = {"en": "Other...", "es": "Otro..."}
 OTHER_WORD: dict[Lang, str] = {"en": "Other", "es": "Otro"}  # the breadcrumb (a pick is a click, no word)
@@ -304,6 +314,9 @@ class Session:
         self._stack: list[Frame] = [self._home()]
         self._pending: Item | None = None  # item being confirmed or spoken
         self._last_clench: float | None = None
+        self._back: Literal["menu", "confirm"] | None = None  # the go-back prompt, while it is open
+        self._back_timer: TimerHandle | None = None
+        self._late_until = float("-inf")  # clenches before this are ignored (the prompt just closed)
         self._speak_timer: TimerHandle | None = None
         self._speaking_id: str | None = None  # the utterance SPEAKING waits for
         self._help_timer: TimerHandle | None = None
@@ -356,6 +369,7 @@ class Session:
         self.pointer.close()
         self._cancel_speak_timer()
         self._cancel_help_timer()
+        self._cancel_back_timer()
         self._cancel_wait()
         for task in list(self._tasks):
             task.cancel()
@@ -428,6 +442,18 @@ class Session:
             log.info("CLENCH ignored: within %d ms of the previous one", CLENCH_DEBOUNCE_S * 1000)
             return
         self._last_clench = now
+        if self._back is not None:
+            kind = self._back
+            log.info("CLENCH confirms the go-back prompt (%s)", kind)
+            self._close_back()
+            if kind == "menu":
+                self._up_one_level()
+            else:
+                self._cancel_confirm()
+            return
+        if now < self._late_until:
+            log.info("CLENCH ignored: the go-back prompt just closed")
+            return
         if self.state is SessionState.SCANNING:
             self._effort.select()
             self._pick()
@@ -437,9 +463,12 @@ class Session:
             log.info("CLENCH ignored while %s", self.state.value)
 
     def _on_double_blink(self) -> None:
+        if self._back is not None and self.state is not SessionState.HELP_COUNTDOWN:
+            log.info("DOUBLE_BLINK ignored: the go-back prompt is already open")
+            return
         if self.state is SessionState.SCANNING:
             if len(self._stack) > 1:
-                self._up_one_level()
+                self._open_back("menu")
             else:
                 log.info("DOUBLE_BLINK at home: nothing to go back to")
         elif self.state is SessionState.LOADING:
@@ -447,22 +476,63 @@ class Session:
             self._cancel_wait()
             self._resume()
         elif self.state is SessionState.CONFIRMING:
-            item = self._pending
-            assert item is not None
-            text = item.phrase(self.lang)
-            log.info("cancelled: %r", text)
-            self._record(item, rejected=True, text=text)
-            self._pending = None
-            branch, self._shortcut_from = self._shortcut_from, None
-            if branch is not None:
-                # The one-clench guess was wrong: show the whole Suggested list instead of going home.
-                self._open_suggested_list(branch)
-            else:
-                self._enter_frame()  # back to the screen the sentence was picked on
+            self._open_back("confirm")
         elif self.state is SessionState.HELP_COUNTDOWN:
-            self._cancel_help()
+            self._cancel_help()  # at once, by choice: stopping a false alarm must stay one gesture
         else:
             log.info("DOUBLE_BLINK ignored while %s", self.state.value)
+
+    # --- the go-back prompt ---------------------------------------------------
+
+    def _open_back(self, kind: Literal["menu", "confirm"]) -> None:
+        """Ask before going back: blinks are easy to do by accident, and twice. Scanning pauses so the
+        highlight cannot move under the prompt."""
+        self._back = kind
+        if kind == "menu":
+            self.pointer.stop()
+        log.info("DOUBLE_BLINK: go-back prompt (%s) for %.0f s; a clench confirms", kind, BACK_CONFIRM_S)
+        self._back_timer = self._scheduler.call_later(BACK_CONFIRM_S, self._back_timed_out)
+        self._emit(BackPrompt(open=True, kind=kind, timeout_ms=round(BACK_CONFIRM_S * 1000)))
+
+    def _back_timed_out(self) -> None:
+        """Nothing happened: stay. Doing nothing is how the person says no."""
+        self._back_timer = None
+        kind = self._back or "menu"
+        self._back = None
+        self._late_until = self._scheduler.now() + LATE_CLENCH_S
+        log.info("go-back prompt (%s) closed: no clench, staying", kind)
+        self._emit(BackPrompt(open=False, kind=kind, timeout_ms=0))
+        if kind == "menu" and self.state is SessionState.SCANNING:
+            self._resume()
+
+    def _close_back(self) -> None:
+        """Close the prompt without its own consequence (confirmed, help, reset, a new screen)."""
+        if self._back is None:
+            return
+        kind = self._back
+        self._back = None
+        self._cancel_back_timer()
+        self._emit(BackPrompt(open=False, kind=kind, timeout_ms=0))
+
+    def _cancel_back_timer(self) -> None:
+        if self._back_timer is not None:
+            self._back_timer.cancel()
+            self._back_timer = None
+
+    def _cancel_confirm(self) -> None:
+        """The "Say this?" screen was cancelled: nothing is said or sent."""
+        item = self._pending
+        assert item is not None
+        text = item.phrase(self.lang)
+        log.info("cancelled: %r", text)
+        self._record(item, rejected=True, text=text)
+        self._pending = None
+        branch, self._shortcut_from = self._shortcut_from, None
+        if branch is not None:
+            # The one-clench guess was wrong: show the whole Suggested list instead of going home.
+            self._open_suggested_list(branch)
+        else:
+            self._enter_frame()  # back to the screen the sentence was picked on
 
     # --- picking --------------------------------------------------------------
 
@@ -591,6 +661,7 @@ class Session:
             log.warning("RESET ignored: a help countdown is running (a double blink cancels it)")
             return
         log.info("RESET: back to home (was %s)", self.state.value)
+        self._close_back()
         self._cancel_wait()
         self._cancel_speak_timer()
         self._speaking_id = None
@@ -985,6 +1056,7 @@ class Session:
         """Show the top frame and prefetch what could be picked next. Scanning starts on the first
         tile with a full scan step; the head keeps its tile until its next POINT, unless `first_tile`
         (RESET) puts every pointer on tile 0."""
+        self._close_back()
         self.state = SessionState.SCANNING
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
         home = len(self._stack) == 1
@@ -1078,6 +1150,7 @@ class Session:
     # --- help alert -----------------------------------------------------------
 
     def _start_help(self) -> None:
+        self._close_back()  # the help alert wins over a go-back prompt, at once
         if self.state is SessionState.LOADING:
             self._cancel_wait()  # the help alert wins; a cancel goes back to scanning this screen
             self.state = SessionState.SCANNING

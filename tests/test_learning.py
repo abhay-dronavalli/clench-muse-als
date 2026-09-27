@@ -20,6 +20,7 @@ from core.session import CLENCH_DEBOUNCE_S, Session, SessionState
 from core.suggest.fake import FakeProvider
 from core.suggest.service import Suggester
 from core.voice import Voice
+from tests.gestures import go_back
 
 NOW = datetime(2026, 9, 26, 18, 30).timestamp()
 SCAN_S = 1.0
@@ -134,13 +135,13 @@ def test_double_blink_on_the_shortcut_opens_the_suggested_list(menu, profile, db
     maria_every_evening(db)
     s, sent = make(menu, profile, db, loop)
     pick(s, sent, "Suggested")
-    s.handle(DoubleBlink(t=0.0))
+    go_back(s)
     screen = last_screen(sent)
     assert s.state is SessionState.SCANNING and screen.path == ["Suggested"]  # not home
     assert screen.tiles[0].label == MARIA and len(screen.tiles) == 6
     rejected = [r for r in db.events() if r["rejected"]]
     assert [r["text"] for r in rejected] == [MARIA]  # the wrong guess is recorded
-    s.handle(DoubleBlink(t=0.0))
+    go_back(s)
     assert last_screen(sent).path == []  # and one more goes home
 
 
@@ -150,7 +151,7 @@ def test_double_blink_on_a_normal_confirm_still_goes_back(menu, profile, db, loo
     for tile in ["I need", "Water"]:
         pick(s, sent, tile)
     assert isinstance(sent[-1], Confirm)
-    s.handle(DoubleBlink(t=0.0))
+    go_back(s)
     assert last_screen(sent).path == ["I need"]
 
 
@@ -182,13 +183,13 @@ def test_a_recent_cancel_turns_the_shortcut_off(menu, profile, db, loop):
     maria_every_evening(db)
     s, sent = make(menu, profile, db, loop)
     pick(s, sent, "Suggested")
-    s.handle(DoubleBlink(t=0.0))  # cancelled the guess
+    go_back(s)  # cancelled the guess
     # The session logs the cancel at the wall clock; the ranker's clock is NOW. Put the cancel a
     # minute before NOW so the test does not depend on the time of day it runs at.
     with db._conn:
         db._conn.execute("UPDATE events SET t = ? WHERE rejected = 1", (NOW - 60,))
     s.ranker._index = None  # re-read the history
-    s.handle(DoubleBlink(t=0.0))
+    go_back(s)
     pick(s, sent, "Suggested")
     assert s.state is SessionState.SCANNING  # the list, not the same guess again
 
@@ -291,7 +292,7 @@ def test_debug_line_after_every_home_render(menu, profile, db, loop):
     assert d.reason.startswith("history share ") and d.reason.endswith(">= 0.6")
     pick(s, sent, "I need")
     count = sum(isinstance(m, ShortcutDebug) for m in sent)
-    s.handle(DoubleBlink(t=0.0))  # home again: a new line
+    go_back(s)  # home again: a new line
     assert sum(isinstance(m, ShortcutDebug) for m in sent) == count + 1
 
 

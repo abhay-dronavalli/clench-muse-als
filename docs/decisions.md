@@ -502,3 +502,28 @@ Status: **done** = built, **planned** = agreed, not built yet.
   refuses them and reports them as INPUT_EVENT with the reason, so the input log is not silently
   empty while paused. Any change of the pause or block state still resets and re-arms the detector,
   so a clench held across Enable, or a crossing during head motion, never fires.
+
+## 17. Going back needs a clench to confirm
+
+With the headband, blinks turned out far too easy to make by accident, and twice: a stray double
+blink went back a level, and a few in a row raced up through the menus. Asked 2026-09-27; the
+choices below are Taher's.
+
+- **Menus:** a DOUBLE_BLINK opens a "Go back?" prompt (BACK_PROMPT, `kind: "menu"`) and pauses
+  scanning. A CLENCH within 3 s (`BACK_CONFIRM_S`) goes up one level. Doing nothing closes it and
+  nothing changes: in a one-muscle interface, "no" has to cost nothing. More double blinks while it
+  is open are ignored, so the menus can no longer be raced through.
+- **"Say this?" screen:** the same prompt (`kind: "confirm"`, "Cancel this message?"); a CLENCH
+  cancels. A clench on that screen normally means SEND, so after the prompt closes on its own every
+  CLENCH is ignored for 1 s (`LATE_CLENCH_S`): a clench meant for a prompt that had just run out must
+  never send a real message. The same 1 s applies after a menu prompt, where it would pick a tile.
+- **Help countdown:** unchanged, a DOUBLE_BLINK cancels it at once (Taher's choice: stopping a false
+  alarm stays one gesture). The spoken line and the red screen say "Double blink to cancel" again,
+  now that the headband sends double blinks ("Press B to cancel" was a stop-gap from before).
+- **"Finding options…" (LOADING, at most 4 s):** unchanged, a DOUBLE_BLINK stops waiting at once;
+  it only returns to the same screen.
+- A LONG_CLENCH during a prompt closes it and starts the help countdown at once (rule 2). RESET, and
+  any new screen, close it too.
+- The keyboard stand-in's B is a DOUBLE_BLINK like any other, so the same prompt shows: B then Space
+  goes back. The Core still cannot tell the two apart.
+- Contracts: new Core -> board and console message BACK_PROMPT (`open`, `kind`, `timeout_ms`).

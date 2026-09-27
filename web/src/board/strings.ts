@@ -48,7 +48,13 @@ export const STRINGS = {
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Calling for help',
-      cancel: 'Press B to cancel',
+      cancel: 'Double blink to cancel',
+    },
+    back: {
+      menu: 'Go back?',
+      confirm: 'Cancel this message?',
+      how: 'Clench to confirm',
+      stay: { menu: 'Do nothing to stay here', confirm: 'Do nothing to keep it' },
     },
     toast: {
       ok: {
@@ -111,7 +117,13 @@ export const STRINGS = {
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Pidiendo ayuda',
-      cancel: 'Pulsa B para cancelar',
+      cancel: 'Parpadea dos veces para cancelar',
+    },
+    back: {
+      menu: '¿Volver?',
+      confirm: '¿Cancelar este mensaje?',
+      how: 'Aprieta la mandíbula para confirmar',
+      stay: { menu: 'No hagas nada para quedarte', confirm: 'No hagas nada para conservarlo' },
     },
     toast: {
       ok: {

@@ -8,6 +8,7 @@ import pytest
 from core.actions import build_registry
 from core.clock import ManualScheduler
 from core.contracts import (
+    BackPrompt,
     ActionResult,
     AudioDone,
     Clench,
@@ -25,7 +26,9 @@ from core.menu import load_menu
 from core.pointer import ScanPointer
 from core.profile import load_profile
 from core.voice import Voice
-from core.session import CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, SPEAK_TIMEOUT_S, Session, SessionState, voice_lines
+from core.session import (BACK_CONFIRM_S, CLENCH_DEBOUNCE_S, HELP_COUNTDOWN_S, LATE_CLENCH_S, SPEAK_TIMEOUT_S, Session,
+                          SessionState, voice_lines)
+from tests.gestures import go_back
 
 SCAN_S = 1.0
 
@@ -156,7 +159,7 @@ def test_double_blink_on_confirm_cancels(session, sched, sent):
     for tile in ["need", "pain", "back", "a_lot"]:
         pick(session, sched, sent, tile)
     assert session.state is SessionState.CONFIRMING
-    session.handle(blink())
+    go_back(session)
     assert session.state is SessionState.SCANNING
     screen = last_screen(sent)
     assert screen.path == ["I need", "Pain", "Back"]  # back on the level the leaf was on
@@ -167,9 +170,9 @@ def test_double_blink_on_confirm_cancels(session, sched, sent):
 def test_double_blink_goes_up_one_level(session, sched, sent):
     pick(session, sched, sent, "need")
     pick(session, sched, sent, "pain")
-    session.handle(blink())
+    go_back(session)
     assert last_screen(sent).path == ["I need"]
-    session.handle(blink())
+    go_back(session)
     assert last_screen(sent).path == []
     n = len(sent)
     session.handle(blink())  # no-op at home
@@ -193,7 +196,7 @@ def test_clench_debounce(session, sched, sent):
 def test_nothing_spoken_without_confirm(session, sched, sent):
     pick(session, sched, sent, "suggested")
     pick(session, sched, sent, "hungry")
-    session.handle(blink())
+    go_back(session)
     session.handle(LongClench(t=0.0, duration=1.6))
     session.handle(blink())  # help countdown cancelled
     session.handle(AudioDone(id="stray"))
@@ -248,7 +251,7 @@ def test_help_countdown_fires_call_and_message(session, sched, sent):
         ActionResult(action="send_message", ok=True, detail="dry run", contact="Maria"),
     ]
     assert spoken(sent) == []
-    assert said(sent, "system") == [("Calling for help. Press B to cancel.", "en"), ("Calling Maria", "en")]
+    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en"), ("Calling Maria", "en")]
     # A system line never holds the session: straight home.
     assert session.state is SessionState.SCANNING
     assert last_screen(sent).path == []
@@ -285,7 +288,7 @@ def test_help_alert_sends_real_requests_in_spanish(menu, profile, sched, sent):
     assert message.url.host == "api.telegram.org"
     assert json.loads(message.content) == {"chat_id": "42", "text": "Luis necesita ayuda ahora"}
     assert said(sent, "system") == [
-        ("Pidiendo ayuda. Pulsa B para cancelar.", "es"),
+        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
         ("Llamando a María", "es"),
     ]
     assert [(r.action, r.ok, r.contact) for r in results(sent)] == [
@@ -306,7 +309,7 @@ def test_double_blink_cancels_help_back_to_scanning(session, sched, sent):
     assert (screen.screen, screen.path, screen.highlight) == ("menu", ["I need"], 2)  # where it was
     sched.advance(30)
     assert results(sent) == [] and spoken(sent) == []
-    assert said(sent, "system") == [("Calling for help. Press B to cancel.", "en")]  # no "Calling Maria"
+    assert said(sent, "system") == [("Calling for help. Double blink to cancel.", "en")]  # no "Calling Maria"
     assert countdowns(sent) == [5, 4, 3]
 
 
@@ -501,8 +504,8 @@ def test_scanning_does_not_wait_for_the_echo(session, sched, sent):
 def test_no_echo_on_double_blink_or_confirm_clench(session, sched, sent):
     pick(session, sched, sent, "suggested")
     pick(session, sched, sent, "water")
-    session.handle(blink())  # back from the confirm screen
-    session.handle(blink())  # up to home
+    go_back(session)  # back from the confirm screen
+    go_back(session)  # up to home
     assert said(sent, "echo") == [("Suggested", "en"), ("Water, please", "en")]
     pick(session, sched, sent, "suggested")
     pick(session, sched, sent, "water")
@@ -530,7 +533,7 @@ def test_speak_picks_off_means_no_echo(session, sched, sent):
         pick(session, sched, sent, tile)
     assert said(sent, "echo") == []
     session.handle(Settings(pointing_mode="auto", scan_ms=1000, speak_picks=True))
-    session.handle(blink())
+    go_back(session)
     pick(session, sched, sent, "a_little")
     assert said(sent, "echo") == [("A little", "en")]
 
@@ -551,8 +554,8 @@ def test_voice_lines_cover_labels_system_lines_and_phrases(menu, profile):
         ("A lot", "en"),
         ("My back hurts a lot. Can you help me turn over?", "en"),
         ("Mija, estoy bien, llámame a las seis.", "es"),
-        ("Pidiendo ayuda. Pulsa B para cancelar.", "es"),
-        ("Calling for help. Press B to cancel.", "en"),
+        ("Pidiendo ayuda. Parpadea dos veces para cancelar.", "es"),
+        ("Calling for help. Double blink to cancel.", "en"),
         ("Llamando a María", "es"),
         ("Calling Maria", "en"),
     ]:
@@ -573,7 +576,7 @@ def test_every_new_screen_starts_on_tile_0_with_a_full_scan_step(session, sched,
     assert session.highlight == 0  # the timer restarted from 0 at the new screen
     sched.advance(0.02)
     assert session.highlight == 1
-    session.handle(blink())  # back up: a new screen again
+    go_back(session)  # back up: a new screen again
     assert session.highlight == 0
     sched.advance(SCAN_S - 0.01)
     assert session.highlight == 0
@@ -646,3 +649,150 @@ def test_reset_puts_the_head_on_tile_0_too(menu, profile, sched, sent):
     assert s.highlight == 4
     s.handle(Reset())
     assert last_screen(sent).highlight == 0
+
+
+# --- the go-back prompt (docs/decisions.md 17) -----------------------------------------------------
+
+
+def back_prompts(sent) -> list[BackPrompt]:
+    return [m for m in sent if isinstance(m, BackPrompt)]
+
+
+def test_double_blink_on_a_menu_only_opens_the_prompt(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    assert last_screen(sent).path == ["I need"]  # not gone back yet
+    assert back_prompts(sent)[-1] == BackPrompt(open=True, kind="menu", timeout_ms=3000)
+
+
+def test_scanning_pauses_under_the_prompt(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    before = session.highlight
+    sched.advance(2 * SCAN_S)  # still inside the 3 s prompt
+    assert session.highlight == before
+
+
+def test_a_clench_inside_the_prompt_goes_up_one_level(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    sched.advance(1.0)
+    session.handle(clench())
+    assert last_screen(sent).path == []
+    assert back_prompts(sent)[-1].open is False
+
+
+def test_doing_nothing_closes_the_prompt_and_stays(session, sched, sent):
+    """Doing nothing is how the person says no."""
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    sched.advance(BACK_CONFIRM_S + 0.01)
+    assert back_prompts(sent)[-1] == BackPrompt(open=False, kind="menu", timeout_ms=0)
+    assert last_screen(sent).path == ["I need"]
+    assert session.state is SessionState.SCANNING
+    before = session.highlight
+    sched.advance(SCAN_S)  # scanning carries on
+    assert session.highlight != before
+
+
+def test_more_blinks_while_the_prompt_is_open_cannot_zoom_back(session, sched, sent):
+    pick(session, sched, sent, "need")
+    pick(session, sched, sent, "pain")
+    for _ in range(4):
+        session.handle(blink())
+    sched.advance(CLENCH_DEBOUNCE_S + 0.05)
+    session.handle(clench())
+    assert last_screen(sent).path == ["I need"]  # one level, not two
+    assert len([p for p in back_prompts(sent) if p.open]) == 1
+
+
+def test_a_late_clench_after_the_prompt_closes_picks_nothing(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    sched.advance(BACK_CONFIRM_S + 0.01)
+    screens = len([m for m in sent if isinstance(m, Screen)])
+    sched.advance(LATE_CLENCH_S / 2)
+    session.handle(clench())  # meant for the prompt, just too late
+    assert last_screen(sent).path == ["I need"]
+    assert session.state is SessionState.SCANNING
+    assert not any(isinstance(m, Confirm) for m in sent)
+    # Only the scan moving, no pick: every SCREEN since is still the same level.
+    assert all(m.path == ["I need"] for m in sent[screens:] if isinstance(m, Screen))
+
+
+def test_a_clench_after_the_late_window_picks_again(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    sched.advance(BACK_CONFIRM_S + LATE_CLENCH_S + 0.01)
+    before = len(sent)
+    session.handle(clench())
+    # The highlighted tile was picked: a deeper level opened, or its sentence is up for confirming.
+    shown = [m for m in sent[before:] if isinstance(m, (Screen, Confirm))]
+    assert shown and (isinstance(shown[-1], Confirm) or shown[-1].path != ["I need"])
+
+
+def test_double_blink_at_home_opens_no_prompt(session, sched, sent):
+    session.handle(blink())
+    assert back_prompts(sent) == []
+
+
+def test_confirm_screen_cancel_needs_a_clench(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    session.handle(blink())
+    assert session.state is SessionState.CONFIRMING  # still asking "Say this?"
+    assert back_prompts(sent)[-1] == BackPrompt(open=True, kind="confirm", timeout_ms=3000)
+    sched.advance(1.0)
+    session.handle(clench())  # confirms the CANCEL, never the message
+    assert session.state is SessionState.SCANNING
+    assert spoken(sent) == [] and results(sent) == []
+
+
+def test_a_late_clench_on_the_confirm_screen_never_sends(session, sched, sent):
+    """The clench there means SEND: one meant for a prompt that just closed must not send."""
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    session.handle(blink())
+    sched.advance(BACK_CONFIRM_S + 0.01)
+    assert session.state is SessionState.CONFIRMING  # nothing happened: still asking
+    session.handle(clench())
+    sched.advance(0.5)
+    assert spoken(sent) == [] and results(sent) == []
+    assert session.state is SessionState.CONFIRMING
+
+
+def test_the_confirm_screen_still_sends_after_the_late_window(session, sched, sent):
+    for tile in ["need", "pain", "back", "a_lot"]:
+        pick(session, sched, sent, tile)
+    session.handle(blink())
+    sched.advance(BACK_CONFIRM_S + LATE_CLENCH_S + 0.01)
+    session.handle(clench())
+    assert session.state is SessionState.SPEAKING
+
+
+def test_long_clench_during_the_prompt_starts_help_at_once(session, sched, sent):
+    """The emergency path never waits behind a prompt."""
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    session.handle(long_clench())
+    assert session.state is SessionState.HELP_COUNTDOWN
+    assert back_prompts(sent)[-1].open is False
+    sched.advance(BACK_CONFIRM_S + 0.5)  # the old prompt timer must not fire into the countdown
+    assert session.state is SessionState.HELP_COUNTDOWN
+
+
+def test_help_countdown_is_still_cancelled_by_one_double_blink(session, sched, sent):
+    session.handle(long_clench())
+    session.handle(blink())
+    assert session.state is SessionState.SCANNING
+    assert back_prompts(sent) == []
+
+
+def test_reset_closes_the_prompt(session, sched, sent):
+    pick(session, sched, sent, "need")
+    session.handle(blink())
+    session.handle(Reset())
+    assert back_prompts(sent)[-1].open is False
+    assert last_screen(sent).path == []
+    sched.advance(BACK_CONFIRM_S + 0.5)
+    assert last_screen(sent).path == []

@@ -189,6 +189,17 @@ class Confirm(_Msg):
     action: ActionName
 
 
+class BackPrompt(_Msg):
+    """A DOUBLE_BLINK asked to go back (a menu) or to cancel the "Say this?" screen. It only happens
+    if a CLENCH follows within `timeout_ms`; doing nothing closes the prompt and nothing changes.
+    Sent again with `open` false when the prompt closes, for any reason."""
+
+    type: Literal["BACK_PROMPT"] = "BACK_PROMPT"
+    open: bool
+    kind: Literal["menu", "confirm"]  # menu = up one level; confirm = cancel the "Say this?" screen
+    timeout_ms: int = Field(ge=0)  # how long it stays open; 0 when closing
+
+
 class Speak(_Msg):
     """Say `text` with the browser's speech synthesis (no cloud audio for it right now).
 
@@ -327,6 +338,7 @@ Message = Annotated[
         Settings,
         Screen,
         Confirm,
+        BackPrompt,
         Speak,
         PlayAudio,
         Click,

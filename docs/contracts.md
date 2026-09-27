@@ -330,6 +330,28 @@ DOUBLE_BLINK cancels (PRD D5).
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
 ```
 
+### BACK_PROMPT
+
+A DOUBLE_BLINK on a menu, or on the "Say this?" screen, does not go back by itself any more: blinks
+are easy to do by accident, and twice. The Core pauses scanning and sends `open: true`; the board shows
+"Go back?" (or "Cancel this message?") with a bar running down over `timeout_ms`. A CLENCH inside that
+time goes back (or cancels the message). Doing nothing is "no": the prompt closes, nothing changes,
+and CLENCH is ignored for the next second so a clench meant for the prompt cannot pick a tile or send
+the message. More DOUBLE_BLINKs while it is open are ignored. LONG_CLENCH still starts the help
+countdown at once, and the help countdown is still cancelled by a DOUBLE_BLINK straight away. The
+Core sends `open: false` whenever the prompt closes (confirmed, timed out, help, reset, new screen).
+Sent to boards and consoles.
+
+| Field | Type | Notes |
+|---|---|---|
+| `open` | bool | true = show the prompt, false = hide it |
+| `kind` | `"menu"` \| `"confirm"` | menu = up one level; confirm = cancel the "Say this?" screen |
+| `timeout_ms` | int | how long it stays open (3000); 0 when closing |
+
+```json
+{"type": "BACK_PROMPT", "open": true, "kind": "menu", "timeout_ms": 3000}
+```
+
 ### Utterances: SPEAK and PLAY_AUDIO
 
 Everything the board says is one utterance with an `id` and a `kind`:

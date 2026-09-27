@@ -11,6 +11,7 @@ from core.db import Db
 from core.menu import load_menu
 from core.profile import ProfileError, load_profile
 from core.session import CLENCH_DEBOUNCE_S, Session
+from tests.gestures import go_back
 
 T0 = datetime(2026, 9, 26, 14, 30).timestamp()  # 14:30 local time
 
@@ -96,7 +97,7 @@ def test_sync_profile_is_idempotent(db, menu):
 def test_pick_confirm_and_cancel_are_logged(session, sched, db, wall):
     db.sync_profile("Luis", "es", [])
     walk(session, sched, "need", "pain", "back", "a_lot")
-    session.handle(DoubleBlink(t=0.0))  # cancel on the confirm screen
+    go_back(session)  # cancel on the confirm screen
     walk(session, sched, "a_lot")
     confirm(session, sched)
 
