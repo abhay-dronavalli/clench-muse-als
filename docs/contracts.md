@@ -507,8 +507,9 @@ blink has to be able to see the gestures the Core REFUSED, and why it refused th
 It receives SETTINGS, including `long_clench_ms` and the optional `muse_enabled`
 boolean. Core starts with Muse paused (`false`); omitted settings preserve the value.
 Web controls on the board and console enable/pause it via `/ws/console`.
-Keyboard `/ws/input` remains independent. DOUBLE_BLINK arrives only from a profile whose eye
-calibration passed (`blink_enabled`); the service never guesses a blink threshold.
+Keyboard `/ws/input` remains independent. The service detects CLENCH and LONG_CLENCH with the
+person's calibrated jaw threshold and DOUBLE_BLINK with MNE on AF7/AF8 (no eye threshold needed).
+DOUBLE_BLINK's `t` is when it was sent, not the blink itself (MNE commits blinks at least 0.5 s late).
 
 SIGNAL adds optional nullable fields: `connected` (boolean), `profile` (string),
 `emg` (finite nonnegative microvolts), `threshold` (finite positive microvolts),

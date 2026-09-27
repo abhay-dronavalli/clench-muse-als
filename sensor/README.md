@@ -18,8 +18,9 @@ starting Core:
 ```
 
 Use `--source demo` for a headband-free smoke test (it cycles three clenches, a long
-clench and a double blink every 30 s). `--blink auto|on|off` controls DOUBLE_BLINK; `auto`
-follows the profile's eye calibration. Press `/` on the board to see every gesture the
+clench and a double blink every 30 s). Clenches use the profile's calibrated jaw
+threshold; DOUBLE_BLINK uses MNE on AF7/AF8 (`detect/eyes.py`, `detect/mne_blinks.py`, shared
+with the bench) and needs 20 s of data after connecting. `--blink off` turns blinks off. Press `/` on the board to see every gesture the
 Core received, including the ones it ignored and why. The real Muse source requires
 the Muse 2 to be disconnected from Muse Station and available over Bluetooth.
 

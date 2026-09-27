@@ -19,11 +19,13 @@ def status(profile, *, sample=None, connected=False, blocked=None, threshold=Non
                 threshold=threshold, blocked=blocked or (sample.blocked if sample else None))
 
 
-async def run_connection(ws, source_factory, profile, profile_name, *, retry_delay=5., blink=None):
+async def run_connection(ws, source_factory, profile, profile_name, *, retry_delay=5., blink=False):
     from sensor.detect.input import ClenchInput
-    detector = ClenchInput(profile, blink=blink)
-    log.info('double blink (back): %s', 'on' if detector.blink_enabled
-             else 'off (no usable eye calibration in this profile)')
+    # Clenches use this person's calibration; blinks use MNE, which needs none (as in the bench).
+    detector = ClenchInput(profile)
+    log.info('clench: calibrated threshold %.1f uV (rest %.1f uV)', profile['emg_threshold'], profile['emg_rest'])
+    log.info('double blink (back): %s', 'MNE on AF7/AF8' if blink else 'off')
+    eyes = None
     enabled = False
     settings_received = False
 
@@ -62,6 +64,10 @@ async def run_connection(ws, source_factory, profile, profile_name, *, retry_del
                     connected = True
                     attempts = 0
                     log.info('Headband connected; enable Muse clenches in the web UI when ready')
+                    if blink:
+                        from sensor.detect.eyes import MNEEyes
+                        eyes = MNEEyes(256, time.time())
+                        log.info('MNE blinks warming up: needs 20 s of continuous AF7/AF8')
                 except Exception as exc:
                     if source is not None:
                         with contextlib.suppress(Exception):
@@ -82,6 +88,9 @@ async def run_connection(ws, source_factory, profile, profile_name, *, retry_del
                 log.warning('Headband lost: %s', exc)
                 detector.reset()
                 connected = False
+                if eyes is not None:
+                    eyes.close()
+                    eyes = None
                 if source is not None:
                     with contextlib.suppress(Exception):
                         await asyncio.to_thread(source.close)
@@ -91,7 +100,17 @@ async def run_connection(ws, source_factory, profile, profile_name, *, retry_del
                 continue
             now = time.time()
             commands = detector.update(sample.level, now, enabled=enabled and settings_received,
-                                       blocked=sample.blocked, blink=sample.blink)
+                                       blocked=sample.blocked)
+            if eyes is not None:
+                if eyes.due(now):
+                    window = await asyncio.to_thread(source.eyes, eyes.window_samples)
+                    eyes.submit(*(window or (None, float('nan'))), now)
+                blinks, notes = eyes.poll(now)
+                for note in notes:
+                    log.info('%s', note)
+                # A clench wins the tick: the jaw pulls the brow, so never send both at once.
+                if not commands:
+                    commands = blinks
             reason = sample.blocked or ('Paused in web UI' if not enabled else None)
             if not reason and not detector.armed:
                 reason = 'Relax jaw to arm'
@@ -104,6 +123,8 @@ async def run_connection(ws, source_factory, profile, profile_name, *, retry_del
                 log.info('%s sent', command['type'])
             await asyncio.sleep(.05)
     finally:
+        if eyes is not None:
+            eyes.close()
         reader.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await reader
@@ -122,7 +143,7 @@ async def run(args):
             async with connect(args.url, open_timeout=5, max_queue=8) as ws:
                 source_factory = (DemoSource if args.source == 'demo'
                                   else lambda: MuseSource(args.name, args.motion_limit))
-                blink = {'auto': None, 'on': True, 'off': False}[args.blink]
+                blink = args.blink != 'off'
                 await run_connection(ws, source_factory, profile, profile_name, blink=blink)
         except Exception as exc:
             log.warning('Input connection stopped: %s; retrying in 5 s', exc)
@@ -137,7 +158,7 @@ def main():
     parser.add_argument('--url', default='ws://127.0.0.1:8000/ws/sensor')
     parser.add_argument('--motion-limit', type=float, default=30., help='Gyroscope limit in degrees/s')
     parser.add_argument('--blink', choices=('auto', 'on', 'off'), default='auto',
-                        help="DOUBLE_BLINK (back): auto follows the profile's eye calibration")
+                        help='DOUBLE_BLINK (back) from MNE on AF7/AF8: auto and on run it, off does not')
     args = parser.parse_args()
     if not math.isfinite(args.motion_limit) or args.motion_limit <= 0:
         parser.error('--motion-limit must be positive')

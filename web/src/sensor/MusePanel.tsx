@@ -158,11 +158,10 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
                 : <option value="">no calibration profiles</option>}
             </select>
             <label htmlFor="muse-blink" className="text-zinc-400">Double blink</label>
-            <select id="muse-blink" value={running ? (service?.blink ?? blink) : blink} disabled={running || busy}
+            <select id="muse-blink" value={running ? (service?.blink === 'off' ? 'off' : 'auto') : blink} disabled={running || busy}
               onChange={(e) => setBlink(e.target.value as BlinkMode)}
               className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-1 disabled:opacity-50">
-              <option value="auto">from calibration</option>
-              <option value="on">force on</option>
+              <option value="auto">MNE (on)</option>
               <option value="off">off</option>
             </select>
             <span className="text-zinc-400">Service</span>
@@ -237,7 +236,7 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
           <ul className="mt-2 space-y-0.5 text-xs text-zinc-400">
             <li>Clench: select / confirm</li>
             <li>Hold {(settings?.long_clench_ms ?? 2500) / 1000} s: help</li>
-            <li>Double blink: back{service?.blink === 'off' ? ' (off)' : ''} · B also goes back</li>
+            <li>Double blink: back{service?.blink === 'off' ? ' (off)' : ' (MNE, ready ~20 s after connecting)'} · B also goes back</li>
             <li className="text-zinc-500">Press / for the input log (shows ignored gestures too)</li>
           </ul>
         </Section>

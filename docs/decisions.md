@@ -464,13 +464,24 @@ Status: **done** = built, **planned** = agreed, not built yet.
   pause now happens only after 10 s without the headband (`MUSE_LOSS_GRACE_S`). A service
   disconnect or the last board closing still pauses at once.
 - **Reconnect backs off.** 5, 10, 20, 40 s, then 40 s, instead of a try every 5 s. Resets on success.
-- **DOUBLE_BLINK from the headband.** The bench's two-channel coincidence detector (AF7 and AF8
-  must both spike within 60 ms, peak-to-peak in 1-10 Hz) moved into `sensor/detect/clench.py`; two
-  blinks within 700 ms send DOUBLE_BLINK. `/ws/sensor` now accepts it. It follows the profile's own
-  eye calibration: `blink_enabled: false` (the bench could not separate a blink from rest) or no
-  `blink_threshold` means no blinks. The panel's "Double blink" selector can force it on or off for
-  testing (`--blink auto|on|off`). Poor forehead contact turns blinks off for that tick but never
-  blocks the jaw, and a clench wins a tick that also completes a double blink.
+- **DOUBLE_BLINK from the headband, by MNE; clenches by the person's calibration.** The same split
+  the Tkinter bench uses (`--blink-detector mne`, its default). Clenches: the calibrated jaw detector
+  (`emg_threshold`, `emg_rest` from `test/calibration.<name>.json`). Blinks: MNE
+  `find_eog_events` on the last 20 s of AF7/AF8, run in a background thread every 0.25 s, peaks
+  committed 0.5 s behind real time, two peaks within 700 ms = DOUBLE_BLINK (a single blink sends
+  nothing). The bench's `mne_blinks.py` moved to `sensor/detect/mne_blinks.py` so the app and the
+  bench share one copy (`test/mne_blinks.py` re-exports it); `sensor/detect/eyes.py` drives it from
+  the service loop. MNE uses no saved eye threshold, so a profile's `blink_enabled: false` does not
+  turn it off. `/ws/sensor` now accepts DOUBLE_BLINK. `mne==1.13.2` (the bench's pin) joined the
+  `sensor` extra. It needs 20 s of continuous data after connecting before the first blink counts.
+  DOUBLE_BLINK is stamped when sent, not at the peak: MNE commits a peak at least 0.5 s late and the
+  Core refuses gestures more than 1 s old. A clench wins a tick that also completes a double blink.
+  If MNE is missing or fails, blinks stop and clenches keep working. `--blink off` (panel: "Double
+  blink: off") turns it off.
+- **MNE thresholds each window against itself.** In a 20 s window with no real blink, noise peaks
+  become "blinks". A wearer blinks every few seconds so this does not happen in use, but an unworn
+  band can produce DOUBLE_BLINKs (the Core refuses them while the band reports poor contact). The
+  demo source blinks every 4 s, like a wearer, for the same reason.
 - **INPUT_EVENT and the input log.** The Core sends one INPUT_EVENT per gesture (headband or
   keyboard stand-in) to consoles and input clients, with `accepted` and the reason when it refused
   one (paused, no board, headband not connected, blocked, stale, clock skew). Pressing `/` on the

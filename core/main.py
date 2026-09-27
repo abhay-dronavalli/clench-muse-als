@@ -75,7 +75,7 @@ class SensorStart(BaseModel):
 
     profile: str = "taher"
     source: str = "muse"
-    blink: str = "auto"  # auto follows the profile's eye calibration
+    blink: str = "auto"  # auto / on = DOUBLE_BLINK from MNE; off = none
 
 
 def input_event(msg: Message, source: str, reason: str | None) -> InputEvent:
