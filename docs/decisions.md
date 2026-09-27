@@ -947,3 +947,17 @@ choices below are Taher's.
   MDC Kendall uses the committed demo trip directly. /api/geo/trip now serves the Core's current trip
   (a planned one, else the committed one), so the board's map follows it. A first live plan usually
   takes more than 20 s (USGS EPQS answers one point a second for the walk slopes).
+
+## 28. Laptop 2 is the car: /car-sim over the hotspot, car speakers, Start / End ride
+
+- /car-sim runs on a second laptop on the same network: laptop 1 starts Vite with `--host`, laptop 2
+  opens http://<laptop 1 IP>:5173/car-sim. Vite proxies /ws and /api to the Core, so the Core stays on
+  127.0.0.1:8000 and only port 5173 must be open on laptop 1. The Core has no WebSocket origin check,
+  so a LAN origin is accepted (checked with a LAN origin through the proxy).
+- Car speakers: while the car reports music on, /car-sim loops `web/public/carsim/music-loop.wav` (an
+  8 s chord loop synthesized for this, no licensed audio) at the car's volume; "Music off" on the board
+  stops it. Browsers need one click on the page first ("Enable car speakers").
+- CAR_SIM `start_ride` (the board shows Car mode; the car's action, so no confirm) and `end_ride` (the
+  ride ends, the board returns to Home). Help works as always.
+- Saved places: "Hospital" is now "Miami Cancer Institute" (the entrance the Baptist campus search
+  lands on) and "Home" is "Home (demo)" (a public stand-in).
