@@ -747,3 +747,8 @@ for Spanish explicitly instead of relying on the profile.
   SendInput batch put an emoji (two UTF-16 units) before the text in front of it; one character per
   call, 5 ms apart, arrived exactly ("Hola, ¿qué tal? ... 😀 ñ"). Scroll and drag were checked live
   the same way (a test window's scrollbar and slider moved as expected).
+- **Highlight hold:** the desktop highlight only moves to another element (or between an element and a
+  zoom spot) after the new one has been under the gaze for 200 ms; the same element follows the gaze
+  at once, and lost eyes clear it at once. With the hold, the clench look-back (250 ms) never reaches
+  past the moment the current highlight appeared, the fix agreed for the board's gaze (decisions 18),
+  so a quick clench on a just-shown highlight picks it, not the one before.

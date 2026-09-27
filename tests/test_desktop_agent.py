@@ -453,3 +453,29 @@ def test_help_or_the_board_never_leaves_the_button_held(ctl):
     ctl.set_help(False)
     start_drag(ctl, at=10.0)
     assert ctl.set_input_target("board") == [Keys("escape"), Release(330, 315)]
+
+
+def test_the_highlight_holds_before_it_moves_to_another_element(ctl):
+    from desktop.agent.interaction import HOLD_S
+
+    ctl.set_candidates([button(300, 300, name="ok"), button(700, 300, name="far")])
+    ctl.tick(1.0, (320, 310), True)
+    assert ctl.target.candidate.name == "ok"  # the first highlight shows at once
+    ctl.tick(1.05, (720, 310), True)
+    assert ctl.target.candidate.name == "ok"  # a glance: held
+    ctl.tick(1.1, (320, 310), True)
+    ctl.tick(1.15, (720, 310), True)
+    assert ctl.target.candidate.name == "ok"  # the glance started over
+    ctl.tick(1.151 + HOLD_S, (720, 310), True)
+    assert ctl.target.candidate.name == "far"
+    ctl.tick(1.5, (330, 312), False)
+    assert ctl.target is None  # eyes lost: gone at once
+
+
+def test_a_quick_clench_on_a_new_highlight_picks_it_not_the_old_one(ctl):
+    """The hold shows a new highlight 200 ms late; the look-back must not reach past it."""
+    ctl.set_candidates([button(300, 300, name="ok"), button(700, 300, name="far")])
+    ctl.tick(1.0, (320, 310), True)
+    ctl.tick(1.1, (720, 310), True)
+    ctl.tick(1.31, (720, 310), True)  # "far" shows now
+    assert ctl.on_gesture("CLENCH", 1.4, 1.4) == [Click(730, 315)]  # 1.4 - 0.25 = 1.15 was still "ok"

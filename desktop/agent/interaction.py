@@ -16,7 +16,12 @@ come in as arguments, effects go out as values, and the running agent carries th
             then clenches are ignored for LATE_CLENCH_S (the Core's rule, decisions.md 17).
   calibrating  gestures do nothing but a double blink, which stops the calibration.
 
-A clench uses the highlight from `lookback_s` before it (clenching moves the eyes). No click happens
+The highlight only moves to a different element (or from an element to a spot) once the new one has
+been under the gaze for HOLD_S, as the board holds a new tile (decisions 18): jitter at the edge
+between two buttons does not flicker it. A clench uses the highlight from `lookback_s` before it
+(clenching moves the eyes), but never from before the current highlight appeared: the hold makes a
+new highlight show up HOLD_S after the eyes, so a quick clench on it would otherwise pick the old
+one (the fix agreed for the board's gaze in decisions 18). No click happens
 while the eyes are not detected, while paused, during the help countdown, or while the board (not
 the desktop) is the input target.
 """
@@ -36,6 +41,7 @@ TOAST_S = 2.5
 SCROLL_EVERY_S = 0.15  # one wheel notch this often while the eyes are in a scroll zone (twice past it)
 WHEEL_NOTCH = 120  # Windows' WHEEL_DELTA: one notch, usually three lines
 DRAG_MOVE_PX = 3  # move the held pointer only when the gaze moved at least this much
+HOLD_S = 0.2  # a new highlight must stay the candidate this long before it shows
 
 Mode = Literal["pointing", "zoom", "palette", "back", "calibrating", "scroll", "drag"]
 Armed = Literal["left", "right", "double", "scroll", "drag"]
@@ -119,6 +125,12 @@ Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCa
                MoveTo, Release]
 
 
+def _key(t: Target) -> tuple[object, ...]:
+    """What a highlight is, regardless of where exactly the eyes are on it."""
+    c = t.candidate if t.sure else None
+    return ("element", c.rect, c.kind) if c is not None else ("spot",)
+
+
 @dataclass(frozen=True)
 class ScrollControl:
     """Where the scroll zones are: `up` above the anchor, `down` below, a still band between."""
@@ -196,6 +208,9 @@ class Controller:
         self._late_until = float("-inf")
         self._last_clench = float("-inf")
         self._trail: Trail[Target | None] = Trail(2.0)
+        self._candidate: tuple[object, ...] | None = None  # what the gaze is on now, before the hold
+        self._candidate_since = 0.0
+        self._changes: Trail[float] = Trail(2.0)  # when the shown highlight last changed
         self.scroll: ScrollControl | None = None
         self._scroll_at = float("-inf")
         self.drag_from: tuple[float, float] | None = None
@@ -294,6 +309,9 @@ class Controller:
                 target = Target(point)  # drop exactly where the eyes are: no snapping
         elif self.mode == "palette":
             target = self.target  # the palette keeps its tile while the eyes blink or wander
+        target = self._hold(target, now)
+        if (target is None) != (self.target is None) or (target and self.target and _key(target) != _key(self.target)):
+            self._changes.add(now, now)
         self.target = target
         self._trail.add(now, target)
         if not (self.eyes and point is not None and self.active and not self.help):
@@ -309,6 +327,23 @@ class Controller:
                 self._drag_at = point
                 return [MoveTo(*point)]
         return []
+
+    def _hold(self, target: Target | None, now: float) -> Target | None:
+        """Keep showing the current highlight until a different one has lasted HOLD_S. The same element
+        (or spot) follows the gaze at once; nothing (eyes lost) and the first highlight show at once."""
+        if target is None or self.target is None or self.mode in ("drag", "scroll"):
+            self._candidate = None
+            return target
+        key = _key(target)
+        if key == _key(self.target):
+            self._candidate = None
+            return target
+        if key != self._candidate:
+            self._candidate, self._candidate_since = key, now
+        if now - self._candidate_since >= HOLD_S:
+            self._candidate = None
+            return target
+        return self.target
 
     def on_gesture(self, kind: str, t: float, now: float) -> list[Effect]:
         if self.mode == "calibrating":
@@ -335,7 +370,8 @@ class Controller:
             return [Keys("alt+left")]
         if now < self._late_until:
             return []
-        target = self._trail.at(t - self.lookback_s)
+        changed = self._changes.at(t)
+        target = self._trail.at(max(t - self.lookback_s, changed if changed is not None else float("-inf")))
         if target is None:
             target = self.target
         if self.mode == "palette":
@@ -439,6 +475,9 @@ class Controller:
             self.drag_from = self._drag_at = None
         if mode != self.mode:
             self._trail = Trail(2.0)  # never look back into another screen
+            self._changes = Trail(2.0)
+            self.target = None  # a new screen's first highlight shows at once
+            self._candidate = None
         self.mode = mode
 
     def _say(self, key: str, now: float) -> None:
