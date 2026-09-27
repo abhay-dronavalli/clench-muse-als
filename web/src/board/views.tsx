@@ -202,7 +202,7 @@ export function StartOverlay({ onStart }: { onStart: () => void }) {
     >
       <span className="text-8xl font-bold tracking-tight">Clench</span>
       <span className="rounded-3xl px-12 py-6 text-5xl font-semibold ring-8 ring-yellow-300">Click to start</span>
-      <span className="text-2xl text-zinc-400">Turns on speech. Haga clic para empezar.</span>
+      <span className="text-2xl text-zinc-400">Turns on speech.</span>
     </button>
   )
 }
