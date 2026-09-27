@@ -967,3 +967,23 @@ choices below are Taher's.
   ride ends, the board returns to Home). Help works as always.
 - Saved places: "Hospital" is now "Miami Cancer Institute" (the entrance the Baptist campus search
   lands on) and "Home" is "Home (demo)" (a public stand-in).
+
+## 29. Car mode starts with Plan a trip; saved places are committed data
+
+- Entering Car mode (the corner button or /car-sim Start ride) opens **Plan a trip**: the car parked
+  (CAR_STATE phase `BOARDING`, 0 mph, new in RidePhase), the title, and the saved places as tiles.
+  A place opens its **routes** screen (one tile per route, e.g. "Fastest and smoothest, 18 min" and the
+  alternative, or Fastest / Smoothest) with the drop-off and a short reason. A route opens the
+  trip-style confirm (destination, route, time, drop-off; HIGH safety). On confirm the DropoffRequest
+  and the route go to the car, the car departs (`EN_ROUTE`), and the ride controls show: Comfort, and
+  Trip changes (Pull over, Slow down, Contact Support, **Change trip** back to Plan a trip).
+- Each saved place's results are committed like the demo trip: `data/geo/places/<key>.json` (computed
+  numbers only, built from the local open-data cache), MDC Kendall = `data/geo/demo_trip.json`. The
+  board loads them at start, so every pick is instant on any machine; the board never plans live.
+  data/geo_cache stays out of git; Google data stays live-only on /trip/live. The typed-address box
+  on /car-sim is hidden.
+- Home (demo) (Tamiami Park) has routes but no mapped entrance, building or reachable road, so no
+  drop-off: its routes screen says "No accessible drop-off is mapped here. The car chooses where to
+  stop." rather than inventing one.
+- Shorter, larger text in Car mode: drop-off names without OSM codes like "(I)(9)", the reason cut to
+  its first three points plus its unknowns, one line each, no " · " lines.
