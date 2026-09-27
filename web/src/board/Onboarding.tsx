@@ -4,7 +4,7 @@ import { nativeBridge, nativeEvents } from '../facetrack/native'
 import { useSocket } from '../lib/useSocket'
 import { getSensor, startSensor } from '../sensor/service'
 import { STRINGS } from './strings'
-import { canEnableMuse, nextSetupStep, NEXT_STEP, signalReady, STEP_MS, type SetupStep } from './onboardingFlow'
+import { CALIBRATE_AFTER_MS, canEnableMuse, nextSetupStep, NEXT_STEP, NO_EYES_MS, signalReady, STEP_MS, type SetupStep } from './onboardingFlow'
 import { CameraLight } from '../facetrack/indicators'
 import { museFresh } from '../sensor/status'
 import { unlockSpeech } from './speech'
@@ -47,7 +47,7 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
     if (done.current) return
     if (step === 'eyes') native?.cancelCalibration?.()
     goodSince.current = null
-    const duration = next === 'eyes' && !hasEyes ? 6000 : STEP_MS[next]
+    const duration = next === 'eyes' && !hasEyes ? NO_EYES_MS : STEP_MS[next]
     setPhase({ step: next, duration, until: performance.now() + duration, wall: Date.now() / 1000 })
     setNow(performance.now())
   }, [step, native, hasEyes])
@@ -119,7 +119,7 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
   useEffect(() => {
     if (paused || document.hidden) { goodSince.current = null; return }
     if (step === 'eyes' && !attempted.current && hasEyes && trackerReady &&
-        now >= phase.until - STEP_MS.eyes + 5000) actions.current.calibrate()
+        now >= phase.until - STEP_MS.eyes + CALIBRATE_AFTER_MS) actions.current.calibrate()
     if (step === 'band') {
       if (!good) goodSince.current = null
       else {
@@ -175,7 +175,7 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
         </div>}
       </main>
       <footer className="mx-auto w-full max-w-5xl shrink-0 rounded-3xl bg-white/95 px-8 py-5 text-center shadow-lg">
-        {step === 'eyes' && <div className="mb-4"><p className="mb-2 text-lg text-[#007a72]">{eyes === 'calibrating' ? s.eyesFollow : eyes === 'failed' ? s.eyesError : trackerReady ? s.calibrationIn(Math.max(0, Math.ceil((phase.until - phase.duration + 5000 - now) / 1000))) : s.eyesStarting}</p><Meter label={s.calibrationProgress} value={progress} /></div>}
+        {step === 'eyes' && <div className="mb-4"><p className="mb-2 text-lg text-[#007a72]">{eyes === 'calibrating' ? s.eyesFollow : eyes === 'failed' ? s.eyesError : trackerReady ? s.calibrationIn(Math.max(0, Math.ceil((phase.until - phase.duration + CALIBRATE_AFTER_MS - now) / 1000))) : s.eyesStarting}</p><Meter label={s.calibrationProgress} value={progress} /></div>}
         <p className="mb-3 text-xl font-semibold text-[#007a72]">{input.tracked ? s.lookBlink : s.scanBlink}</p>
         <SetupButtons options={options} selected={input.selected} />
         <p className="mb-2 mt-4 text-xl tabular-nums">{s.nextIn(nextLabel, remaining)}</p>

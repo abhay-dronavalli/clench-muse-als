@@ -23,8 +23,8 @@ describe('setup timers and permissions', () => {
   })
   it('successful checks progress early, but short/unstable signal does not', () => {
     expect(nextSetupStep('eyes', false, true, 0, false)).toBe('band')
-    expect(nextSetupStep('band', false, true, 1999, false)).toBe(null)
-    expect(nextSetupStep('band', false, true, 2000, false)).toBe('clench')
+    expect(nextSetupStep('band', false, true, 999, false)).toBe(null) // a second of clean signal, no longer
+    expect(nextSetupStep('band', false, true, 1000, false)).toBe('clench')
     expect(nextSetupStep('clench', false, true, 0, true)).toBe('done')
     expect(canEnableMuse(true, signal, 100)).toBe(true)
   })

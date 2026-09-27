@@ -9,6 +9,8 @@ import com.google.android.filament.Skybox
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.SceneView
 import io.github.sceneview.node.CubeNode
+import io.github.sceneview.node.Node
+import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.ModelNode
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -18,16 +20,15 @@ import kotlin.math.max
 
 /**
  * The trip screen's 3D car (SceneView / Filament), drawn full screen behind the transparent board
- * WebView. A daytime drive through a random world (CarWorld / WorldPlan). The car stays put facing down
- * the road while the world moves past it and wraps around (it looks like driving), and the
- * camera makes one slow circle around the car every 45 s. The page (web/src/board/trip.tsx) drives it
+ * WebView. Just the car, on a soft light platform against a plain light backdrop (no road or scenery:
+ * the controls are the point, the car is the anchor), with the camera making one slow circle around it
+ * every 45 s. The page (web/src/board/trip.tsx) drives it
  * through ClenchNative.carScene(on) and carEffect(action, ms) (CAR_ACTION); the maths is CarMotion.
  *
- * The scenery moves at the telemetry's speed (carSpeed, CAR_STATE): Slow down slows it, and after Pull
- * over (speed 0) the road stands still. Pull over also stills the camera for a moment.
+ * Pull over stills the camera for a moment.
  *
  * Main thread only (Filament's rule). The GLB (app/src/main/assets/jaguar_i-pace.glb, not in git) is
- * read off the main thread the first time the car is shown; without it the scene shows the road alone.
+ * read off the main thread the first time the car is shown; without it the scene shows the platform alone.
  */
 class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     val view: SceneView = SceneView(
@@ -43,9 +44,6 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private var shown = false
     private var built = false
 
-    private var world: CarWorld? = null
-    private val seed = System.nanoTime() // a different world every time the app starts
-    private var seconds = 0f // scene time, for the clouds' own drift
     private var shift = 0f // horizontal lens shift: the car in the right half in the split layout
     private var shiftTarget = CAR_SHIFT
     private var preview = false
@@ -62,17 +60,14 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     )
     private var effect: Effect? = null
     private var drive = 1f // 1 = moving, 0 = held still (Pull over's moment); eases between the two
-    private var speed = 1f // the scenery's speed as a share of cruising (CRUISE_MPH), eased
-    private var speedTarget = 1f
     private var stillUntilNanos = 0L
     private var lastNanos = 0L
-    private var travel = 0f // how far the world has moved past the car
     private var orbitDeg = CarMotion.ORBIT_START_DEG
     private val materials = HashMap<String, MaterialInstance>()
 
     init {
         view.visibility = View.GONE
-        view.scene.skybox = Skybox.Builder().color(0.42f, 0.64f, 0.92f, 1f).build(view.engine) // daytime sky
+        view.scene.skybox = Skybox.Builder().color(0.80f, 0.86f, 0.88f, 1f).build(view.engine) // plain light backdrop
         view.onFrame = ::frame
         placeCamera(0f)
     }
@@ -81,7 +76,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     fun show(on: Boolean) {
         shown = on
         view.visibility = if (on) View.VISIBLE else View.GONE
-        if (on && car == null && !loading) load() // the world follows once the car's size is known
+        if (on && car == null && !loading) load() // the platform follows once the car's size is known
     }
 
     /**
@@ -106,10 +101,6 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         } else lookSeenAt = 0L
     }
 
-    /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
-    fun setSpeed(mph: Int) {
-        speedTarget = (mph / CRUISE_MPH).coerceIn(0f, 2f)
-    }
 
     /** Play a control's effect for `ms` (CAR_ACTION); `window` for the window controls. */
     fun play(action: String, ms: Int, window: String = "all") {
@@ -128,13 +119,24 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         view.destroy()
     }
 
-    // --- the world --------------------------------------------------------------------------
+    // --- the platform -----------------------------------------------------------------------
 
     private val ground get() = -box.halfHeight // the model is centered: its wheels touch y = -halfHeight
 
+    /** A soft round platform under the car and a darker oval under its body, so it never floats. */
     private fun buildWorld() {
         built = true
-        world = CarWorld(view, ground, seed)
+        val engine = view.engine
+        view.addChildNode(CylinderNode(engine, 1.1f, 0.01f, Float3(0f, ground - 0.005f, 0f), 64, stage("platform", 226, 232, 234)))
+        view.addChildNode(Node(engine).apply {
+            position = Float3(0f, ground + 0.0005f, 0f)
+            scale = Float3(1f, 1f, 0.5f)
+            addChildNode(CylinderNode(engine, 0.6f, 0.002f, Float3(0f, 0f, 0f), 48, stage("shadow", 188, 196, 200)))
+        })
+    }
+
+    private fun stage(key: String, r: Int, g: Int, b: Int): MaterialInstance = materials.getOrPut(key) {
+        view.materialLoader.createColorInstance(Color.rgb(r, g, b), 0f, 0.95f, 0.05f)
     }
 
     private fun load() {
@@ -150,7 +152,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
             view.post {
                 loading = false
                 if (bytes == null) {
-                    if (!built) buildWorld() // the road alone
+                    if (!built) buildWorld() // the platform alone
                     return@post
                 }
                 if (car != null) return@post
@@ -174,7 +176,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
                 node.position = Float3(0f, CAR_LIFT, 0f)
                 view.addChildNode(node)
                 car = node
-                if (!built) buildWorld() // the ground at the car's real wheel height
+                if (!built) buildWorld() // the platform at the car's real wheel height
                 Log.i(TAG, "car model loaded (${bytes.size / 1024} KB, box $box)")
             }
         }
@@ -197,11 +199,7 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         // Cruising, or stopped for Pull over; always eased, never a jolt.
         val target = if (nanos < stillUntilNanos) 0f else 1f
         drive += (target - drive) * (1f - exp(-dt / DRIVE_EASE_S))
-        speed += (speedTarget - speed) * (1f - exp(-dt / SPEED_EASE_S))
-        travel += CarMotion.DRIVE_SPEED * speed * drive * dt
         orbitDeg += 360.0 / CarMotion.ORBIT_PERIOD_S * drive * dt
-        seconds += dt
-        world?.update(travel, seconds)
         shift += (shiftTarget - shift) * (1f - exp(-dt / LAYOUT_EASE_S))
         view.cameraNode.setShift(shift.toDouble(), 0.0)
 
@@ -264,8 +262,6 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         private const val LINE_LENGTH = 0.11f // CubeNode height; CarMotion lengths scale it
         private const val STILL_AFTER_MS = 2_500L // the car stays stopped this long after Pull over
         private const val DRIVE_EASE_S = 0.6f // how gently the camera and scenery hold still and resume
-        private const val SPEED_EASE_S = 1.2f // how gently the scenery follows a new speed
-        private const val CRUISE_MPH = 32f // the scenery's DRIVE_SPEED is this speed
         private const val CAR_LIFT = 0.006f // tyres on the road's surface (its top is ~0.0045 above ground)
         // Lens shifts (measured on the tablet: 0.3 moves the car a quarter of the screen's width).
         private const val CAR_SHIFT = 0.06f // past the page's 288 px telemetry column

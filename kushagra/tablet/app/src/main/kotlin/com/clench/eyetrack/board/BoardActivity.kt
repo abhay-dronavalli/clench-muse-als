@@ -379,10 +379,6 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             main.post { if (!destroyed) car.play(action, ms.coerceIn(100, 5_000), window) }
         }
 
-        @JavascriptInterface fun carSpeed(mph: Int) {
-            main.post { if (!destroyed) car.setSpeed(mph) }
-        }
-
         @JavascriptInterface fun carLayout(mode: String) {
             main.post { if (!destroyed) car.setLayout(mode) }
         }
@@ -441,7 +437,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         if (onboarding) car.look(GazeMath.toFraction(x, y, webRect()).x, found)
         val v = validation
         if (v != null || calibratingFor != null) {
-            if (v != null && v.collecting && found) v.samples += GazeMath.toFraction(x, y, gazeOverlay.screenRect())
+            if (v != null && v.collecting && found) v.samples += GazeMath.toFraction(x, y, webRect())
             // Setup can still select its own Skip button; the page pauses all board pointing.
             js(GazeMath.feedJs(GazeMath.toFraction(x, y, webRect()), onboarding && found, "CALIBRATING"))
             return
@@ -470,13 +466,15 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         calText = "Look at each dot until its ring fills"
         gazeOverlay.showDot(-1f, -1f, 0f, calText, CAL_STEP)
         // Points inside a safe margin: every target is drawn whole, never cut off by the screen's edge.
-        val r = gazeOverlay.screenRect()
+        // Measured on the board's WebView (full screen, always laid out): the overlay may still be 0 x 0
+        // here when nothing has shown it yet, and the SDK refuses an empty area.
+        val r = webRect()
         val mx = maxOf(gazeOverlay.targetReach(), r.width * CAL_MARGIN)
         val my = maxOf(gazeOverlay.targetReach(), r.height * CAL_MARGIN)
         val inset = gaze.startCalibration(r.left + mx, r.top + my, r.left + r.width - mx, r.top + r.height - my)
         // If the SDK will not take the inset area, the whole screen (its targets may then touch the edges).
         val started = inset || gaze.startCalibration(r.left, r.top, r.left + r.width, r.top + r.height)
-        Log.i(TAG, "calibration for $who: ${if (inset) "inset area" else if (started) "whole screen (inset refused)" else "refused"}")
+        Log.i(TAG, "calibration for $who in ${r.width.toInt()} x ${r.height.toInt()}: ${if (inset) "inset area" else if (started) "whole screen (inset refused)" else "refused"}")
         if (!started) {
             calibratingFor = null
             if (onboarding) gazeOverlay.hide()
@@ -556,13 +554,13 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     }
 
     private fun validate(who: String) {
-        val portrait = gazeOverlay.height > gazeOverlay.width
+        val portrait = web.height > web.width
         val (cols, rows) = if (portrait) 2 to 3 else 3 to 2
         val tile = (0 until cols * rows).random()
         val target = Frac((tile % cols + 0.5f) / cols, (tile / cols + 0.5f) / rows)
         val v = Validation(who, target, cols, rows)
         validation = v
-        val r = gazeOverlay.screenRect()
+        val r = webRect()
         gazeOverlay.showDot(r.left + target.x * r.width, r.top + target.y * r.height, 0f, "Checking $who's calibration: look at the dot")
         main.postDelayed({ if (validation === v) v.collecting = true }, VALIDATE_SETTLE_MS)
         main.postDelayed({ if (validation === v) finishValidation(v) }, VALIDATE_SETTLE_MS + VALIDATE_COLLECT_MS)

@@ -796,3 +796,13 @@ choices below are Taher's.
 - Finishing the onboarding starts the ride: it turns trip mode on (the trip screen with the 3D car,
   map and car controls). Before, it left the rider on the communication menus, which looked like the
   old screens; they are still there with trip mode off (Dev panel End trip).
+
+- Calibration fix: the calibration area was measured on the calibration overlay, which is still 0 x 0
+  when nothing has shown it yet (the onboarding holds the startup prompt back), so the SDK refused every
+  start. The area (and the one-dot check) is now measured on the full-screen board WebView.
+- The trip scene is just the car: a soft light platform and a plain light backdrop, no road or
+  scenery (removed `CarWorld` / `WorldPlan`, and the `carSpeed` bridge that moved the scenery). The
+  camera still circles; the line particles and the Pull over stop are unchanged.
+- Onboarding waits are shorter: welcome and "all set" 2 s, the eye calibration starts 1 s into its
+  step, 1 s of clean headband signal moves on, 2 s for the no-eye-tracker note. Steps still move on
+  at once when they succeed.
