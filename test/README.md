@@ -1,11 +1,64 @@
 # Muse 2 + BrainFlow test bench
 
+## Live MNE blinks + calibrated clenches
+
+Muse Station and `clench_detect.py` now default to **MNE blinks** on AF7/AF8
+and the existing per-profile jaw detector on TP9/TP10. Select the wearer's
+profile (for example `nikhil`) and click **Listen** or **Drill**. The Blinks
+selector offers `calibrated` to use the older eye detector for comparison.
+Saved profiles are not rewritten when listening. MNE ignores the saved blink
+threshold and `blink_enabled` flag. Calibration in MNE mode collects rest and
+three jaw trials; no old eye-threshold or eye-hold trials are needed.
+
+```powershell
+.\test\.venv\Scripts\python.exe -m pip install -r test/requirements.txt
+.\test\.venv\Scripts\python.exe test/muse_station.py --profile nikhil
+# No headband:
+.\test\.venv\Scripts\python.exe test/clench_flappy.py --keyboard
+```
+
+MNE finds blink peaks; it does **not** classify sustained eye closure. MNE mode
+emits BLINK and DOUBLE_BLINK, disables LONG_BLINK, and Drill asks for **BLINK
+ONCE** instead of holding the eyes shut. The jaw's CLENCH, CLENCH_START and
+LONG_CLENCH behavior and saved thresholds remain unchanged.
+
+The live adapter uses a 20-second rolling raw window, MNE's default EOG settings,
+a 0.5-second trailing guard, and a scan every 0.25 seconds. It runs in a separate
+worker with a bounded latest-window queue so jaw polling does not wait for MNE.
+It waits up to 20 seconds for history and never emits warm-up history. Single
+blinks also wait for the 0.7-second double-blink interval to finish processing;
+expect roughly 1.2-1.5 seconds plus computation before a single-blink event.
+Drill scores by the detected peak timestamp, not delivery time. Its latency
+column therefore omits the MNE delivery delay. Packet gaps pause eye processing,
+and a worker failure is logged while jaw detection continues.
+
+**This is an integration, not proof of generalization.** Rolling MNE changes
+channel/threshold selection as history moves, so whole-recording benchmark scores
+do not transfer directly. Replays on the two available sessions matched 10/12
+and 9/12 single-blink prompt windows, with 42/31 unmatched single-blink events and
+12/6 double-blink events respectively. Some unmatched events can be unmarked
+natural blinks. The jaw replay remains 5/6 and 3/6 within strict release windows;
+the latter still has many extra jaw events. No parameters were tuned per recording.
+
+Reproduce the combined path with the original manifest and an optional explicit
+profile override (useful when the recording was labelled `friend1`):
+
+```powershell
+.\test\.venv\Scripts\python.exe test/evaluate_hybrid.py --manifest test/recordings/SESSION_manifest.json --profile test/calibration.nikhil.json --output test/recordings/hybrid-result.json
+.\test\.venv\Scripts\python.exe -m pytest test/test_mne_blinks.py -q
+.\test\.venv\Scripts\python.exe test/test_station.py
+```
+
+Synthetic regressions cover scale/noise variation, jaw equivalence, overlapping
+windows, double-blink grouping, worker failure, delayed Drill events and keyboard
+mode. They do not establish specificity on human noise or motion.
+
 ## Library comparison (2026-09-26)
 
 See [LIBRARY_COMPARISON.md](LIBRARY_COMPARISON.md) for actual MNE, NeuroKit2 and
 muse-vtuber runs, measured synthetic limitations, and the commands to compare
-the same raw recording with every detector. The live detector is unchanged by
-this experiment. To capture gentle versus firm blinks and false clenches, use
+the same raw recording with every detector. For live integration, see above.
+To capture gentle versus firm blinks and false clenches, use
 `record_protocol.py --protocol blink-comparison --profile taher` after disconnecting
 Station from the headband. This takes about 2.5 minutes and saves a separate
 calibration snapshot with the recording. Repeat with the friend's own profile.

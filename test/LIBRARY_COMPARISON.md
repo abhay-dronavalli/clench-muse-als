@@ -2,9 +2,13 @@
 
 Evaluated 2026-09-26. Everything in this experiment lives in `test/`.
 **No human accuracy or cross-user generalization has been demonstrated.**
-There were no raw human EEG CSVs in `test/recordings/`; saved calibration
+At the initial synthetic evaluation there were no raw human EEG CSVs; saved calibration
 summaries and Drill event logs cannot be used to re-run alternative detectors.
-The live Station detector has not been replaced by this experiment.
+Two human recordings were subsequently collected and compared. At the user's
+request, Station now defaults to rolling MNE blinks plus the saved calibrated jaw
+detector; see [README.md](README.md#live-mne-blinks--calibrated-clenches) for live
+behavior, limitations and replay commands. The whole-file benchmark below remains
+separate from that rolling adapter and does not measure its live accuracy.
 
 ## What actually ran
 

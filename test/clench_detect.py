@@ -201,6 +201,9 @@ class ConsoleUI:
         """One recognised gesture."""
         print(CR + f"  [{elapsed:6.1f}s]  {name:<13} {detail}".ljust(LINE_WIDTH))
 
+    def event_at(self, name, detail, elapsed, occurred_at):
+        self.event(name, detail, elapsed)
+
     def tick(self, levels, recognizer, recent):
         """Every detector tick, gesture or not: the live meter."""
         status = (f"  {meter(levels.emg, recognizer.clench.threshold)} emg {levels.emg:6.1f}   "
@@ -210,6 +213,10 @@ class ConsoleUI:
             status += (f"   {meter(levels.hold, recognizer.long_blink.threshold)}"
                        f" hold {levels.hold:5.1f}")
         status += f"   {' '.join(list(recent)[-3:])}"
+        if getattr(recognizer, 'mne_blinks', False):
+            status = (f"  emg {levels.emg:6.1f} / {recognizer.clench.threshold:.1f} uV"
+                      f"   blinks: MNE {'ready' if recognizer.eyes_ready else 'warming up'}"
+                      f"   {' '.join(list(recent)[-3:])}")
         print(CR + status.ljust(LINE_WIDTH), end="", flush=True)
 
     def should_stop(self):
@@ -499,6 +506,10 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     blink so none get missed, but clear of the noise.
     """
     ui = ui or ConsoleUI()
+    mne_blinks = getattr(args, 'blink_detector', 'calibrated') == 'mne'
+    if mne_blinks and getattr(args, 'blink_only', False):
+        ui.log('MNE needs no saved blink threshold. Use Listen or Drill to test blinks.')
+        return None
     ui.log("")
     ui.log("--- CALIBRATION ---")
     ui.instruct("SIT STILL", "jaw relaxed and slightly open\n"
@@ -607,7 +618,7 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
             if not any(duration >= 300 for _, duration in runs):
                 return retry_calibration(ui, "A clench trial had only brief spikes; retry a steady clench.")
 
-    if not args.no_clench_cal:
+    if not args.no_clench_cal and not mne_blinks:
         # ---------------- blink ----------------
         ui.log("")
         ui.instruct("BLINK HARD", "once a second, for 6 seconds\n"
@@ -732,14 +743,21 @@ def calibrate(board, rows, fs, window_samples, args, ui=None):
     ui.log("")
     ui.log(f"Saved to {path.name}. Reuse it with --load "
            "(only valid while the band stays on your head).")
-    ui.log("Next: run Drill to test real detection. Disabled eye inputs require recalibration.")
+    ui.log("Next: run Drill to test clenches and MNE blinks." if mne_blinks else
+           "Next: run Drill to test real detection. Disabled eye inputs require recalibration.")
     return calibration
 
 
-def describe(calibration, ui=None):
+def describe(calibration, ui=None, blink_detector='calibrated'):
     ui = ui or ConsoleUI()
     ui.log("")
     ui.log("--- THRESHOLDS ---")
+    if blink_detector == 'mne':
+        ui.log(f"  clench: saved rest {calibration['emg_rest']:.1f} uV, "
+               f"fires at {calibration['emg_threshold']:.1f} uV")
+        ui.log('  eyes: MNE on AF7/AF8; saved eye thresholds are unused.')
+        ui.log('  Single/double blinks enabled. LONG_BLINK unavailable with MNE.')
+        return
     if not calibration.get("blink_enabled", True):
         ui.log("  BLINK / DOUBLE_BLINK OFF: eye calibration failed; adjust contact and retry.")
     for kind in ("emg", "blink"):
@@ -976,16 +994,20 @@ class GestureRecognizer:
 
 def recognizer_from_calibration(calibration, args, emit_start=False):
     """One profile-to-detector path shared by station, games, and offline replay."""
-    return GestureRecognizer(
+    use_mne = getattr(args, 'blink_detector', 'calibrated') == 'mne'
+    recognizer = GestureRecognizer(
         calibration["emg_threshold"], calibration["blink_threshold"],
         args.long_ms, args.double_ms, emit_start=emit_start,
-        hold_threshold=calibration.get("hold_threshold"),
+        hold_threshold=None if use_mne else calibration.get("hold_threshold"),
         long_blink_ms=getattr(args, "long_blink_ms",
                               calibration.get("long_blink_ms", LONG_BLINK_MS)),
         emg_rest=calibration.get("emg_rest", 0.0),
         blink_rest=calibration.get("blink_rest", 0.0),
         hold_rest=calibration.get("hold_rest", 0.0),
-        blink_enabled=calibration.get("blink_enabled", True))
+        blink_enabled=False if use_mne else calibration.get("blink_enabled", True))
+    recognizer.mne_blinks = use_mne
+    recognizer.eyes_ready = not use_mne
+    return recognizer
 
 
 def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None,
@@ -997,34 +1019,82 @@ def detect_loop(board, rows, fs, window_samples, calibration, args, ui=None,
     of the clench to the latency.
     """
     ui = ui or ConsoleUI()
-    hold_threshold = calibration.get("hold_threshold")
     recognizer = recognizer_from_calibration(calibration, args, emit_start)
+    hold_threshold = recognizer.long_blink
     recent = deque(maxlen=6)
 
     ui.log("")
     ui.log("--- LISTENING ---  clench = CLENCH, hold = LONG_CLENCH, "
            "two blinks = DOUBLE_BLINK.   Ctrl-C to stop.")
-    if hold_threshold:
+    if recognizer.mne_blinks:
+        ui.log('  MNE blinks: warming up (up to 20 s); single/double blinks, no eye holds.')
+    elif hold_threshold:
         ui.log("                   eyes closed and held = LONG_BLINK.")
     else:
         ui.log("                   (LONG_BLINK is off: this profile has no hold "
                "calibration -- recalibrate to enable it.)")
     ui.log("")
     started = time.monotonic()
-
-    while not ui.should_stop():
-        now = time.monotonic()
-        levels = read_levels(board, rows, fs, window_samples)
-        if levels is None:
+    worker = None
+    if recognizer.mne_blinks:
+        from mne_blinks import MNEBlinkWorker, BlinkGroups, WINDOW_SECONDS as MNE_WINDOW, SCAN_SECONDS
+        worker = MNEBlinkWorker(fs, started)
+        groups = BlinkGroups(args.double_ms)
+        timestamp_row = BoardShim.get_timestamp_channel(board.board_id)
+        epoch_offset = started - time.time()
+        next_scan = started
+        blink_through = started
+        ready_logged = False
+        last_sample = -float('inf')
+        gap_reported = False
+    try:
+        while not ui.should_stop():
+            now = time.monotonic()
+            levels = read_levels(board, rows, fs, window_samples)
+            if levels is None:
+                time.sleep(TICK_SECONDS)
+                continue
+            for name, detail in recognizer.update(levels, now):
+                ui.event(name, detail, now - started)
+                recent.append(name)
+            if worker is not None:
+                if now >= next_scan and not worker.stopped.is_set():
+                    data = board.get_current_board_data(round(MNE_WINDOW*fs),
+                                                       preset=BrainFlowPresets.DEFAULT_PRESET)
+                    if data.shape[1] >= round(MNE_WINDOW*fs):
+                        stamps = data[timestamp_row]
+                        end = float(stamps[-1])+epoch_offset
+                        if end > last_sample:
+                            last_sample = end
+                            if np.max(np.abs(stamps-stamps[-1] -
+                                             (np.arange(len(stamps))-len(stamps)+1)/fs)) <= .1:
+                                worker.submit(data[rows['blink']], end)
+                                gap_reported = False
+                            elif not gap_reported:
+                                ui.log('MNE skipped a window: EEG timestamp gap; waiting for continuous data.')
+                                gap_reported = True
+                    next_scan = now+SCAN_SECONDS
+                for peaks, through, error in worker.drain():
+                    if error:
+                        ui.log(f'!! MNE blinks stopped: {error}. Clenches remain active. '
+                               'Install test/requirements.txt, then Stop and Listen again.')
+                        groups.pending = None
+                        continue
+                    blink_through = through
+                    for name, detail, peak in groups.advance(peaks, through):
+                        ui.event_at(name, detail, peak-started, peak)
+                        recent.append(name)
+                ready = (not worker.stopped.is_set() and now-blink_through < 2
+                         and blink_through > started)
+                if ready and not ready_logged:
+                    ui.log('MNE blinks ready. Blink once, or twice for DOUBLE_BLINK.')
+                    ready_logged = True
+                recognizer.eyes_ready = ready and groups.pending is None
+            ui.tick(levels, recognizer, recent)
             time.sleep(TICK_SECONDS)
-            continue
-        for name, detail in recognizer.update(levels, now):
-            ui.event(name, detail, now - started)
-            recent.append(name)
-
-        # Live meter: bar fills as you approach the threshold, | marks the line.
-        ui.tick(levels, recognizer, recent)
-        time.sleep(TICK_SECONDS)
+    finally:
+        if worker is not None:
+            worker.close()
 
 
 def meter(level, threshold, width=14):
@@ -1042,6 +1112,7 @@ def meter(level, threshold, width=14):
 
 def main():
     parser = build_parser("Detect jaw clenches and blinks as input events.")
+    parser.add_argument('--blink-detector', choices=('mne', 'calibrated'), default='mne')
     parser.add_argument("--load", action="store_true",
                         help="reuse calibration.json instead of recalibrating")
     parser.add_argument("--no-clench-cal", action="store_true",
@@ -1098,7 +1169,7 @@ def main():
         if calibration is None:
             return 1
 
-        describe(calibration)
+        describe(calibration, blink_detector=args.blink_detector)
         detect_loop(board, rows, fs, window_samples, calibration, args)
     except KeyboardInterrupt:
         print("\n\nStopped.")

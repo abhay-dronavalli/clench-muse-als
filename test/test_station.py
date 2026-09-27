@@ -100,6 +100,7 @@ def main():
     # Fit bars must move while merely connected, with no activity running: that
     # is what makes the window useful for seating the band.
     driver.pump(3)
+    check('MNE selected by default', station.blink_detector_var.get() == 'mne')
     verdicts = [station.fit_rows[i][3].cget("text") for i in range(4)]
     check("electrode fit updates while idle", all(verdicts), verdicts)
     check("Calibrate offered once connected", driver.button("calibrate_button") == "normal")
@@ -157,7 +158,9 @@ def main():
     station._on_listen()
     check("listen starts", driver.pump(10, until=lambda:
                                       "--- LISTENING ---" in station.log_text.get("1.0", "end")))
-    driver.pump(3)
+    ready = driver.pump(25, until=lambda: 'MNE blinks ready' in station.log_text.get('1.0', 'end'))
+    check('MNE worker reaches ready', ready,
+          station.log_text.get('1.0', 'end') if not ready else '')
     check("live clench level is updating", "uV" in station.emg_value.cget("text"),
           station.emg_value.cget("text"))
     check("Stop offered while busy", driver.button("stop_button") == "normal")
@@ -259,22 +262,22 @@ def main():
         check("the station forgot the closed window", station.activity_window is None)
 
     # ================================================================= the drill
-    # This profile was calibrated quick, so it has no hold threshold and the drill
-    # must notice that rather than asking for an input that cannot fire.
+    # MNE supplies ordinary blinks even when the profile has no eye calibration.
     station._on_drill()
     driver.pump(1)
     drill = station.activity_window
     check("Drill opens a window", isinstance(drill, sa.DrillWindow))
     if drill:
         drill.withdraw()
-        check("without hold calibration the drill only tests the clench",
-              drill.inputs == [sa.CLENCH], drill.inputs)
+        check("MNE drill tests clench and blink without hold calibration",
+              drill.inputs == [sa.CLENCH, sa.BLINK], drill.inputs)
         drill.close()
         driver.pump(6, until=driver.idle)
 
     # Give the profile a hold threshold, as a real long-blink calibration would,
     # and the drill should now offer both inputs.
     add_hold_threshold(station)
+    station.blink_detector_var.set('calibrated')
     station._on_drill()
     driver.pump(1)
     drill = station.activity_window

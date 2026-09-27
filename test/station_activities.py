@@ -29,6 +29,7 @@ from clench_flappy import (BIRD_R, BIRD_X, GAP_HEIGHT, GROUND_Y, PIPE_WIDTH,
 FRAME_MS = 20               # 50 fps; the physics are dt-based so this is cosmetic
 CLENCH = "CLENCH_START"     # the rising edge, not the release: see clench_flappy
 LONG_BLINK = "LONG_BLINK"
+BLINK = 'BLINK'
 
 INK = "#0f172a"
 PAPER = "#f8fafc"
@@ -360,9 +361,9 @@ class DrillState:
     TIMEOUT_S = 4.0
     GAP_S = 1.2                 # quiet time between rounds, to catch stray fires
 
-    PROMPT = {CLENCH: "CLENCH", LONG_BLINK: "EYES SHUT"}
+    PROMPT = {CLENCH: "CLENCH", LONG_BLINK: "EYES SHUT", BLINK: 'BLINK ONCE'}
     HOW = {CLENCH: "one short jaw clench",
-           LONG_BLINK: "close your eyes and keep them shut"}
+           LONG_BLINK: "close your eyes and keep them shut", BLINK: 'one blink, then open your eyes'}
 
     def __init__(self, rounds=ROUNDS, inputs=(CLENCH, LONG_BLINK), seed=None,
                  clock=time.monotonic, require_neutral=False):

@@ -391,14 +391,18 @@ class StationUI:
     def event(self, name, detail, elapsed):
         self.post(("event", name, detail, elapsed, time.monotonic()))
 
+    def event_at(self, name, detail, elapsed, occurred_at):
+        self.post(('event', name, detail, elapsed, occurred_at))
+
     def tick(self, levels, recognizer, recent):
         hold = recognizer.long_blink.threshold if recognizer.long_blink else None
         self.post(("tick", levels, recognizer.clench.threshold,
-                   recognizer.blink.threshold, hold))
+                   None if getattr(recognizer, 'mne_blinks', False) else recognizer.blink.threshold, hold))
         now = time.monotonic()
         jaw = recognizer.clench
         lid = recognizer.long_blink
-        ready = (not jaw.active and levels.emg < jaw.release
+        ready = (getattr(recognizer, 'eyes_ready', True)
+                 and not jaw.active and levels.emg < jaw.release
                  and (now-jaw.last_event_at)*1000 > jaw.refractory_ms
                  and (lid is None or (not lid.active and levels.hold < lid.release
                       and (now-lid.last_event_at)*1000 > lid.refractory_ms)))
@@ -553,9 +557,17 @@ class Station(tk.Tk):
                         variable=self.quick_var).grid(row=1, column=0, columnspan=8,
                                                       sticky="w", pady=(6, 0))
         self.blink_only_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(activity, text="blink only (keep saved clench numbers)",
-                        variable=self.blink_only_var).grid(row=2, column=0,
-                                                           columnspan=8, sticky="w")
+        self.blink_only_check = ttk.Checkbutton(
+            activity, text="blink only (calibrated mode)", variable=self.blink_only_var)
+        self.blink_only_check.grid(row=2, column=0, columnspan=8, sticky='w')
+        self.blink_detector_var = tk.StringVar(value=getattr(self.args, 'blink_detector', 'mne'))
+        ttk.Label(activity, text='Blinks').grid(row=3, column=0, sticky='e')
+        self.blink_detector_box = ttk.Combobox(activity, textvariable=self.blink_detector_var,
+                                              values=('mne', 'calibrated'), width=14, state='readonly')
+        self.blink_detector_box.grid(row=3, column=1, sticky='w')
+        self.blink_detector_box.bind('<<ComboboxSelected>>', lambda _: self._refresh_buttons())
+        ttk.Label(activity, text='MNE: blink once/twice; no eyes-held-shut input',
+                  foreground='#6b7280').grid(row=3, column=2, columnspan=6, sticky='w')
 
         # --- the prompt, when an activity is waiting on you -----------------
         self.prompt_frame = ttk.Frame(root, padding=(0, 8))
@@ -618,7 +630,10 @@ class Station(tk.Tk):
         # has to know what it is drilling before it opens.
         inputs = [sa.CLENCH]
         calibration = self._peek_calibration()
-        if calibration and calibration.get("hold_threshold"):
+        if self.blink_detector_var.get() == 'mne':
+            inputs.append(sa.BLINK)
+            self._log('Drill: clench or blink once. Wait for MNE warm-up before prompts.')
+        elif calibration and calibration.get("hold_threshold"):
             inputs.append(sa.LONG_BLINK)
         else:
             self._log("!! this profile has no long-blink calibration, so the drill "
@@ -705,7 +720,8 @@ class Station(tk.Tk):
             baseline_seconds=10.0,
             k=6.0,
             no_clench_cal=self.quick_var.get(),
-            blink_only=self.blink_only_var.get(),
+            blink_only=self.blink_only_var.get() and self.blink_detector_var.get() != 'mne',
+            blink_detector=self.blink_detector_var.get(),
             long_ms=1500,
             double_ms=700,
             long_blink_ms=cd.LONG_BLINK_MS,
@@ -752,7 +768,7 @@ class Station(tk.Tk):
         calibration = cd.calibrate(board, self.link.rows, self.link.fs,
                                    window, args, ui)
         if calibration:
-            cd.describe(calibration, ui)
+            cd.describe(calibration, ui, args.blink_detector)
             self.queue.put(("profiles", cd.list_profiles()))
 
     def _listen(self, ui, args):
@@ -772,7 +788,7 @@ class Station(tk.Tk):
             return
         ui.log(f"loaded calibration saved {calibration['saved_at']}")
         ui.log("  (recalibrate if the band has moved since then)")
-        cd.describe(calibration, ui)
+        cd.describe(calibration, ui, args.blink_detector)
         window = int(self.link.fs * cd.WINDOW_SECONDS)
         cd.detect_loop(board, self.link.rows, self.link.fs, window,
                        calibration, args, ui, emit_start=emit_start)
@@ -949,6 +965,9 @@ class Station(tk.Tk):
         self.new_profile_button.configure(state="disabled" if busy else "normal")
         self.stop_button.configure(state="normal" if busy else "disabled")
         self.profile_box.configure(state="readonly" if not busy else "disabled")
+        self.blink_detector_box.configure(state='disabled' if busy else 'readonly')
+        self.blink_only_check.configure(state='normal' if not busy and
+                                        self.blink_detector_var.get() == 'calibrated' else 'disabled')
 
     def _log(self, message):
         self.log_text.configure(state="normal")
@@ -997,6 +1016,7 @@ class Bar(tk.Canvas):
 
 def main():
     parser = build_parser("A window that holds the Muse connection open.")
+    parser.add_argument('--blink-detector', choices=('mne', 'calibrated'), default='mne')
     parser.add_argument("--connect", action="store_true",
                         help="start connecting immediately instead of waiting "
                              "for the Connect button")
