@@ -159,6 +159,12 @@ export default function BoardPage() {
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
+  // Touch: a tap on a tile picks it, a tap on the "Say this?" sentence confirms (TAP; the Core checks
+  // the screen is still the one tapped). For a caregiver, or testing without a headband.
+  const tapTile = (tile: number) => {
+    if (screen) send({ type: 'TAP', tile, seq: screen.seq, t: Date.now() / 1000 })
+  }
+  const tapConfirm = () => send({ type: 'TAP', tile: null, seq: null, t: Date.now() / 1000 })
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
@@ -201,12 +207,12 @@ export default function BoardPage() {
       {screen && (
         <>
           <Breadcrumb screen={screen} />
-          <TileGrid screen={screen} />
+          <TileGrid screen={screen} onTap={tapTile} />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
         </>
       )}
-      {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
+      {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />}
       {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       {connected && backPrompt && view.kind !== 'help' && (
