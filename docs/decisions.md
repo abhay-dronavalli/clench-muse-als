@@ -454,3 +454,185 @@ Status: **done** = built, **planned** = agreed, not built yet.
 - `data/profile.yaml` now starts the board in English (`lang: en`, was `es`). Luis still has Spanish
   one click away (EN/ES in the dev panel); the help-alert test pins Spanish itself instead of relying
   on the profile file.
+
+## 16. Muse input in the main app: connect button, double blink, input log
+
+- **The console starts the Sensor Service.** `core/sensor_service.py` supervises one
+  `python -m sensor.main` subprocess behind `GET /api/sensor`, `POST /api/sensor/start` and
+  `POST /api/sensor/stop`. The Muse panel (board bottom bar and `/console`) has a profile picker
+  (the `test/calibration.*.json` files), Connect / Disconnect, a demo-source button and the
+  service's last output lines. Starting replaces a running service (BrainFlow allows one BLE client
+  per headband). Stopping pauses Muse input. The Core kills the subprocess on shutdown.
+- **A brief headband dropout no longer pauses Muse.** Before, every `SIGNAL` with
+  `connected: false` set `muse_enabled` to false. The sensor sends one before every reconnect try,
+  so the switch flapped Paused / Ready every ~12 s and the caregiver had to press Enable again. The
+  command gate already refuses gestures while the signal is disconnected, blocked or stale, so the
+  pause now happens only after 10 s without the headband (`MUSE_LOSS_GRACE_S`). A service
+  disconnect or the last board closing still pauses at once.
+- **Reconnect backs off.** 5, 10, 20, 40 s, then 40 s, instead of a try every 5 s. Resets on success.
+- **DOUBLE_BLINK from the headband, by MNE; clenches by the person's calibration.** The same split
+  the Tkinter bench uses (`--blink-detector mne`, its default). Clenches: the calibrated jaw detector
+  (`emg_threshold`, `emg_rest` from `test/calibration.<name>.json`). Blinks: MNE
+  `find_eog_events` on the last 20 s of AF7/AF8, run in a background thread every 0.25 s, peaks
+  committed 0.5 s behind real time, two peaks within 700 ms = DOUBLE_BLINK (a single blink sends
+  nothing). The bench's `mne_blinks.py` moved to `sensor/detect/mne_blinks.py` so the app and the
+  bench share one copy (`test/mne_blinks.py` re-exports it); `sensor/detect/eyes.py` drives it from
+  the service loop. MNE uses no saved eye threshold, so a profile's `blink_enabled: false` does not
+  turn it off. `/ws/sensor` now accepts DOUBLE_BLINK. `mne==1.13.2` (the bench's pin) joined the
+  `sensor` extra. It needs 20 s of continuous data after connecting before the first blink counts.
+  DOUBLE_BLINK is stamped when sent, not at the peak: MNE commits a peak at least 0.5 s late and the
+  Core refuses gestures more than 1 s old. A clench wins a tick that also completes a double blink.
+  If MNE is missing or fails, blinks stop and clenches keep working. `--blink off` (panel: "Double
+  blink: off") turns it off.
+- **MNE thresholds each window against itself.** In a 20 s window with no real blink, noise peaks
+  become "blinks". A wearer blinks every few seconds so this does not happen in use, but an unworn
+  band can produce DOUBLE_BLINKs (the Core refuses them while the band reports poor contact). The
+  demo source blinks every 4 s, like a wearer, for the same reason.
+- **INPUT_EVENT and the input log.** The Core sends one INPUT_EVENT per gesture (headband or
+  keyboard stand-in) to consoles and input clients, with `accepted` and the reason when it refused
+  one (paused, no board, headband not connected, blocked, stale, clock skew). Pressing `/` on the
+  board or console opens a short full-width strip at the top listing them with per-kind counts; Esc
+  or `/` closes it. Refused gestures are shown (amber) because "the detector never fired" and "the
+  Core ignored it" look the same otherwise.
+- **Muse panel moved to a left-side debug panel on ",".** The bottom-bar widget is gone.
+  `web/src/sensor/MusePanel.tsx` is a full-height strip on the left (Esc also closes it; open by
+  default on `/console`) with four sections in the order you use them: headband (profile, double
+  blink, Connect / Disconnect, demo source), live signal (per-channel spread with flat / noisy
+  flags, jaw level against the threshold, sample age), the Enable / Pause switch, and the service's
+  output. Closed, only a small "Muse" tab with a status dot stays on the left edge.
+- **The panel no longer flickers Disconnected / Paused.** It required a sample's time to be at or
+  before the page clock, but the page clock ticks every 250 ms and a sample arrives every ~285 ms,
+  so the newest sample was routinely "from the future" and read as Disconnected several times a
+  second, disabling the Enable button with it. A sample up to 2 s ahead now counts as fresh.
+- **The detector keeps running while Muse is paused or blocked.** Gestures go to the Core, which
+  refuses them and reports them as INPUT_EVENT with the reason, so the input log is not silently
+  empty while paused. Any change of the pause or block state still resets and re-arms the detector,
+  so a clench held across Enable, or a crossing during head motion, never fires.
+
+## 17. Going back needs a clench to confirm
+
+With the headband, blinks turned out far too easy to make by accident, and twice: a stray double
+blink went back a level, and a few in a row raced up through the menus. Asked 2026-09-27; the
+choices below are Taher's.
+
+- **Menus:** a DOUBLE_BLINK opens a "Go back?" prompt (BACK_PROMPT, `kind: "menu"`) and pauses
+  scanning. A CLENCH within 3 s (`BACK_CONFIRM_S`) goes up one level. Doing nothing closes it and
+  nothing changes: in a one-muscle interface, "no" has to cost nothing. More double blinks while it
+  is open are ignored, so the menus can no longer be raced through.
+- **"Say this?" screen:** the same prompt (`kind: "confirm"`, "Cancel this message?"); a CLENCH
+  cancels. A clench on that screen normally means SEND, so after the prompt closes on its own every
+  CLENCH is ignored for 1 s (`LATE_CLENCH_S`): a clench meant for a prompt that had just run out must
+  never send a real message. The same 1 s applies after a menu prompt, where it would pick a tile.
+- **Help countdown:** unchanged, a DOUBLE_BLINK cancels it at once (Taher's choice: stopping a false
+  alarm stays one gesture). The spoken line and the red screen say "Double blink to cancel" again,
+  now that the headband sends double blinks ("Press B to cancel" was a stop-gap from before).
+- **"Finding options…" (LOADING, at most 4 s):** unchanged, a DOUBLE_BLINK stops waiting at once;
+  it only returns to the same screen.
+- A LONG_CLENCH during a prompt closes it and starts the help countdown at once (rule 2). RESET, and
+  any new screen, close it too.
+- The keyboard stand-in's B is a DOUBLE_BLINK like any other, so the same prompt shows: B then Space
+  goes back. The Core still cannot tell the two apart.
+- Contracts: new Core -> board and console message BACK_PROMPT (`open`, `kind`, `timeout_ms`).
+
+## 18. Eyedid gaze on the tablet, step 1: gaze pipeline and test bench (branch android/eyedid)
+
+- Eyedid (VisualCamp, formerly SeeSo) is the primary eye tracker for the Android tablet; improving
+  our MediaPipe iris path is the fallback. Step 1 is the web side only; the native shell is step 2.
+- The board now smooths gaze (One Euro) and holds 300 ms before the highlight moves to a new tile
+  (`tilePointer.ts`). This replaces "the board adds no smoothing to gaze" from section 15. The head
+  path is unchanged.
+- Dwell select: off by default, gaze only, 1.5 s, only on a menu screen that is not loading. It sends
+  CLENCH on `/ws/input`, so the Core records it as a clench (METRICS count it as one). Settings live
+  in the browser (`localStorage`), not in `data/profile.yaml`, to keep the Core out of this branch.
+- Known gap, "gaze-only confirm": dwell never confirms (hard rule 1 in spirit: a stare must not send a
+  message) and never acts during the help countdown. A person with only an eye tracker and no
+  headband therefore cannot confirm a message. Closing it needs a deliberate confirm gesture, not a
+  longer stare.
+- Known issue, clench look-back with the hold: the Core picks the tile highlighted
+  `clench_lookback_ms` (250 ms) before a clench (`core/session.py`, `_pick_index`). With the 300 ms
+  hold, the highlight reaches the Core about 300 ms after the eyes arrive, so a clench within 250 ms
+  of the highlight moving picks the previous tile. Agreed fix: for gaze, look back only to when the
+  highlight changed (the hold already filters clench-induced eye movement). It is a `core/` change,
+  which this branch does not touch; until then a quick clench after a gaze move can pick the wrong tile.
+- One camera owner: when the tablet shell's tracker is active (`window.ClenchNative.gazeActive()`),
+  the page never opens the camera, and Auto and Webcam follow the gaze.
+- Blinks from the SDK are forwarded and counted on `/gaze-test` only; nothing is mapped to them until
+  their timing is measured.
+- The board's grid is 2 across x 3 down on a portrait screen (Tailwind `portrait:`), for the case
+  where Eyedid needs the tablet upright. Landscape is unchanged.
+- `/gaze-test` is a third page (`web/src/gazetest/`). Results stay in the browser with JSON/CSV
+  export; nothing goes to the Core.
+- Known issue, dwell plus a real clench: CLENCH carries no screen `seq`, so if the person clenches
+  (headband) just as the dwell ring completes, the Core gets two CLENCHes: the first picks the tile and
+  opens the confirm screen, the second confirms it. The board guards its own side (dwell only sends if
+  the menu `seq` it measured is still the one on show, updated synchronously from the Core's messages),
+  but the network race needs a Core fix: CLENCH carrying the screen `seq` (contracts change) or the Core
+  ignoring a CLENCH for about 500 ms after it shows the confirm screen. Until then keep dwell off
+  whenever the headband is in use.
+
+## 19. Eyedid gaze on the tablet, step 2: the native board shell (branch android/eyedid-shell)
+
+- `kushagra/tablet` gains `board/BoardActivity` ("Clench Board" launcher entry): the board in a
+  WebView plus the Eyedid SDK (`camp.visual.eyedid.android.gazetracker:eyedid-gazetracker:1.0.0-beta5`,
+  VisualCamp's Maven repo). The MediaPipe prototype stays as the second launcher entry, the fallback.
+- The board loads from `BOARD_URL` (default `http://localhost:5173/`, reached with `adb reverse`).
+  Plain HTTP is allowed for localhost and 127.0.0.1 only (`network_security_config.xml`).
+- The license key and the tablet's camera position come from the git-ignored `local.properties` into
+  `BuildConfig`. The key is inside the debug APK; do not share the APK outside the team.
+- Camera position: the app uses the SDK's own entry if it has one for the model; otherwise it adds
+  one for the Galaxy Tab S9 Ultra (SM-X910, 2960 x 1848, camera on the long edge) with the screen's
+  top-left at -157.2 mm, -1.0 mm from the camera. Those numbers are estimated from the 14.6-inch 16:10
+  panel, not measured, and the S9 Ultra has two front cameras in the notch; measure if accuracy is off.
+- Gaze is converted to fractions of the WebView in the shell (screen pixels minus the WebView's
+  on-screen position, divided by its size), so the page needs no density or bar offsets.
+- Start-up authentication retries every 5 s for a minute on `AUTH_SERVER_ERROR` or
+  `AUTH_CANNOT_FIND_HOST`; other errors stop the tracker and hand the camera to the page.
+- The SDK's gaze filter is an init option, so switching it (from `/gaze-test`) restarts the tracker
+  (about a second without gaze) and re-applies the person's calibration.
+- Calibration is saved per person (SharedPreferences on the tablet), and the last one is reloaded at
+  start and checked with one target: the median gaze over 1.5 s must fall within half a tile of it
+  (3 x 2 grid, 2 x 3 in portrait). Fewer than 10 tracked samples counts as a miss.
+- The activity's orientation is fixed (landscape by default, `BOARD_ORIENTATION=portrait` for the
+  fallback) instead of following the sensor, so a rotation never changes the gaze coordinates mid-use.
+- Review follow-up: the shell's tracker now runs only when the page's pointing mode needs the camera
+  (`ClenchNative.setPointingMode`, reported from SETTINGS before the board renders), is off before
+  "Click to start" and after every page load, and releases the camera in Scan and Head tilt. The
+  "Camera on" light covers the shell's tracker. `/gaze-test` picks each target when its prompt starts
+  (never the highlighted tile) and locks its settings during a run. Dwell is unchanged: the dwell and
+  clench race is left to the Core confirm-window fix on the safety work, and dwell stays off whenever
+  the headband is in use.
+
+## 20. The Muse on the tablet: clenches without the laptop's Bluetooth (branch muse-on-android)
+
+- The tablet app can read the Muse 2 itself and be the Sensor Service: `kushagra/tablet/.../muse/`
+  talks Bluetooth LE to the headband directly (the muse-js / muse-lsl protocol: preset `p21`, TP9,
+  AF7, AF8, TP10 and the gyroscope), since BrainFlow's Muse support does not run on Android. It sends
+  the same SIGNAL, CLENCH and LONG_CLENCH to the Core's `/ws/sensor`, through the Vite proxy on the
+  `adb reverse` port the board already uses. Off unless the build sets `MUSE_PROFILE`.
+- Clench detection is a port of `sensor/`, not a new detector: the same envelope, EdgeDetector,
+  600 ms re-arm, pause and motion gating, contact and gap checks, SIGNAL thinning and reconnect
+  back-off. The envelope matches BrainFlow to about 1e-8 uV (`EmgFilterTest` on windows from
+  `kushagra/tablet/tools/muse_golden.py`), so a profile calibrated on the laptop works unchanged.
+  BrainFlow details this depends on: its zero-phase pass keeps the filter state between the forward
+  and backward runs, and FIFTY_AND_SIXTY runs the 60 Hz band-stop in one direction only.
+- The profile is read at build time from the same git-ignored `test/calibration.<name>.json` the
+  Python sensor loads, and built into `BuildConfig`. Calibrating stays on the laptop's Muse bench.
+- No DOUBLE_BLINK from the tablet yet: the Python sensor uses MNE's `find_eog_events`, which has no
+  Android port. Going back works from the keyboard stand-in meanwhile. Porting it is the next step.
+- The Core refuses gestures more than 1 s off its clock, and the tablet's clock is its own, so the
+  Core gains `GET /api/time` and the tablet moves every timestamp onto the Core's clock (fastest of
+  five round trips, again every minute). Without it the tablet uses its own clock and logs a warning.
+- The Bluetooth link and the Core link are independent: a Core restart does not drop the headband.
+  The Core still accepts one sensor, so the laptop's Connect headband and the tablet cannot both run;
+  the second one is refused and retries.
+- Follow-up: the tablet's sensor no longer starts with the app. The Muse panel's Connect headband
+  starts it (and asks for Bluetooth the first time); Disconnect releases the headband. In a build with
+  `MUSE_PROFILE` the panel's Connect / Disconnect / status go to the tablet (`ClenchNative.muse*`)
+  instead of the Core's `/api/sensor`, so the laptop's Python sensor cannot be started from the
+  tablet by mistake. Without a headband the board works exactly as before.
+- The tablet speaks with Android's text-to-speech wherever the board would use browser speech:
+  Android's WebView has no `speechSynthesis`, so the tablet was silent for every browser-speech line
+  (no ElevenLabs key, an uncached picked word, ElevenLabs slow or failing). `ClenchNative.speak`
+  answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
+  sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
+  unchanged and still preferred.

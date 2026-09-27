@@ -17,6 +17,7 @@ from core.rank.score import DAY_S
 from core.session import CLENCH_DEBOUNCE_S, SPEAK_TIMEOUT_S, Session
 from core.suggest.fake import FakeProvider
 from core.suggest.service import Suggester
+from tests.gestures import go_back
 
 NOW = datetime(2026, 9, 26, 18, 30).timestamp()
 SCAN_S = 1.0
@@ -137,7 +138,7 @@ def test_after_a_week_the_shortcut_makes_it_two_clenches(menu, profile, db):
 def test_mistakes_and_waiting_count(menu, profile, db):
     s, sent, _ = make(menu, profile, db, learning=False)
     pick(s, sent, "I need")  # wrong branch
-    s.handle(DoubleBlink(t=0.0))
+    go_back(s)
     s._scheduler.advance(6 * SCAN_S)  # a full lap missed
     pick(s, sent, "People")
     for tile in ["Maria", "Text"]:

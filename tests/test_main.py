@@ -114,6 +114,7 @@ def test_console_mirrors_board_and_sends_settings():
     with make_client(clock) as client:
         with client.websocket_connect("/ws/console") as console:
             assert console.receive_json()["type"] == "SETTINGS"
+            assert console.receive_json()["type"] == "SIGNAL"
             console.send_json({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 600_000, "lang": "es"})
             assert console.receive_json()["lang"] == "es"  # the new settings first, then the view
             screen = console.receive_json()
@@ -135,10 +136,12 @@ def test_settings_are_announced_on_connect_and_after_every_change():
         ):
             current = {
                 "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True,
-                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05,
+                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": False,
             }
             for ws in (board, console, inp):
                 assert ws.receive_json() == current
+            # Console clients also receive the cached Muse telemetry snapshot.
+            assert console.receive_json()["type"] == "SIGNAL"
             inp.send_json({"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 700, "speak_picks": False})
             changed = {**current, "pointing_mode": "scan", "scan_ms": 700, "speak_picks": False}
             for ws in (board, console, inp):
@@ -203,3 +206,13 @@ def test_serves_cached_audio_only(tmp_path):
         assert health["voice"] == "browser speech (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID missing)"
         assert health["speak_picks"] is True
         assert health["learning"] is True and health["jev"] == "off"
+
+
+def test_api_time_is_the_cores_clock_for_a_sensor_on_another_device():
+    """The tablet's Muse sensor stamps gestures on this clock (the Core refuses any over 1 s off)."""
+    import time
+
+    with make_client(FakeClock()) as client:
+        before = time.time()
+        t = client.get("/api/time").json()["t"]
+        assert before <= t <= time.time()

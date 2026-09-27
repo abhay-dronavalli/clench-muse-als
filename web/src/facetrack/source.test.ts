@@ -17,6 +17,12 @@ describe('chooseSource', () => {
     expect(chooseSource('auto', false)).toBe('head')
   })
 
+  it('tablet shell owns the camera (no head): auto and webcam follow the gaze, even when lost', () => {
+    expect(chooseSource('auto', false, false)).toBe('gaze')
+    expect(chooseSource('webcam', false, false)).toBe('gaze')
+    expect(chooseSource('scan', true, false)).toBeNull()
+  })
+
   it('maps sources to POINT sources', () => {
     expect(POINT_SOURCE).toEqual({ head: 'webcam', gaze: 'gaze' })
   })

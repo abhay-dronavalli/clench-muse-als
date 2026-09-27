@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
+import { InputLog } from '../sensor/InputLog'
+import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
 import { loadHeadRange } from '../facetrack/headRange'
-import { CameraLight, CameraNotice, CursorDot, GazeNotice, PointerBadge } from '../facetrack/indicators'
+import {
+  CameraLight,
+  CameraNotice,
+  CursorDot,
+  DwellRing,
+  EyesNotice,
+  GazeNotice,
+  PointerBadge,
+} from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
+import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
+import { gazeTuning } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
@@ -13,7 +25,7 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { ToastStack } from './ToastStack'
-import { Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
+import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
 type View =
   | { kind: 'waiting' }
@@ -38,16 +50,31 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
-  const [view, setView] = useState<View>({ kind: 'waiting' })
+  const [view, setViewState] = useState<View>({ kind: 'waiting' })
+  // What is on screen as of the last Core message, updated synchronously (not after a render), so
+  // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
+  const shown = useRef<View>({ kind: 'waiting' })
+  const setView = (v: View) => {
+    shown.current = v
+    setViewState(v)
+  }
   const [lang, setLang] = useState<Lang>('en')
   const [mode, setMode] = useState<PointingMode | null>(null)
   const [margin, setMargin] = useState(STICKY_MARGIN) // SETTINGS tile_switch_margin
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
+  const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
+
+  useEffect(() => {
+    if (!backPrompt) return
+    const timer = window.setTimeout(() => setBackPrompt(null), backPrompt.ms + 1000)
+    return () => window.clearTimeout(timer)
+  }, [backPrompt])
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
@@ -58,6 +85,9 @@ export default function BoardPage() {
         break
       case 'CONFIRM':
         setView({ kind: 'confirm', confirm: msg })
+        break
+      case 'BACK_PROMPT':
+        setBackPrompt(msg.open ? { kind: msg.kind, ms: msg.timeout_ms, at: Date.now() } : null)
         break
       case 'SPEAK':
       case 'PLAY_AUDIO': {
@@ -81,12 +111,17 @@ export default function BoardPage() {
       case 'CLICK':
         click() // a picked "Other...": no word, a soft click in the sound queue
         break
+      case 'SIGNAL':
+        break // MusePanel displays sensor telemetry through its console socket.
       case 'ACTION_RESULT':
         push(toastFor(msg, lang))
         break
       case 'SETTINGS':
         // The language and the pointing mode (camera on or off); the dev panel shows the rest.
         if (msg.lang) setLang(msg.lang)
+        // The tablet shell first: in a camera mode it claims the camera before this render decides
+        // whether the page opens it (native.ts). SETTINGS only arrive after "Click to start".
+        reportPointingMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         break
@@ -119,10 +154,23 @@ export default function BoardPage() {
     }
   }, [connected])
 
+  // Re-render when the tablet shell's tracker starts or stops: it decides who owns the camera.
+  useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
-  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
+
+  // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
+  // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
+  // screen or the help countdown.
+  const dwellOn = useSyncExternalStore(gazeTuning.subscribe, gazeTuning.get).dwell
+  const input = useSocket('/ws/input', { enabled: started && dwellOn })
+  const pick = (seq: number) => {
+    const v = shown.current
+    if (v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
+    return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
+  }
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
 
   const start = () => {
     unlockSpeech()
@@ -135,6 +183,7 @@ export default function BoardPage() {
       {!started && <StartOverlay onStart={start} />}
       <div className="fixed right-4 top-4 z-30 flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
+          {pointing && <EyesNotice lang={lang} />}
           {screen && <PointerBadge screen={screen} mode={mode} />}
           <CameraLight lang={lang} />
           <StatusDot status={started ? status : 'closed'} label="Core" />
@@ -154,12 +203,18 @@ export default function BoardPage() {
           <Breadcrumb screen={screen} />
           <TileGrid screen={screen} />
           {pointing && <CursorDot />}
+          {pointing && <DwellRing />}
         </>
       )}
       {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
       {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
+      {connected && backPrompt && view.kind !== 'help' && (
+        <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />
+      )}
       <ToastStack toasts={toasts} />
+      <MusePanel />
+      <InputLog />
 
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />

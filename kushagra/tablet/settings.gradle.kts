@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Eyedid (VisualCamp) gaze SDK: https://docs.eyedid.ai/docs/quick-start/android-quick-start
+        maven("https://seeso.jfrog.io/artifactory/visualcamp-eyedid-sdk-android-release")
     }
 }
 

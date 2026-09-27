@@ -1,5 +1,5 @@
 """WebSocket hub: keeps track of connected clients and delivers Core -> Board messages (and SETTINGS
-to everyone, METRICS and SHORTCUT_DEBUG to consoles and the dev panel).
+to everyone, METRICS, SHORTCUT_DEBUG and INPUT_EVENT to consoles and the dev panel).
 
 Each client has its own queue and writer task, so messages always arrive in the order the session
 emitted them, and a slow or dead client never blocks the session.
@@ -13,11 +13,11 @@ from typing import Literal
 
 from fastapi import WebSocket
 
-from core.contracts import Message, Metrics, Settings, ShortcutDebug
+from core.contracts import InputEvent, Message, Metrics, Settings, ShortcutDebug
 
 log = logging.getLogger("clench.hub")
 
-Role = Literal["board", "console", "input"]
+Role = Literal["board", "console", "input", "sensor"]
 
 
 class Client:
@@ -53,9 +53,10 @@ class Hub:
         """Send to every board, and to every console so the caregiver screen can mirror. SETTINGS
         also goes to input clients, so the dev panel shows the real values. METRICS and
         SHORTCUT_DEBUG go to consoles and input clients (the dev panel) only: the patient's board has
-        no use for them."""
+        no use for them. INPUT_EVENT goes the same way; the board's own input log opens a console
+        socket for it, exactly as the board's Muse panel already does."""
         for c in self._clients:
-            if isinstance(msg, (Metrics, ShortcutDebug)):
+            if isinstance(msg, (Metrics, ShortcutDebug, InputEvent)):
                 wanted = c.role in ("console", "input")
             else:
                 wanted = c.role in ("board", "console") or isinstance(msg, Settings)

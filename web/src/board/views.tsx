@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
 
@@ -49,8 +50,9 @@ function tileLook(tile: Tile, on: boolean): string {
 }
 
 /**
- * Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are.
- * The deeper bottom padding keeps the collapsed dev panel pill clear of the highlighted tile's ring.
+ * Up to 6 huge tiles in a fixed 3x2 grid (2x3 on a portrait screen, e.g. the tablet held upright),
+ * so a tile's position never depends on how many there are. The deeper bottom padding keeps the
+ * collapsed dev panel pill clear of the highlighted tile's ring.
  *
  * While the Core is loading AI options (`screen.loading`) the picked tile pulses gently and a
  * "Finding options…" line shows; the Core has paused the scan.
@@ -59,7 +61,7 @@ export function TileGrid({ screen }: { screen: Screen }) {
   const loading = screen.loading === true
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8">
+      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8 portrait:grid-cols-2 portrait:grid-rows-3">
         {screen.tiles.map((tile, i) => {
           const on = i === screen.highlight
           return (
@@ -133,6 +135,33 @@ export function SpeakingView({ text, lang }: { text: string; lang: Lang }) {
 }
 
 /** Full-screen red help countdown (PRD D3): a huge number and how to cancel. */
+/**
+ * "Go back?" over the board after a double blink (BACK_PROMPT). A clench confirms; doing nothing lets
+ * the bar run out and nothing changes. The bar shows how long is left.
+ */
+export function BackPromptView({ kind, ms, lang }: { kind: 'menu' | 'confirm'; ms: number; lang: Lang }) {
+  const s = STRINGS[lang].back
+  const [full, setFull] = useState(true)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setFull(false)) // start the bar shrinking next frame
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return (
+    <div role="alertdialog" aria-live="assertive"
+      className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-black/60">
+      <div className="w-[min(90vw,48rem)] rounded-3xl bg-zinc-900 p-10 text-center text-white shadow-2xl ring-4 ring-sky-400">
+        <p className="text-7xl font-bold">↩ {s[kind]}</p>
+        <p className="mt-6 text-4xl font-semibold text-sky-300">{s.how}</p>
+        <p className="mt-2 text-2xl text-zinc-400">{s.stay[kind]}</p>
+        <div className="mt-8 h-4 overflow-hidden rounded-full bg-zinc-700">
+          <div className="h-4 rounded-full bg-sky-400"
+            style={{ width: full ? '100%' : '0%', transition: full ? 'none' : `width ${ms}ms linear` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function HelpCountdownView({ countdown, lang }: { countdown: number; lang: Lang }) {
   const s = STRINGS[lang].help
   return (
