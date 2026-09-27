@@ -18,6 +18,9 @@ dev = [
     "pytest",
 ]
 
+[project.optional-dependencies]
+sensor = ["brainflow==5.23.0", "numpy>=2.1", "websockets>=16,<17"]
+
 [tool.uv]
 # core/ and sensor/ are run from the repo root; nothing is built or installed as a wheel.
 package = false
