@@ -113,7 +113,7 @@ def pick(session: Session, sched: ManualScheduler, sent, tile: str) -> None:
 def test_starts_scanning_home(session, sent):
     screen = last_screen(sent)
     assert session.state is SessionState.SCANNING
-    assert [t.id for t in screen.tiles] == ["suggested", "need", "people", "feel", "room", "other"]
+    assert [t.id for t in screen.tiles] == ["suggested", "need", "people", "feel", "computer", "other"]
     assert screen.highlight == 0
     assert screen.path == []
 

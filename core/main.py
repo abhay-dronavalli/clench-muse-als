@@ -28,13 +28,15 @@ import time
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
+from functools import partial
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ValidationError
 
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
+from core.computer.service import Computer
 from core.config import dry_run_enabled, load_env, prewarm_enabled
 from core.contracts import (Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
                             Message, Ready, Signal, Settings, parse_message)
@@ -188,6 +190,7 @@ def create_app(
             scan_ms=scan_ms,
             lang=lang,
             jev=ranker_jev,
+            computer_factory=partial(Computer, start_url=env.get("COMPUTER_START_URL", "http://127.0.0.1:8000/computer/start")),
         )
         app.state.session = session
         session.start()
@@ -208,6 +211,7 @@ def create_app(
         app.state.sensor_service.stop()
         if prewarm is not None:
             prewarm.cancel()
+        await session.computer.aclose()
         session.stop()
         await suggester.aclose()
         if ranker_jev is not None:
@@ -221,6 +225,10 @@ def create_app(
     app.state.sensor_seen = 0.0
     app.state.sensor_service = SensorService()
     app.state.headband_lost_at: float | None = None
+
+    @app.get("/computer/start", response_class=HTMLResponse)
+    async def computer_start() -> str:
+        return (Path(__file__).parent / "computer" / "start.html").read_text(encoding="utf-8")
 
     async def serve(ws: WebSocket, role: Role) -> None:
         if role == 'sensor' and hub.count('sensor'):

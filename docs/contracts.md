@@ -35,6 +35,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | `GET /api/head-range` | the saved head range (HeadRange below), or `null` before the first calibration (the board then uses its defaults) |
 | `PUT /api/head-range` | save a HeadRange from the calibration overlay; answers with it. 422 when the sides are not around the center |
 | `GET /audio/<sha256>.mp3` | cached ElevenLabs audio named in PLAY_AUDIO |
+| `GET /computer/start` | local managed-browser launcher: YouTube, Spotify, Google, Exit |
 
 | Message | Sender | Receiver | Meaning |
 |---|---|---|---|
@@ -253,7 +254,7 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` | `suggestions` = the sentences for a picked leaf |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"computer"` | `suggestions` = the sentences for a picked leaf; `computer` = managed Chromium is open |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
 | `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
@@ -316,7 +317,32 @@ Picking is always a CLENCH on the highlighted tile. When the highlight follows t
 picks the tile that was highlighted about 250 ms before the CLENCH arrived (`clench_lookback_ms` in
 `data/profile.yaml`), because clenching the jaw can move the head slightly (PRD 3a "freeze on clench").
 
-### CONFIRM
+### Computer mode
+
+Computer mode uses SCREEN with `screen="computer"`, empty `tiles` and `path`, null
+`highlight` and `pointer`. The board remains connected and keeps its existing audio queue and
+dev input panel. READY returns this screen while Chromium is open. No COMPUTER_STATE message is
+needed: browser targets and overlay state stay inside the core's Playwright connection.
+
+```json
+{"type":"SCREEN","screen":"computer","seq":20,"tiles":[],"highlight":null,"lang":"en","path":[],"countdown":null,"loading":false,"pointer":null}
+```
+
+In computer mode CLENCH selects a band, target or browser-menu item. DOUBLE_BLINK goes from
+targets/menu to bands; at bands it does nothing. A text placeholder has one Cancel choice.
+LONG_CLENCH starts the same five-second help countdown, mirrored as a red banner in Chromium.
+After cancel or firing, the session resumes its browser selection. Closing Chromium during the
+countdown does not cancel help; the session returns Home when the countdown ends. RESET closes
+computer mode except during help. SETTINGS.scan_ms applies to the computer scan independently of
+the board's pointing mode. Echoes remain SPEAK/PLAY_AUDIO kind `echo` and respect speak_picks.
+
+The page bridge uses `page.add_init_script` and `page.expose_binding` for target snapshots;
+there is no page WebSocket. It cannot submit gestures. Foreground Space/B/hold input uses a
+Chromium isolated-world binding that accepts only trusted keyboard events and forwards the same
+CLENCH/DOUBLE_BLINK/LONG_CLENCH types to Session.handle. The headband and board dev panel still
+use `/ws/input` unchanged.
+
+### CONFIRM (communication board)
 
 The "Send this?" screen. Nothing is spoken or sent until the person clenches here; a
 DOUBLE_BLINK cancels (PRD D5).

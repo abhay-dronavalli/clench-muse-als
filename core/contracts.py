@@ -20,7 +20,7 @@ PointSource = Literal["webcam", "gaze", "headtilt"]
 ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
-ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
+ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "computer"]
 ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.

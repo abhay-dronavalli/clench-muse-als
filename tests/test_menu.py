@@ -30,7 +30,7 @@ def all_nodes_and_more(node: MenuNode):
 
 
 def test_home_level(menu):
-    assert [c.id for c in menu.root.children] == ["suggested", "need", "people", "feel", "room"]
+    assert [c.id for c in menu.root.children] == ["suggested", "need", "people", "feel", "computer"]
     assert menu.root.children[0].ai_now
     # The old "Say something" phrases live on in Suggested and in the home "Other..." fallback.
     assert [c.id for c in menu.root.more] == ["yes", "no", "good_morning", "wait"]
@@ -40,7 +40,7 @@ def test_home_level(menu):
 def test_every_level_has_at_most_five_items(menu):
     assert MAX_ITEMS == 5  # the session adds "Other..." as the sixth tile (PRD D8)
     for node in all_nodes_and_more(menu.root):
-        if not node.is_leaf:
+        if not node.is_leaf and not node.computer:
             assert 1 <= len(node.children) <= MAX_ITEMS, node.id
             assert node.more is None or 1 <= len(node.more) <= MAX_ITEMS, node.id
 
@@ -53,7 +53,11 @@ def test_moved_items_are_in_more(menu):
 
 def test_ai_options_inherit_action_and_contact_from_the_path(menu):
     assert find(menu.root, "people", "maria").inherited() == ("speak", "maria")
-    assert find(menu.root, "room").inherited() == ("room_control", None)
+    # Room actions remain supported for custom menus, though Home now opens Computer.
+    room = MenuNode.model_validate(yaml.safe_load((Path(__file__).parent / "room_fixture.yaml").read_text(encoding="utf-8")))
+    assert room.inherited() == ("room_control", None)
+    assert find(menu.root, "computer").computer
+    assert find(menu.root, "computer").leaves() == []
     assert find(menu.root, "people").inherited() == ("speak", None)
     assert menu.root.inherited() == ("speak", None)
 

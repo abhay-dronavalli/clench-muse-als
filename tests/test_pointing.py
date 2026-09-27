@@ -25,7 +25,7 @@ from core.session import CLENCH_DEBOUNCE_S, Session, SessionState
 from tests.gestures import go_back
 
 SCAN_S = 1.0
-HOME = ["suggested", "need", "people", "feel", "room", "other"]
+HOME = ["suggested", "need", "people", "feel", "computer", "other"]
 
 
 @pytest.fixture(scope="module")
@@ -140,11 +140,13 @@ def test_webcam_moves_are_not_scan_steps(menu, profile, sched, sent):
 
 def test_points_are_ignored_off_the_scanning_screen(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent, mode="webcam")
-    point(session, 4)  # room
+    point(session, 1)  # I need
     clench(session, sched)
-    point(session, 1)  # tv
+    point(session, 3)  # Pain
     clench(session, sched)
-    point(session, 0)  # on
+    point(session, 0)  # Back
+    clench(session, sched)
+    point(session, 0)  # A little
     clench(session, sched)
     assert session.state is SessionState.CONFIRMING
     before = len(sent)
@@ -209,11 +211,13 @@ def test_auto_face_back_within_3_s_cancels_the_fallback(menu, profile, sched, se
 def test_auto_falls_back_while_confirming_and_scans_when_back(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent)
     session.handle(FaceOk(ok=True))
-    point(session, 4)  # room
+    point(session, 1)  # I need
     clench(session, sched)
-    point(session, 1)  # tv
+    point(session, 3)  # Pain
     clench(session, sched)
-    point(session, 0)  # on
+    point(session, 0)  # Back
+    clench(session, sched)
+    point(session, 0)  # A little
     clench(session, sched)
     assert session.state is SessionState.CONFIRMING
     session.handle(FaceOk(ok=False))
@@ -289,11 +293,11 @@ def test_switch_to_auto_keeps_the_known_face(menu, profile, sched, sent):
 
 def test_switching_modes_while_confirming_waits_for_the_next_screen(menu, profile, sched, sent):
     session = make_session(menu, profile, sched, sent, mode="webcam")
-    point(session, 4)
+    point(session, 2)  # People
     clench(session, sched)
     point(session, 1)
     clench(session, sched)
-    clench(session, sched)  # the head still points at tile 1 on the TV level
+    clench(session, sched)  # the head still points at Text on the contact level
     assert session.state is SessionState.CONFIRMING
     session.handle(settings("scan"))
     n = len(screens(sent))

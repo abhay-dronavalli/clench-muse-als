@@ -195,9 +195,9 @@ def profile(menu):
 def home_prior(request):
     criteria = json.loads(request.content)["questions"]["next"]["criteria"]
     probs = {k: 0.02 for k in criteria}
-    if "room" in criteria:  # the home level: Room is the likely one right now
-        probs["room"] = 0.9
-    return httpx.Response(200, json=reply(probs, "room" if "room" in criteria else next(iter(criteria))))
+    if "computer" in criteria:  # the home level: Room is the likely one right now
+        probs["computer"] = 0.9
+    return httpx.Response(200, json=reply(probs, "computer" if "computer" in criteria else next(iter(criteria))))
 
 
 def make_session(menu, profile, *, learning=True):
@@ -214,10 +214,10 @@ def ids(sent) -> list[str]:
 
 def test_jev_answer_reranks_quietly_when_the_person_has_not_moved(menu, profile):
     s, sent, loop, requests = make_session(menu, profile)
-    assert ids(sent) == ["suggested", "need", "people", "feel", "room", "other"]  # history only: yaml order
+    assert ids(sent) == ["suggested", "need", "people", "feel", "computer", "other"]  # history only: yaml order
     s._scheduler.advance(1.0)  # the highlight moves on: that is not the person moving
     loop.run()
-    assert ids(sent) == ["suggested", "room", "need", "people", "feel", "other"]  # Suggested stays first
+    assert ids(sent) == ["suggested", "computer", "need", "people", "feel", "other"]  # Suggested stays first
     assert s.highlight == 1  # same position; nothing jumps back to the start
     assert json.loads(requests[0].content)["state"].startswith("Now: ")
 
@@ -230,7 +230,7 @@ def test_jev_answer_is_ignored_after_a_gesture(menu, profile):
     loop.run()
     assert all(not isinstance(m, Screen) or m.path == ["I need"] for m in sent[n:])
     go_back(s)  # back home: the answer Jev gave meanwhile is used at once
-    assert ids(sent) == ["suggested", "room", "need", "people", "feel", "other"]
+    assert ids(sent) == ["suggested", "computer", "need", "people", "feel", "other"]
 
 
 def test_day1_mode_never_asks_jev(menu, profile):

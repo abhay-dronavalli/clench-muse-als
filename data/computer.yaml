@@ -1,0 +1,16 @@
+# Navigations only: CDN/media subresources remain available to these sites.
+domains:
+  - youtube.com
+  - google.com
+  - open.spotify.com
+blocked_words:
+  - purchase
+  - pay
+  - subscribe
+  - buy
+  - delete
+  - comprar
+  - pagar
+  - suscribir
+  - eliminar
+  - borrar

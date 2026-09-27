@@ -34,11 +34,11 @@
       "days_per_week": 3
     },
     {
-      "name": "TV at night",
-      "path": "room.tv.on",
-      "phrase_en": "Please turn on the TV.",
-      "phrase_es": "Por favor, prende la televisión.",
-      "action": "room_control",
+      "name": "Tired at night",
+      "path": "feel.tired",
+      "phrase_en": "I'm tired. I'd like to rest.",
+      "phrase_es": "Tengo sueño. Quiero descansar.",
+      "action": "speak",
       "contact": null,
       "hours": [20],
       "days_per_week": 5
