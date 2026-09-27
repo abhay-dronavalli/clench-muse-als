@@ -630,3 +630,10 @@ choices below are Taher's.
   answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
   sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
   unchanged and still preferred.
+- Touch on the board (new board message TAP, `docs/contracts.md`): a tap on a tile picks that tile
+  and a tap on the "Say this?" sentence confirms, each exactly as a CLENCH would (same debounce, the
+  confirm step still required; no look-back, the finger names the tile). The tablet has no keyboard
+  for the stand-in and the Muse is often off while testing. Taps are ignored while the go-back prompt
+  is open and during the help countdown, so a stray touch can neither answer the prompt nor cancel a
+  call for help; going back stays the Dev panel's Double blink (then Clench). Always on, also with a
+  mouse on the laptop.
