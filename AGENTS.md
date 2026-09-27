@@ -346,7 +346,10 @@ Camera troubleshooting (Windows):
 
 Home has **Computer / Computadora** in place of Room. Pick it to open the core's maximized
 Chromium window. The board stays connected, displays Computer mode and plays the usual echo/help
-audio. Four horizontal bands group visible page controls; empty bands are omitted. Browser menu
+audio. Four horizontal bands group visible page controls; empty bands are omitted and the visible
+choices are numbered Group 1 onward. YouTube video cards stay together in a group. The active
+outline encloses the group's actual controls; selecting it leaves one yellow target highlight.
+The compact control dock moves to the top when it would cover a selected bottom control. Browser menu
 is always the last choice. Clench a band, then clench a target. Eight choices fit on a target page
 (seven targets plus More when needed). Double blink returns to bands. Browser menu contains
 Scroll down/up, history Back, Home and Exit. Text fields currently show "Search options coming

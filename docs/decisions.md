@@ -494,3 +494,37 @@ Status: **done** = built, **planned** = agreed, not built yet.
 - Local Chromium integration runs by default on 8001 using temporary profiles and a Trusted Types
   CSP. It captures a trusted click without contacting YouTube, checks blocking/recovery and
   keyboard input isolation. Actual YouTube smoke tests require CLENCH_NETWORK_TESTS=1.
+
+## Computer overlay usability repair (2026-09-27)
+
+- Playwright MCP inspection reproduced outlines slicing launcher buttons, dimming half a chosen
+  row, a status strip covering YouTube search, duplicate controls, and thumbnail labels of "true".
+  The overlay now uses a single yellow active outline around the actual group or target, muted
+  teal outlines for the current target page's alternatives, and a navy control dock. The dock
+  shows the current label, scan position and gesture hints rather than every long label at once.
+  Browser menu and the text placeholder have their own readable panels.
+- Design tokens: navy #142b38, white #f5fafb, yellow #ffda60, teal #6caea8 and help red #ae1737.
+  Segoe UI keeps the local Windows UI familiar. Yellow identifies the current selectable choice;
+  there are no animated sweeps or pulses. Group/target outlines and the dim cutout use real bounds,
+  not viewport quarter edges. The launcher fits short windows with responsive button heights.
+- Four horizontal buckets remain. Occupied buckets are labelled Group 1 onward without gaps.
+  Controls within one YouTube video card use its thumbnail center for bucket assignment, so a
+  video title, thumbnail and action menu do not fall into different groups. Duplicate links to
+  the same video in that card share one thumbnail target when the thumbnail is visible. YouTube
+  marks these duplicate thumbnail links aria-hidden for screen readers; this specific link is
+  still eligible when visually visible. Hidden ancestors, inert state and hit testing still apply.
+- The dock normally stays at the bottom and moves to the top for a bottom-edge selection. This
+  keeps fixed page/video controls reachable without excluding the bottom of the viewport. Error
+  messages move with it. Menu panels also fit short windows. Help remains the existing countdown.
+- Shadow DOM nodes are created once and updated in an animation frame; scanning no longer tears
+  down the overlay or initiates another full target discovery. DOM/scroll discovery remains
+  throttled. Live target identity survives moving between bands or pagination pages. Navigation
+  and a vanished target get a fresh scan interval; slow actions visibly pause selection.
+- Short video titles are display labels only. All available action labels, including associated
+  video title attributes, are checked at discovery and again before clicking. The injected
+  denylist survives an empty render during navigation. No board event contract changed; group
+  membership and the optional card band position stay internal to the browser adapter.
+- Regression checks cover persistent overlay nodes, complete target outlines, dock avoidance,
+  menu bounds at 1000x650 / 800x480 / 390x650, duplicate video controls, blocked labels hidden by
+  friendly titles, and selection stability after layout shifts. The real YouTube visual checks
+  use Playwright MCP; automated network tests remain opt-in.

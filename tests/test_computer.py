@@ -26,11 +26,20 @@ def test_bands_and_reading_order():
     assert [t.id for t in bands[0]] == ["2", "1"]
 
 
+def test_video_card_controls_stay_in_the_same_band():
+    targets = [Target("thumbnail", "Video", 10, 110, 300, 280, band_y=250),
+               Target("menu", "Action menu", 600, 100, 40, 40, band_y=250),
+               target("search", 300, 10)]
+    bands = split_bands(targets, 800)
+    assert set(t.id for t in bands[1]) == {"thumbnail", "menu"}
+    assert [t.id for t in bands[0]] == ["search"]
+
+
 def test_bands_targets_pagination_back_and_menu():
     s = Selection()
     s.update([target(i, x=i * 50) for i in range(17)], 1000)
-    assert s.items() == [("band:0", "Band 1"), ("menu", "Browser menu")]
-    assert s.pick() == ("", "Band 1")
+    assert s.items() == [("band:0", "Group 1"), ("menu", "Browser menu")]
+    assert s.pick() == ("", "Group 1")
     assert len(s.items()) == 8 and s.items()[-1][0] == "more"
     s.index = 7
     s.pick()
@@ -64,6 +73,20 @@ def test_snapshot_preserves_identity_and_navigation_resets():
     s.pick()
     s.update([target(1)], 1000, navigation=True)
     assert s.level == "bands" and s.index == 0
+
+
+def test_live_target_survives_band_and_pagination_changes():
+    s = Selection()
+    s.update([target(i, i * 50) for i in range(10)], 1000)
+    s.pick()
+    s.index = 6
+    s.update([target(-1, 0)] + [target(i, (i + 1) * 50) for i in range(10)], 1000)
+    assert s.page == 1 and s.items()[s.index][0] == "6"
+    s.update([target(6, 300, 600)], 1000)
+    assert s.level == "targets" and s.band == 2 and s.items()[s.index][0] == "6"
+    assert s.groups() == {"2": ["6"]}
+    s.back()
+    assert s.items()[0] == ("band:2", "Group 1")
 
 
 @pytest.mark.parametrize("url", ["https://youtube.com/watch?v=a", "https://www.youtube.com/", "https://accounts.google.com/", "https://open.spotify.com/", "http://127.0.0.1:8001/computer/start#x"])
@@ -237,6 +260,7 @@ def test_browser_timeout_cannot_block_help():
         s.computer.pick()
         s.computer.pick()
         await settle()
+        assert s.computer.browser.overlays[-1]["busy"] is True
         s.handle(LongClench(t=0, duration=3))
         clock.advance(5)
         assert s.state is SessionState.COMPUTER

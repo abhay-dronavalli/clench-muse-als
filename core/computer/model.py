@@ -12,13 +12,18 @@ class Target:
     width: float
     height: float
     text: bool = False
+    band_y: float | None = None
 
     @classmethod
     def parse(cls, data: dict) -> "Target":
         rect = {k: float(data[k]) for k in ("x", "y", "width", "height")}
         if not all(isfinite(v) for v in rect.values()) or min(rect["width"], rect["height"]) < 8:
             raise ValueError("invalid target rectangle")
-        return cls(str(data["id"])[:100], str(data["label"])[:60], **rect, text=bool(data.get("text")))
+        band_y = float(data["band_y"]) if data.get("band_y") is not None else None
+        if band_y is not None and not isfinite(band_y):
+            raise ValueError("invalid target band position")
+        return cls(str(data["id"])[:100], str(data["label"])[:60], **rect,
+                   text=bool(data.get("text")), band_y=band_y)
 
 
 def reading_order(targets: list[Target]) -> list[Target]:
@@ -34,7 +39,8 @@ def reading_order(targets: list[Target]) -> list[Target]:
 def split_bands(targets: list[Target], height: float) -> dict[int, list[Target]]:
     bands: dict[int, list[Target]] = {}
     for t in reading_order(targets):
-        band = min(3, max(0, int((t.y + t.height / 2) / max(height, 1) * 4)))
+        center = t.band_y if t.band_y is not None else t.y + t.height / 2
+        band = min(3, max(0, int(center / max(height, 1) * 4)))
         bands.setdefault(band, []).append(t)
     return dict(sorted(bands.items()))
 
@@ -58,6 +64,15 @@ class Selection:
         selected = old[self.index][0] if old else None
         self.height = height
         self.bands = split_bands(targets, height)
+        if self.level == "targets" and selected not in ("more", "cancel") and not navigation:
+            # Ads and lazy-loaded rows may move a live target to another band or
+            # pagination page. Keep the same choice, never silently substitute it.
+            for band, members in self.bands.items():
+                position = next((i for i, t in enumerate(members) if t.id == selected), None)
+                if position is not None:
+                    self.band = band
+                    self.page = position // (7 if len(members) > 8 else 8)
+                    break
         if navigation:
             self.back_to_bands()
         elif self.level == "targets" and self.band not in self.bands:
@@ -72,7 +87,7 @@ class Selection:
 
     def items(self) -> list[tuple[str, str]]:
         if self.level == "bands":
-            return [(f"band:{b}", f"Band {b + 1}") for b in self.bands] + [("menu", "Browser menu")]
+            return [(f"band:{b}", f"Group {i + 1}") for i, b in enumerate(self.bands)] + [("menu", "Browser menu")]
         if self.level == "menu":
             return MENU
         if self.level == "text":
@@ -85,6 +100,10 @@ class Selection:
         if len(targets) > 8:
             items.append(("more", "More..."))
         return items or [("cancel", "Cancel")]
+
+    def groups(self) -> dict[str, list[str]]:
+        """The overlay follows the same membership as the selection model."""
+        return {str(b): [t.id for t in targets] for b, targets in self.bands.items()}
 
     def tick(self):
         self.index = (self.index + 1) % len(self.items())

@@ -66,6 +66,7 @@ def test_launcher_scan_real_click_discovery_and_policy(launcher, tmp_path):
             key, label = selection.pick()
             assert label == "YouTube"
             await browser.render({"level": selection.level, "band": selection.band,
+                                  "groups": selection.groups(),
                                   "bands": list(selection.bands), "items": selection.items(),
                                   "selected": key, "blockedWords": browser.policy.blocked_words})
             await browser.page.screenshot(path=str(tmp_path / "computer-overlay.png"))
@@ -133,6 +134,134 @@ def test_launcher_scan_real_click_discovery_and_policy(launcher, tmp_path):
             await until(lambda: any(e.get("event") == "LONG_CLENCH" for e in events))
             await browser.page.keyboard.up("Space")
             assert {e.get("event") for e in events} >= {"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH"}
+        finally:
+            await browser.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("size", [(1000, 650), (800, 480), (390, 650)])
+def test_overlay_layout_and_stable_dom(launcher, tmp_path, size):
+    async def run():
+        events = []
+        browser = Browser(Policy.load(launcher), events.append, headless=True, profile=tmp_path / "layout")
+        try:
+            await browser.open()
+            await browser.page.set_viewport_size({"width": size[0], "height": size[1]})
+            # Test-only access to the otherwise closed shadow root; production stays closed.
+            await browser.page.add_init_script("""const attach = Element.prototype.attachShadow;
+              Element.prototype.attachShadow = function(options) {
+                const root = attach.call(this, options);
+                if (this.id === 'clench-overlay') window.overlayUnderTest = root;
+                return root;
+              };""")
+            await browser.page.reload()
+            assert await browser.page.evaluate("() => !!window.overlayUnderTest")
+            await until(lambda: any(e.get("targets") for e in events))
+            await browser.page.evaluate("window.__clench.discover()")
+            await asyncio.sleep(.1)
+            snapshot = next(e for e in reversed(events) if e.get("targets"))
+            selection = Selection()
+            selection.update([Target.parse(t) for t in snapshot["targets"]], snapshot["height"])
+
+            async def render():
+                await browser.render(dict(level=selection.level, band=selection.band,
+                    groups=selection.groups(), items=selection.items(),
+                    selected=selection.items()[selection.index][0]))
+                await browser.page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+            await render()
+            await browser.page.evaluate("""() => {
+              window.overlayNodes = [...window.overlayUnderTest.querySelectorAll('*')];
+              window.overlayAdds = 0;
+              new MutationObserver(records => { window.overlayAdds += records.reduce((n,r)=>n+[...r.addedNodes].filter(e=>e.nodeType===1).length,0); })
+                .observe(window.overlayUnderTest,{subtree:true,childList:true});
+            }""")
+            selection.pick()
+            await render()
+            geometry = await browser.page.evaluate("""() => {
+              const r = window.overlayUnderTest;
+              return {outline:r.querySelector('.outline').getBoundingClientRect().toJSON(),
+                      dock:r.querySelector('.dock').getBoundingClientRect().toJSON()};
+            }""")
+            target = next(t for t in snapshot["targets"] if t["id"] == selection.items()[selection.index][0])
+            outline, dock = geometry["outline"], geometry["dock"]
+            assert outline["top"] <= target["y"] and outline["bottom"] >= target["y"] + target["height"]
+            assert dock["top"] >= outline["bottom"] or dock["bottom"] <= outline["top"]
+            for _ in range(8):
+                selection.tick()
+                await render()
+            assert await browser.page.evaluate("window.overlayAdds") == 0
+            assert await browser.page.evaluate("window.overlayNodes.every(e => e.isConnected)")
+            selection.back()
+            selection.index = len(selection.items()) - 1
+            selection.pick()
+            await render()
+            assert await browser.page.evaluate("""() => {
+              const r=window.overlayUnderTest, p=r.querySelector('.panel').getBoundingClientRect();
+              const options=[...r.querySelectorAll('.option')].filter(e=>e.style.display!=='none');
+              return p.top>=0 && p.bottom<=innerHeight && options.length===5 &&
+                options.every(e=>e.getBoundingClientRect().bottom<=p.bottom);
+            }""")
+            # Controls fixed at the bottom remain discoverable; the dock moves away.
+            await browser.page.evaluate("""() => {
+              const button=document.createElement('button'); button.textContent='Bottom control';
+              Object.assign(button.style,{position:'fixed',bottom:'8px',left:'20px',height:'44px',minHeight:'0',width:'180px',fontSize:'18px'});
+              document.body.append(button);window.__clench.discover();
+            }""")
+            await until(lambda: any(any(t["label"] == "Bottom control" for t in e.get("targets", [])) for e in events))
+            snapshot = next(e for e in reversed(events) if e.get("targets"))
+            button = next(t for t in snapshot["targets"] if t["label"] == "Bottom control")
+            await browser.render(dict(level="targets", band=3, groups={"3": [button["id"]]},
+                                      items=[[button["id"], button["label"]]], selected=button["id"]))
+            await browser.page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+            assert await browser.page.evaluate("() => window.overlayUnderTest.querySelector('.dock').getBoundingClientRect().top === 0")
+            assert await browser.page.evaluate("window.__clench.prepare", button["id"]) is not None
+        finally:
+            await browser.close()
+    asyncio.run(run())
+
+
+def test_video_discovery_labels_duplicates_and_final_policy(launcher, tmp_path):
+    async def run():
+        events = []
+        browser = Browser(Policy.load(launcher), events.append, headless=True, profile=tmp_path / "video")
+        try:
+            await browser.open()
+            await browser.page.set_viewport_size({"width": 1000, "height": 700})
+            await browser.page.evaluate("""() => {
+              document.body.replaceChildren();
+              const card=document.createElement('ytd-video-renderer');
+              const thumbnail=document.createElement('a');thumbnail.id='thumbnail';
+              thumbnail.setAttribute('aria-hidden','true'); // YouTube hides this duplicate from screen readers.
+              thumbnail.href='https://www.youtube.com/watch?v=test&tracking=one';thumbnail.setAttribute('aria-label','true');
+              Object.assign(thumbnail.style,{position:'fixed',left:'20px',top:'100px',width:'400px',height:'220px',minHeight:'0'});
+              const title=document.createElement('a');title.id='video-title';title.textContent='A peaceful forest';
+              title.href='https://www.youtube.com/watch?v=test&tracking=two';
+              Object.assign(title.style,{position:'fixed',left:'450px',top:'100px',width:'450px',height:'60px',minHeight:'0'});
+              const wrapper=document.createElement('ytd-thumbnail');wrapper.append(thumbnail);
+              card.append(wrapper,title);document.body.append(card);window.__clench.discover();
+            }""")
+            await until(lambda: any(any(t["label"] == "A peaceful forest" for t in e.get("targets", [])) for e in events))
+            snapshot = next(e for e in reversed(events) if e.get("targets"))
+            assert len(snapshot["targets"]) == 1
+            video = snapshot["targets"][0]
+            assert video["label"] == "A peaceful forest" and video["band_y"] == 210
+            # A friendly title must never hide a denied action label, even after discovery.
+            await browser.page.evaluate("document.querySelector('#thumbnail').setAttribute('aria-label','Buy now')")
+            assert "error" in await browser.click(video["id"])
+            await browser.page.evaluate("window.__clench.discover()")
+            await asyncio.sleep(.1)
+            latest = next(e for e in reversed(events) if e.get("kind") == "targets")
+            assert video["id"] not in [t["id"] for t in latest["targets"]]
+            # A blocked title is also checked through the thumbnail's associated title.
+            await browser.page.evaluate("""() => {
+              document.querySelector('#thumbnail').setAttribute('aria-label','true');
+              document.querySelector('#video-title').setAttribute('aria-label','Subscribe now');
+              window.__clench.discover();
+            }""")
+            await asyncio.sleep(.1)
+            latest = next(e for e in reversed(events) if e.get("kind") == "targets")
+            assert latest["targets"] == []
         finally:
             await browser.close()
     asyncio.run(run())

@@ -99,8 +99,9 @@ class Computer:
                 targets = [t for t in targets if self.policy.allows_label(t.label)]
                 navigation = self.document != event["documentId"] or self.url != event["url"]
                 self.document, self.url = event["documentId"], event["url"]
+                previous_level = self.selection.level
                 self.selection.update(targets, max(1, float(event["height"])), navigation=navigation)
-                self._refresh()
+                self._refresh(restart=navigation or previous_level != self.selection.level)
             except (ValueError, TypeError, KeyError):
                 log.warning("invalid computer target snapshot ignored")
 
@@ -122,6 +123,7 @@ class Computer:
             return
         items = self.selection.items()
         state = dict(level=self.selection.level, band=self.selection.band, bands=list(self.selection.bands),
+                     groups=self.selection.groups(), page=self.selection.page, busy=self.busy,
                      items=items, selected=items[self.selection.index][0], help=self.help,
                      message=self.message, blockedWords=self.policy.blocked_words, longClenchMs=self.long_clench_ms)
         self._spawn(self.browser.render(state))
@@ -137,6 +139,7 @@ class Computer:
         elif key:
             self.busy = True
             self.scan.stop()
+            self._render()
             self._spawn(self._act(key, self.generation, self.document, self.url))
         else:
             self._refresh(restart=True)
