@@ -50,8 +50,9 @@ function tileLook(tile: Tile, on: boolean): string {
 }
 
 /**
- * Up to 6 huge tiles in a fixed 3x2 grid, so a tile's position never depends on how many there are.
- * The deeper bottom padding keeps the collapsed dev panel pill clear of the highlighted tile's ring.
+ * Up to 6 huge tiles in a fixed 3x2 grid (2x3 on a portrait screen, e.g. the tablet held upright),
+ * so a tile's position never depends on how many there are. The deeper bottom padding keeps the
+ * collapsed dev panel pill clear of the highlighted tile's ring.
  *
  * While the Core is loading AI options (`screen.loading`) the picked tile pulses gently and a
  * "Finding options…" line shows; the Core has paused the scan.
@@ -60,7 +61,7 @@ export function TileGrid({ screen }: { screen: Screen }) {
   const loading = screen.loading === true
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8">
+      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-6 px-8 pb-16 pt-8 portrait:grid-cols-2 portrait:grid-rows-3">
         {screen.tiles.map((tile, i) => {
           const on = i === screen.highlight
           return (

@@ -3,9 +3,12 @@ import type { HeadRange, PointingMode, Screen } from '../contracts'
 import type { Send } from '../lib/useSocket'
 import { FaceDebouncer } from './face'
 import { gaze } from './gaze'
+import { gazePointerTuning } from './gazeTuning'
+import { nativeGazeActive } from './native'
 import { chooseSource, fromHead, POINT_SOURCE, type PointSample, type SourceName } from './source'
-import { cursor, gazeConnected } from './stores'
-import { chooseTile, STICKY_MARGIN, type Rect } from './tiles'
+import { cursor, dwell, eyesLost, gazeConnected, gazeTuning } from './stores'
+import { DwellTimer, HEAD_TUNING, TilePointer } from './tilePointer'
+import { STICKY_MARGIN, type Rect } from './tiles'
 import { tracker } from './tracker'
 
 interface Options {
@@ -23,6 +26,12 @@ interface Options {
   paused: boolean
   /** Sticky edges: share of a tile's size the point must be inside it (SETTINGS tile_switch_margin). */
   margin?: number
+  /**
+   * Dwell select (gaze only, gazeTuning.dwell): pick the highlighted tile of menu screen `seq`, the
+   * same as a clench. Only called on a menu screen; the board checks again that screen `seq` is still
+   * the one on show (this hook's `screen` can be a render behind the Core's messages).
+   */
+  pick?: (seq: number) => boolean
 }
 
 /** How often the gaze slot is checked for an eye tracker that stopped feeding points. */
@@ -31,12 +40,13 @@ const GAZE_WATCH_MS = 200
 /** FACE_OK debounce for the page's one pointer (like the tracker, one per page). */
 const face = new FaceDebouncer()
 
-/** Every tile's box as fractions of the window, from the board's `data-tile-index` elements. */
-function measureTiles(): Rect[] {
+/** Every tile's box as fractions of the window, from elements carrying `attr` (the board's `data-tile-index`). */
+export function measureTiles(attr = 'data-tile-index'): Rect[] {
   const w = window.innerWidth
   const h = window.innerHeight
-  return [...document.querySelectorAll<HTMLElement>('[data-tile-index]')]
-    .sort((a, b) => Number(a.dataset.tileIndex) - Number(b.dataset.tileIndex))
+  const key = (el: Element) => Number(el.getAttribute(attr))
+  return [...document.querySelectorAll<HTMLElement>(`[${attr}]`)]
+    .sort((a, b) => key(a) - key(b))
     .map((el) => {
       const r = el.getBoundingClientRect()
       return { left: r.left / w, top: r.top / h, right: r.right / w, bottom: r.bottom / h }
@@ -48,32 +58,38 @@ export function boardPoints(mode: PointingMode | null): boolean {
   return chooseSource(mode, false) !== null
 }
 
-/** The head tracker (and so the camera, with its light) runs in this mode: Webcam, Auto. */
+/**
+ * The head tracker (and so the camera, with its light) runs in this mode: Webcam, Auto. Never while
+ * the tablet shell's eye tracker owns the camera (native.ts).
+ */
 export function headCamera(mode: PointingMode | null): boolean {
-  return mode === 'webcam' || mode === 'auto'
+  return (mode === 'webcam' || mode === 'auto') && !nativeGazeActive()
 }
 
 /**
  * Pointing on the board (PRD A3.3a) from a pluggable screen-point source (source.ts): the head
  * (MediaPipe head pose, tracker.ts) or the gaze (an eye tracker feeding gaze.ts). Webcam mode uses
  * the head, Gaze mode the gaze, Auto the gaze while it is available, else the head. The active
- * source's samples become messages for the Core:
+ * source's samples go through one TilePointer (tilePointer.ts; for gaze a One Euro filter and a
+ * 300 ms hold before the highlight moves) and become messages for the Core:
  *
  *   FACE_OK  when the person is seen or lost for 300 ms (face for head, eyes for gaze), on every
  *            (re)connect, and false when the camera stops or fails or the eye tracker stops
- *   POINT    the tile under the point (sticky edges), source "webcam" or "gaze", only when it
- *            changes, and once for every new SCREEN `seq`; only while the person is seen
+ *   POINT    the highlighted tile, source "webcam" or "gaze", only when it changes, and once for
+ *            every new SCREEN `seq`; only while the person is seen
  *
- * Video never leaves the browser: only these two messages are sent (PRD section 11).
+ * Video never leaves the browser: only these two messages are sent (PRD section 11). Dwell select,
+ * when on, calls `pick` (the board sends CLENCH).
  */
-export function usePointing({ mode, started, connected, screen, send, range, paused, margin = STICKY_MARGIN }: Options) {
+export function usePointing({ mode, started, connected, screen, send, range, paused, margin = STICKY_MARGIN, pick }: Options) {
   const pointing = started && boardPoints(mode)
   const camera = started && headCamera(mode)
-  const latest = useRef({ mode, pointing, screen, send, range, paused, margin })
+  const latest = useRef({ mode, pointing, screen, send, range, paused, margin, pick })
   useEffect(() => {
-    latest.current = { mode, pointing, screen, send, range, paused, margin }
+    latest.current = { mode, pointing, screen, send, range, paused, margin, pick }
   })
-  const tile = useRef<number | null>(null) // the tile the point is on (sticky), for this seq
+  const pointer = useRef(new TilePointer(HEAD_TUNING)) // the highlighted tile (sticky, held), for this seq
+  const dwellTimer = useRef(new DwellTimer())
   const sent = useRef<{ seq: number; tile: number; source: SourceName } | null>(null)
   const active = useRef<SourceName | null>(null)
   const seq = screen?.seq ?? null
@@ -81,7 +97,9 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
   // New tiles: start from the Core's highlight (it keeps the same index while pointing) and send
   // the tile under the point for this seq.
   useEffect(() => {
-    tile.current = latest.current.screen?.highlight ?? null
+    pointer.current.reset(latest.current.screen?.highlight ?? null)
+    dwellTimer.current.reset()
+    dwell.set(null)
     sent.current = null
   }, [seq])
 
@@ -100,6 +118,8 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
     if (!pointing) return
     return () => {
       cursor.set(null)
+      eyesLost.set(false)
+      dwell.set(null)
       if (face.reported) latest.current.send({ type: 'FACE_OK', ok: false })
       face.reset()
       sent.current = null
@@ -111,7 +131,8 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
   useEffect(
     () =>
       tracker.subscribeStatus(() => {
-        if (tracker.status.kind !== 'error' || chooseSource(latest.current.mode, gaze.available()) !== 'head') return
+        const source = chooseSource(latest.current.mode, gaze.available(), !nativeGazeActive())
+        if (tracker.status.kind !== 'error' || source !== 'head') return
         cursor.set(null)
         if (face.reported !== false) latest.current.send({ type: 'FACE_OK', ok: false })
         face.reset()
@@ -129,40 +150,77 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
 
   // Every sample from either source; only the active one drives the highlight.
   useEffect(() => {
+    const stopDwell = () => {
+      dwellTimer.current.reset()
+      dwell.set(null)
+    }
     const onSample = (s: PointSample) => {
-      const { mode, pointing, screen, send, paused, margin } = latest.current
-      if (!pointing || s.source !== chooseSource(mode, gaze.available(s.t))) return
+      const { mode, pointing, screen, send, paused, margin, pick } = latest.current
+      if (!pointing || s.source !== chooseSource(mode, gaze.available(s.t), !nativeGazeActive())) return
+      const p = pointer.current
       if (active.current !== s.source) {
         active.current = s.source
+        p.lost() // the other source's filter state means nothing here
         sent.current = null // tell the Core where this source points, even on the same tile
+        stopDwell()
       }
+      p.tuning = s.source === 'gaze' ? gazePointerTuning(gazeTuning.get(), margin) : { ...HEAD_TUNING, margin }
+      // A live tracker that does not see the eyes (a stopped one gets "no eye tracker" instead).
+      eyesLost.set(s.source === 'gaze' && !s.found && gaze.connected(s.t))
       const change = face.update(s.found, s.t)
       if (change !== null) {
         send({ type: 'FACE_OK', ok: change })
         sent.current = null // seen again: send the tile it points at, even if unchanged
       }
-      cursor.set(s.point)
-      if (!s.point || !s.found) return
-      if (paused || face.reported !== true || !screen || screen.tiles.length === 0) return
+      if (!s.point || !s.found) {
+        cursor.set(s.point)
+        p.lost()
+        stopDwell()
+        return
+      }
+      if (paused || face.reported !== true || !screen || screen.tiles.length === 0) {
+        cursor.set(s.point)
+        stopDwell()
+        return
+      }
       const rects = measureTiles()
       if (rects.length !== screen.tiles.length) return // the new tiles are not drawn yet
-      const next = chooseTile(s.point, rects, tile.current, margin)
-      tile.current = next
+      const step = p.update(s.point, s.t, rects)
+      cursor.set(step.point)
+      const next = step.tile
       if (next === null) return
-      if (sent.current?.seq === screen.seq && sent.current.tile === next && sent.current.source === s.source) return
-      const source = POINT_SOURCE[s.source]
-      if (send({ type: 'POINT', source, tile: next, seq: screen.seq, t: Date.now() / 1000 })) {
-        sent.current = { seq: screen.seq, tile: next, source: s.source }
+      if (!(sent.current?.seq === screen.seq && sent.current.tile === next && sent.current.source === s.source)) {
+        const source = POINT_SOURCE[s.source]
+        if (send({ type: 'POINT', source, tile: next, seq: screen.seq, t: Date.now() / 1000 })) {
+          sent.current = { seq: screen.seq, tile: next, source: s.source }
+        }
+      }
+      // Dwell select: gaze only, on a menu screen that is not loading, once the Core has this tile.
+      const tuning = gazeTuning.get()
+      const canDwell = tuning.dwell && pick && s.source === 'gaze' && !screen.loading && sent.current?.tile === next
+      if (!canDwell) {
+        stopDwell()
+        return
+      }
+      dwellTimer.current.dwellMs = tuning.dwellMs
+      const d = dwellTimer.current.update(next, s.t)
+      dwell.set(d.progress > 0 ? { tile: next, progress: d.progress } : null)
+      if (d.fire) {
+        dwell.set(null)
+        pick(screen.seq)
       }
     }
     const offHead = tracker.subscribeSample((h) => onSample(fromHead(h, latest.current.range)))
     const offGaze = gaze.subscribe(onSample)
-    // An eye tracker that stops feeding points: "not seen" in Gaze mode (Auto moves to the head
-    // with its next frame), and the board's "no eye tracker" notice.
+    // An eye tracker that stops feeding points: "not seen" while the gaze is the active source
+    // (Auto moves to the head with its next frame, if there is one), and the board's notice.
     const watch = window.setInterval(() => {
       const now = performance.now()
-      gazeConnected.set(gaze.connected(now))
-      if (latest.current.mode === 'gaze' && !gaze.connected(now)) {
+      const live = gaze.connected(now)
+      gazeConnected.set(live)
+      if (live) return
+      const { mode } = latest.current
+      if (mode === 'gaze' || (nativeGazeActive() && chooseSource(mode, false, false) === 'gaze')) {
         onSample({ source: 'gaze', t: now, found: false, point: null, confidence: 0 })
       }
     }, GAZE_WATCH_MS)

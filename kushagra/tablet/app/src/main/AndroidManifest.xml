@@ -3,15 +3,32 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Eyedid authenticates its license key over the network; the board loads from the laptop. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".EyeTrackApp"
         android:label="Clench Eye Track"
         android:theme="@style/Theme.ClenchEyeTrack"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
 
+        <!-- The patient board in a WebView with Eyedid gaze (docs/eye-tracking.md, "Native shell"). -->
+        <activity
+            android:name=".board.BoardActivity"
+            android:label="Clench Board"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The MediaPipe eye tracking prototype: the fallback if Eyedid does not work out. -->
         <activity
             android:name=".MainActivity"
+            android:label="Clench Eye Track (MediaPipe)"
             android:exported="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize">

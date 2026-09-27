@@ -20,6 +20,8 @@ export interface GazeInput {
   found: boolean
   /** 0..1, how sure the tracker is about this point */
   confidence: number
+  /** the tracker's own state word, shown on /gaze-test only (Eyedid: SUCCESS, GAZE_MISSING, FACE_MISSING) */
+  state?: string
 }
 
 /** A gaze sample older than this means the eye tracker stopped: gaze is not available. */
@@ -31,6 +33,8 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 
 
 export class GazeFeed {
   private last: PointSample | null = null
+  /** the last sample's `state` (debugging) */
+  lastState: string | null = null
   private listeners = new Set<(s: PointSample) => void>()
   private readonly now: () => number
 
@@ -45,6 +49,7 @@ export class GazeFeed {
     const point: ScreenPoint | null = input.found ? { x: clamp01(input.x), y: clamp01(input.y) } : null
     const sample: PointSample = { source: 'gaze', t: this.now(), found, point, confidence }
     this.last = sample
+    this.lastState = input.state ?? null
     this.listeners.forEach((fn) => fn(sample))
   }
 

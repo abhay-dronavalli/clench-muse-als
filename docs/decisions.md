@@ -527,3 +527,71 @@ choices below are Taher's.
 - The keyboard stand-in's B is a DOUBLE_BLINK like any other, so the same prompt shows: B then Space
   goes back. The Core still cannot tell the two apart.
 - Contracts: new Core -> board and console message BACK_PROMPT (`open`, `kind`, `timeout_ms`).
+
+## 18. Eyedid gaze on the tablet, step 1: gaze pipeline and test bench (branch android/eyedid)
+
+- Eyedid (VisualCamp, formerly SeeSo) is the primary eye tracker for the Android tablet; improving
+  our MediaPipe iris path is the fallback. Step 1 is the web side only; the native shell is step 2.
+- The board now smooths gaze (One Euro) and holds 300 ms before the highlight moves to a new tile
+  (`tilePointer.ts`). This replaces "the board adds no smoothing to gaze" from section 15. The head
+  path is unchanged.
+- Dwell select: off by default, gaze only, 1.5 s, only on a menu screen that is not loading. It sends
+  CLENCH on `/ws/input`, so the Core records it as a clench (METRICS count it as one). Settings live
+  in the browser (`localStorage`), not in `data/profile.yaml`, to keep the Core out of this branch.
+- Known gap, "gaze-only confirm": dwell never confirms (hard rule 1 in spirit: a stare must not send a
+  message) and never acts during the help countdown. A person with only an eye tracker and no
+  headband therefore cannot confirm a message. Closing it needs a deliberate confirm gesture, not a
+  longer stare.
+- Known issue, clench look-back with the hold: the Core picks the tile highlighted
+  `clench_lookback_ms` (250 ms) before a clench (`core/session.py`, `_pick_index`). With the 300 ms
+  hold, the highlight reaches the Core about 300 ms after the eyes arrive, so a clench within 250 ms
+  of the highlight moving picks the previous tile. Agreed fix: for gaze, look back only to when the
+  highlight changed (the hold already filters clench-induced eye movement). It is a `core/` change,
+  which this branch does not touch; until then a quick clench after a gaze move can pick the wrong tile.
+- One camera owner: when the tablet shell's tracker is active (`window.ClenchNative.gazeActive()`),
+  the page never opens the camera, and Auto and Webcam follow the gaze.
+- Blinks from the SDK are forwarded and counted on `/gaze-test` only; nothing is mapped to them until
+  their timing is measured.
+- The board's grid is 2 across x 3 down on a portrait screen (Tailwind `portrait:`), for the case
+  where Eyedid needs the tablet upright. Landscape is unchanged.
+- `/gaze-test` is a third page (`web/src/gazetest/`). Results stay in the browser with JSON/CSV
+  export; nothing goes to the Core.
+- Known issue, dwell plus a real clench: CLENCH carries no screen `seq`, so if the person clenches
+  (headband) just as the dwell ring completes, the Core gets two CLENCHes: the first picks the tile and
+  opens the confirm screen, the second confirms it. The board guards its own side (dwell only sends if
+  the menu `seq` it measured is still the one on show, updated synchronously from the Core's messages),
+  but the network race needs a Core fix: CLENCH carrying the screen `seq` (contracts change) or the Core
+  ignoring a CLENCH for about 500 ms after it shows the confirm screen. Until then keep dwell off
+  whenever the headband is in use.
+
+## 19. Eyedid gaze on the tablet, step 2: the native board shell (branch android/eyedid-shell)
+
+- `kushagra/tablet` gains `board/BoardActivity` ("Clench Board" launcher entry): the board in a
+  WebView plus the Eyedid SDK (`camp.visual.eyedid.android.gazetracker:eyedid-gazetracker:1.0.0-beta5`,
+  VisualCamp's Maven repo). The MediaPipe prototype stays as the second launcher entry, the fallback.
+- The board loads from `BOARD_URL` (default `http://localhost:5173/`, reached with `adb reverse`).
+  Plain HTTP is allowed for localhost and 127.0.0.1 only (`network_security_config.xml`).
+- The license key and the tablet's camera position come from the git-ignored `local.properties` into
+  `BuildConfig`. The key is inside the debug APK; do not share the APK outside the team.
+- Camera position: the app uses the SDK's own entry if it has one for the model; otherwise it adds
+  one for the Galaxy Tab S9 Ultra (SM-X910, 2960 x 1848, camera on the long edge) with the screen's
+  top-left at -157.2 mm, -1.0 mm from the camera. Those numbers are estimated from the 14.6-inch 16:10
+  panel, not measured, and the S9 Ultra has two front cameras in the notch; measure if accuracy is off.
+- Gaze is converted to fractions of the WebView in the shell (screen pixels minus the WebView's
+  on-screen position, divided by its size), so the page needs no density or bar offsets.
+- Start-up authentication retries every 5 s for a minute on `AUTH_SERVER_ERROR` or
+  `AUTH_CANNOT_FIND_HOST`; other errors stop the tracker and hand the camera to the page.
+- The SDK's gaze filter is an init option, so switching it (from `/gaze-test`) restarts the tracker
+  (about a second without gaze) and re-applies the person's calibration.
+- Calibration is saved per person (SharedPreferences on the tablet), and the last one is reloaded at
+  start and checked with one target: the median gaze over 1.5 s must fall within half a tile of it
+  (3 x 2 grid, 2 x 3 in portrait). Fewer than 10 tracked samples counts as a miss.
+- The activity's orientation is fixed (landscape by default, `BOARD_ORIENTATION=portrait` for the
+  fallback) instead of following the sensor, so a rotation never changes the gaze coordinates mid-use.
+- Review follow-up: the shell's tracker now runs only when the page's pointing mode needs the camera
+  (`ClenchNative.setPointingMode`, reported from SETTINGS before the board renders), is off before
+  "Click to start" and after every page load, and releases the camera in Scan and Head tilt. The
+  "Camera on" light covers the shell's tracker. `/gaze-test` picks each target when its prompt starts
+  (never the highlighted tile) and locks its settings during a run. Dwell is unchanged: the dwell and
+  clench race is left to the Core confirm-window fix on the safety work, and dwell stays off whenever
+  the headband is in use.

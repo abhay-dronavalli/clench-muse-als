@@ -30,15 +30,18 @@ export const POINT_SOURCE: Record<SourceName, PointSource> = { head: 'webcam', g
  * Which source drives the highlight: Webcam = the head, Gaze = the gaze, Auto = the gaze while it is
  * available, else the head (and the Core scans when neither sees the person). Null = the board does
  * not point in this mode (Scan, Head tilt).
+ *
+ * `headPossible` false = the tablet shell's eye tracker owns the camera (native.ts), so the page has
+ * no head tracker: Auto and Webcam follow the gaze (its "eyes lost" makes the Core scan in Auto).
  */
-export function chooseSource(mode: PointingMode | null, gazeAvailable: boolean): SourceName | null {
+export function chooseSource(mode: PointingMode | null, gazeAvailable: boolean, headPossible = true): SourceName | null {
   switch (mode) {
     case 'webcam':
-      return 'head'
+      return headPossible ? 'head' : 'gaze'
     case 'gaze':
       return 'gaze'
     case 'auto':
-      return gazeAvailable ? 'gaze' : 'head'
+      return gazeAvailable || !headPossible ? 'gaze' : 'head'
     default:
       return null
   }
