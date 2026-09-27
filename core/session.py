@@ -1074,7 +1074,7 @@ class Session:
     def _change_trip(self) -> None:
         """Trip mode on or off. A new trip starts a fresh (mock) ride. While scanning, the board switches
         screens at once (first tile); otherwise (confirming, speaking, help) it applies from the next screen."""
-        log.info("trip mode %s", "on: the trip screen" if self.trip else "off: the menus (the ride goes on)")
+        log.info("trip mode %s", "on: the trip screen" if self.trip else "off: the menus" + (" (the ride goes on)" if self.ride_active else " (ride ended)"))
         if self.trip and self.ride_active:
             self._emit(self.car_link.state())  # back to the ride under way
         elif self.trip:
@@ -1134,6 +1134,19 @@ class Session:
                                ai_label=corner.label, action="car_mode"))
             return
         log.info("Car mode: back to Home (the ride goes on)")
+        self._set_trip(False)
+
+    def car_start_ride(self) -> None:
+        """The car started the ride (/car-sim Start ride): the board shows Car mode. The car's action,
+        not the rider's request, so there is no confirm screen; help works as always."""
+        log.info("the car started the ride")
+        self._set_trip(True)
+
+    def car_end_ride(self) -> None:
+        """The car ended the ride (/car-sim End ride): back to Home; the next ride starts fresh."""
+        log.info("the car ended the ride")
+        self.ride_active = False
+        self._cancel_ride()
         self._set_trip(False)
 
     def _set_trip(self, on: bool) -> None:

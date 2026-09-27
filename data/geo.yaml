@@ -17,8 +17,9 @@ demo_trip:
 # Car mode > Trip > Plan a trip: destinations planned live from the pickup (core/geo/plan.py).
 # "Home" is a demo stand-in (a public place), not a real person's address: the caregiver sets it.
 places:
-  - {key: home, label_en: "Home", label_es: "Casa", query: "Tamiami Park, Miami, FL"}
-  - {key: hospital, label_en: "Hospital", label_es: "Hospital", query: "Baptist Hospital of Miami, 8900 N Kendall Dr, Miami, FL"}
+  - {key: home, label_en: "Home (demo)", label_es: "Casa (demo)", query: "Tamiami Park, Miami, FL"}
+  # The Baptist campus search lands on the Miami Cancer Institute's mapped entrance, so it is named for it.
+  - {key: hospital, label_en: "Miami Cancer Institute", label_es: "Miami Cancer Institute", query: "Baptist Hospital of Miami, 8900 N Kendall Dr, Miami, FL"}
   - {key: pharmacy, label_en: "Pharmacy", label_es: "Farmacia", query: "Walgreens, 15705 SW 72nd St, Miami, FL"}
   - {key: mdc, label_en: "MDC Kendall", label_es: "MDC Kendall", query: "Miami Dade College Kendall Campus"}
 

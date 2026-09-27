@@ -596,7 +596,9 @@ One request or answer crossing the car link, with the round trip for answers.
 
 `ask` sends a Support question to the rider; `set` changes the mock car's situation (on the highway,
 the ride's phase); `plan` plans a trip to the address in `text` (a caregiver typing any destination):
-layers 1 and 2 are computed live, or the demo trip stays after 20 s or a failure.
+layers 1 and 2 are computed live, or the demo trip stays after 20 s or a failure. `start_ride` starts
+a ride and shows Car mode on the board (the car's action, not a rider request, so no confirm);
+`end_ride` ends the ride and returns the board to Home.
 
 ```json
 {"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"], "timeout_s": 30, "urgent": true, "on_highway": null, "phase": null}

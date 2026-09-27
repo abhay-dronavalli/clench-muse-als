@@ -352,7 +352,8 @@ export interface CarLog {
 /** /car-sim -> Core: ask the rider a Support question, change the mock car's situation, or plan a trip to any address. */
 export interface CarSim {
   type: 'CAR_SIM'
-  command: 'ask' | 'set' | 'plan'
+  /** start_ride / end_ride: the car starts the ride (the board shows Car mode) or ends it (back to Home) */
+  command: 'ask' | 'set' | 'plan' | 'start_ride' | 'end_ride'
   text?: string | null
   options?: string[]
   timeout_s?: number

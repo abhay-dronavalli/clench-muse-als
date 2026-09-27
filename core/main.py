@@ -435,6 +435,10 @@ def car_sim(car: MockCar, msg: CarSim, session: Session) -> None:
     a trip to an address a caregiver typed."""
     if msg.command == "plan" and msg.text:
         session.plan_trip(msg.text.strip(), msg.text.strip())
+    elif msg.command == "start_ride":
+        session.car_start_ride()
+    elif msg.command == "end_ride":
+        session.car_end_ride()
     elif msg.command == "ask" and msg.text:
         car.ask(msg.text, msg.options, msg.timeout_s, msg.urgent)
     elif msg.command == "set":

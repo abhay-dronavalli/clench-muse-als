@@ -357,7 +357,8 @@ class CarSim(_Msg):
     trip to any address (a caregiver typing the destination)."""
 
     type: Literal["CAR_SIM"] = "CAR_SIM"
-    command: Literal["ask", "set", "plan"]
+    # start_ride / end_ride: the car starts the ride (the board shows Car mode) or ends it (back to Home).
+    command: Literal["ask", "set", "plan", "start_ride", "end_ride"]
     text: str | None = None  # ask: the question; plan: the destination address
     options: list[str] = Field(default_factory=list, max_length=5)  # ask: answer labels
     timeout_s: int = Field(default=30, ge=5, le=300)
