@@ -119,6 +119,7 @@ class EyedidWeb {
   private stream: MediaStream | null = null
   private wanted = false
   private mode: PointingMode | 'off' | null = 'off'
+  private offReason: string | null = null // why the last setMode did not want it running
   private listeners = new Set<() => void>()
   private calibrating: CalibrationUi | null = null
   private holding = false // calibrating or checking: the board holds still
@@ -185,8 +186,13 @@ class EyedidWeb {
       isolated: typeof window !== 'undefined' && window.crossOriginIsolated === true,
       desktopAgent: desktopAgent.active(),
     })
+    this.offReason = why
     const want = why === null
-    if (want === this.wanted) return
+    if (want === this.wanted) {
+      // Still off, maybe for a new reason (the desktop agent came first): say which one.
+      if (!want && this.state === 'off' && why && why !== this.detail) this.set('off', why)
+      return
+    }
     this.wanted = want
     if (want) {
       this.set('starting')
@@ -227,11 +233,11 @@ class EyedidWeb {
         sdk.addGazeCallback(this.onGaze)
         this.sdk = sdk
       }
-      if (!this.wanted) return this.stop('stopped while starting')
+      if (!this.wanted) return this.stop(this.offReason ?? 'stopped while starting')
       const saved = loadCalibration()
       if (saved) await this.sdk.setCalibrationData(saved)
       this.stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      if (!this.wanted) return this.stop('stopped while starting')
+      if (!this.wanted) return this.stop(this.offReason ?? 'stopped while starting')
       if (!this.sdk.startTracking(this.stream)) throw new Error('tracking did not start')
       this.set('on', saved ? '' : 'not calibrated yet')
       // Ask right away, as the tablet does: an uncalibrated tracker cannot reach the whole screen.
