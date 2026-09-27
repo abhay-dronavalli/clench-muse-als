@@ -1,0 +1,9 @@
+# Insights service only. Kept apart from pyproject.toml on purpose: the core never imports these.
+# Run everything with:  uv run --no-project --with-requirements insights/requirements.txt ...
+psycopg[binary,pool]>=3.2
+websockets>=14
+fastapi
+uvicorn
+python-dotenv
+tzdata  # zoneinfo has no time zone database on Windows without it
+pytest
