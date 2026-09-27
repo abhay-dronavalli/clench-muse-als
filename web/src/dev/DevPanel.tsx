@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Mo
 import {
   POINTING_MODES,
   type HeadRange,
+  type InputTarget,
   type Lang,
   type Message,
   type Metrics,
@@ -9,6 +10,7 @@ import {
   type ShortcutDebug,
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
+import { desktopAgent } from '../facetrack/desktopAgent'
 import { eyedidWeb } from '../facetrack/eyedidWeb'
 import { gazeConnected, gazeTuning, showCursor } from '../facetrack/stores'
 import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
@@ -113,6 +115,7 @@ interface Props {
 
 export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onCalibrateEyes }: Props) {
   useSyncExternalStore(eyedidWeb.subscribe, eyedidWeb.snapshot)
+  const agentConnected = useSyncExternalStore(desktopAgent.subscribe, desktopAgent.active)
   const [open, setOpen] = useState(false)
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
@@ -120,6 +123,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const [lang, setLang] = useState<Lang | null>(null)
   const [speakPicks, setSpeakPicks] = useState<boolean | null>(null)
   const [learning, setLearning] = useState<boolean | null>(null)
+  const [inputTarget, setInputTarget] = useState<InputTarget | null>(null)
   const [longClenchMs, setLongClenchMs] = useState(DEFAULT_LONG_CLENCH_MS)
   const [margin, setMargin] = useState<number | null>(null) // tile_switch_margin, 0..0.2
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -146,6 +150,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       if (msg.lang) setLang(msg.lang)
       if (msg.speak_picks !== undefined) setSpeakPicks(msg.speak_picks)
       if (msg.learning !== undefined) setLearning(msg.learning)
+      if (msg.input_target) setInputTarget(msg.input_target)
       if (msg.long_clench_ms !== undefined) setLongClenchMs(msg.long_clench_ms)
       if (msg.tile_switch_margin !== undefined && !marginSliding.current) setMargin(msg.tile_switch_margin)
     },
@@ -267,6 +272,14 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
   const toggleDay1 = () => {
     if (!known || learning === null) return
     emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, learning: !learning })
+  }
+
+  // Where the gestures go (docs/desktop-control.md). The Core refuses the computer while no desktop
+  // agent is connected, so the switch then simply stays on Board.
+  const toggleTarget = () => {
+    if (!known || inputTarget === null) return
+    const next: InputTarget = inputTarget === 'desktop' ? 'board' : 'desktop'
+    emit({ type: 'SETTINGS', pointing_mode: pointingMode, scan_ms: scanMs, input_target: next })
   }
 
   const took =
@@ -501,6 +514,23 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
           <span className={learning === false ? 'text-amber-300' : 'text-zinc-400'}>On</span>
           {' / '}
           <span className={learning ? 'text-yellow-300' : 'text-zinc-400'}>Off</span>
+        </button>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <span
+          className="text-xs text-zinc-400"
+          title="docs/desktop-control.md: the desktop agent (uv run --extra desktop python -m desktop.agent)"
+        >
+          Input{' '}
+          <span className={agentConnected ? 'text-emerald-300' : 'text-zinc-500'}>
+            (agent {agentConnected ? 'connected' : 'not running'})
+          </span>
+        </span>
+        <button type="button" className={btn} onMouseDown={noFocus} onClick={toggleTarget}>
+          <span className={inputTarget === 'board' ? 'text-yellow-300' : 'text-zinc-400'}>Board</span>
+          {' / '}
+          <span className={inputTarget === 'desktop' ? 'text-yellow-300' : 'text-zinc-400'}>Computer</span>
         </button>
       </div>
 

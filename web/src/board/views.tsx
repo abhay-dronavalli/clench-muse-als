@@ -176,6 +176,23 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
   )
 }
 
+/**
+ * The gestures go to the desktop agent (Room > Computer): the board stays home and still, and says
+ * how to come back. The help countdown still shows over it.
+ */
+export function ComputerView({ lang }: { lang: Lang }) {
+  const s = STRINGS[lang]
+  return (
+    <div
+      role="status"
+      className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-8 bg-black/85 p-16 text-center text-white"
+    >
+      <p className="text-7xl font-bold">{s.computerTitle}</p>
+      <p className="max-w-5xl text-4xl leading-snug text-zinc-300">{s.computerHint}</p>
+    </div>
+  )
+}
+
 export function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
     <button

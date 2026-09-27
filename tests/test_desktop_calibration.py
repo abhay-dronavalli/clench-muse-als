@@ -107,3 +107,51 @@ def test_f9_is_a_double_blink_and_ctrl_f8_is_not_a_clench():
     s.key(Key("F8", True, True, 6.0))
     s.key(Key("F8", False, True, 6.1))
     assert sent == [{"type": "DOUBLE_BLINK", "t": 5.0}]
+
+
+# --- the gaze bridge to the board --------------------------------------------------------------------
+
+import json  # noqa: E402
+import socket  # noqa: E402
+import time  # noqa: E402
+
+from desktop.agent.bridge import GazeBridge, gaze_message  # noqa: E402
+
+
+def test_bridge_messages_hide_a_point_the_eyes_are_not_on():
+    assert gaze_message(1.23456, (10.04, 20.06), True, "SUCCESS") == {
+        "type": "gaze", "t": 1.235, "x": 10.0, "y": 20.1, "found": True, "state": "SUCCESS"}
+    lost = gaze_message(2.0, (10.0, 20.0), False, "CALIBRATING")
+    assert (lost["x"], lost["y"], lost["found"]) == (None, None, False)
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def test_the_board_gets_the_gaze_and_other_web_pages_are_refused():
+    from websockets.exceptions import InvalidStatus
+    from websockets.sync.client import connect
+
+    port = free_port()
+    bridge = GazeBridge((1920, 1080), port)
+    bridge.start()
+    url = f"ws://127.0.0.1:{port}"
+    for _ in range(50):
+        try:
+            ws = connect(url, origin="http://localhost:5173")
+            break
+        except OSError:
+            time.sleep(0.05)
+    with ws:
+        assert json.loads(ws.recv(2)) == {"type": "hello", "screen": [1920, 1080], "version": 1}
+        for _ in range(50):
+            if bridge.clients:
+                break
+            time.sleep(0.02)
+        bridge.publish(gaze_message(5.0, (100.0, 200.0), True, "SUCCESS"))
+        assert json.loads(ws.recv(2))["x"] == 100.0
+    with pytest.raises(InvalidStatus):
+        connect(url, origin="https://some-website.example")

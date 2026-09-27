@@ -707,3 +707,14 @@ for Spanish explicitly instead of relying on the profile.
   agent is connected" reason (still possible in a race) is tested on `refuse_reason` directly.
 - `test_every_level_has_at_most_five_items` treated every non-leaf as a branch; a switch tile is
   neither, so it now checks every node with children. The rule itself is unchanged.
+- **One camera owner with the agent.** The agent serves its smoothed gaze on ws://127.0.0.1:8766
+  (`desktop/agent/bridge.py`); the board connects after "Click to start" (`desktopAgent.ts`) and,
+  while connected, treats the agent like the tablet shell: Eyedid web does not start ("the desktop
+  agent tracks the eyes") and the head camera stays off. The page converts screen pixels to its own
+  window from `screenX` / outer / inner sizes (exact in full screen at 100% zoom); gaze on another
+  window counts as "not found", so it never moves the board's highlight.
+- The bridge accepts only the board's own origins (localhost / 127.0.0.1, ports 5173 to 5175, plus
+  `--bridge-origin`) and local programs (no Origin): any web page open in the browser could
+  otherwise read where the person looks.
+- The board shows "Using the computer" (how to come back) while `input_target` is desktop; the dev
+  panel has an Input Board / Computer switch and says whether the agent is connected.

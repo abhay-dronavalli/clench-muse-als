@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 from desktop.agent import calibration, winput
+from desktop.agent.bridge import GazeBridge, gaze_message
 from desktop.agent.gaze import Gaze, SavitzkyGolay
 from desktop.agent.hotkeys import Key, KeyboardHook, StandIn
 from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Controller, Effect, FocusBoard, Keys,
@@ -73,6 +74,8 @@ class Agent:
         self.calib = calibration.Flow(self.source.command, self._later, self._calibration_ended)
         self.calib_point_at = 0.0
         self.uia = UiaFinder(lambda kind, c: self.inbox.put(("uia", (kind, c))))
+        self.bridge = GazeBridge((d.width_px, d.height_px), args.bridge_port, args.bridge_origin)
+        self._bridged_at = float("-inf")  # the last gaze sample sent to the board
         self._uia_at = (float("-inf"), (0.0, 0.0))
         self._top_at = 0.0
         self.overlay = Overlay(self)
@@ -82,7 +85,7 @@ class Agent:
 
     def start(self) -> None:
         self.overlay.show_overlay()
-        for thread in (self.core, self.source, self.uia, self.hook):
+        for thread in (self.core, self.source, self.uia, self.hook, self.bridge):
             thread.start()
         self.timer.start(16)
         log.info("desktop agent: screen %dx%d px, %.0fx%.0f mm, gaze from %s, Core %s", self.display.width_px,
@@ -118,6 +121,11 @@ class Agent:
         self.gaze_point = self.gaze.point if fresh else None
         self.ctl.tick(now, self.gaze.point, fresh)
         self._ask_uia(now)
+        if self.gaze.last_sample_at > self._bridged_at:
+            self._bridged_at = self.gaze.last_sample_at
+            state = "CALIBRATING" if self.calib.running else self.gaze.state
+            self.bridge.publish(gaze_message(self.gaze.last_sample_at, self.gaze_point,
+                                             fresh and not self.calib.running, state))
         if now - self._top_at > 2.0:
             self._top_at = now
             self.overlay.keep_on_top()  # another topmost window may have come up over us
@@ -305,6 +313,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--face-cm", type=int, default=50, help="about how far the eyes are from the camera")
     parser.add_argument("--lookback-ms", type=int, default=250, help="a clench uses the highlight from this long before")
     parser.add_argument("--no-take", action="store_true", help="start with the board as the input target")
+    parser.add_argument("--bridge-port", type=int, default=8766, help="the gaze bridge the board connects to")
+    parser.add_argument("--bridge-origin", action="append", default=[],
+                        help="another page origin allowed on the gaze bridge (localhost:5173-5175 always are)")
     smooth = parser.add_argument_group("smoothing (Savitzky-Golay, then One Euro)")
     smooth.add_argument("--sg-window-ms", type=int, default=500, help="Savitzky-Golay window; 0 turns it off")
     smooth.add_argument("--sg-order", type=int, default=2, choices=(1, 2, 3), help="polynomial order")

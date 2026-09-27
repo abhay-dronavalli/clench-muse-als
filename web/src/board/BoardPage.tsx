@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { Confirm, HeadRange, InputTarget, Lang, Message, PointingMode, Screen } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -18,6 +18,7 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import { gazeOwnsCamera, subscribeGazeOwner } from '../facetrack/cameraOwner'
+import { desktopAgent } from '../facetrack/desktopAgent'
 import { eyedidWeb } from '../facetrack/eyedidWeb'
 import { reportPointingMode } from '../facetrack/native'
 import { gazeTuning } from '../facetrack/stores'
@@ -29,7 +30,16 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { ToastStack } from './ToastStack'
-import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
+import {
+  BackPromptView,
+  Breadcrumb,
+  ComputerView,
+  ConfirmView,
+  HelpCountdownView,
+  SpeakingView,
+  StartOverlay,
+  TileGrid,
+} from './views'
 
 type View =
   | { kind: 'waiting' }
@@ -64,6 +74,8 @@ export default function BoardPage() {
   }
   const [lang, setLang] = useState<Lang>('en')
   const [mode, setMode] = useState<PointingMode | null>(null)
+  // Where the gestures go: this board, or the desktop agent (docs/desktop-control.md).
+  const [target, setTarget] = useState<InputTarget>('board')
   const [margin, setMargin] = useState(STICKY_MARGIN) // SETTINGS tile_switch_margin
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
@@ -131,6 +143,7 @@ export default function BoardPage() {
         eyedidWeb.setMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
+        if (msg.input_target) setTarget(msg.input_target)
         break
       default:
         console.warn('board ignored', msg.type)
@@ -165,6 +178,17 @@ export default function BoardPage() {
   useSyncExternalStore(subscribeGazeOwner, gazeOwnsCamera)
   // Leaving the board gives the webcam back.
   useEffect(() => () => eyedidWeb.setMode('off'), [])
+  // The desktop agent, when it runs, owns the webcam and feeds the gaze (desktopAgent.ts). Look for it
+  // once the board has started; when it comes or goes, Eyedid web stops or starts again.
+  useEffect(() => {
+    if (!started) return
+    const off = desktopAgent.subscribe(() => eyedidWeb.refresh())
+    desktopAgent.start()
+    return () => {
+      off()
+      desktopAgent.stop()
+    }
+  }, [started])
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
@@ -221,6 +245,7 @@ export default function BoardPage() {
       {connected && backPrompt && view.kind !== 'help' && (
         <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />
       )}
+      {connected && target === 'desktop' && view.kind !== 'help' && <ComputerView lang={lang} />}
       <ToastStack toasts={toasts} />
       <MusePanel />
       <InputLog />

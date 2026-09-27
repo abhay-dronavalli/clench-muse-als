@@ -8,6 +8,8 @@ export const STRINGS = {
   en: {
     home: 'Home',
     connecting: 'Connecting to Clench…',
+    computerTitle: 'Using the computer',
+    computerHint: 'Your eyes point and a clench clicks. To come back, look at the Clench tab on the right edge, clench, then pick Clench board.',
     speaking: 'Speaking…',
     finding: 'Finding options…',
     hint: 'Clench = send  |  B = cancel',
@@ -78,6 +80,8 @@ export const STRINGS = {
   es: {
     home: 'Inicio',
     connecting: 'Conectando con Clench…',
+    computerTitle: 'Usando la computadora',
+    computerHint: 'Los ojos señalan y un apretón hace clic. Para volver, mira la pestaña Clench a la derecha, aprieta y elige Tablero Clench.',
     speaking: 'Hablando…',
     finding: 'Buscando opciones…',
     hint: 'Apretar = enviar  |  B = cancelar',

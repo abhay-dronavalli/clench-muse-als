@@ -14,6 +14,7 @@
 // The SDK itself is imported only when it is about to run, so the board never loads it otherwise.
 
 import type { PointingMode } from '../contracts'
+import { desktopAgent } from './desktopAgent'
 import { gaze, type GazeInput } from './gaze'
 import { nativeBridge } from './native'
 
@@ -53,10 +54,11 @@ export function toGazeInput(g: { x: number; y: number; trackingState: number }, 
 /** Why Eyedid web would not run here, or null when it should (for this mode). */
 export function whyNotRunning(
   mode: PointingMode | 'off' | null,
-  env: { key: string; nativeShell: boolean; isolated: boolean },
+  env: { key: string; nativeShell: boolean; isolated: boolean; desktopAgent?: boolean },
 ): string | null {
   if (mode !== 'auto' && mode !== 'gaze') return 'not a gaze mode'
   if (env.nativeShell) return 'the tablet shell tracks the eyes'
+  if (env.desktopAgent) return 'the desktop agent tracks the eyes'
   if (!env.key) return 'no key (VITE_EYEDID_WEB_KEY)'
   if (!env.isolated) return 'the page is not cross-origin isolated (restart the web dev server)'
   return null
@@ -116,6 +118,7 @@ class EyedidWeb {
   private sdk: SeesoSdk | null = null
   private stream: MediaStream | null = null
   private wanted = false
+  private mode: PointingMode | 'off' | null = 'off'
   private listeners = new Set<() => void>()
   private calibrating: CalibrationUi | null = null
   private holding = false // calibrating or checking: the board holds still
@@ -175,10 +178,12 @@ class EyedidWeb {
    * render that decides whether the head opens the camera: a gaze mode claims the camera at once.
    */
   setMode = (mode: PointingMode | 'off' | null): void => {
+    this.mode = mode
     const why = whyNotRunning(mode, {
       key: EYEDID_WEB_KEY,
       nativeShell: nativeBridge() !== null,
       isolated: typeof window !== 'undefined' && window.crossOriginIsolated === true,
+      desktopAgent: desktopAgent.active(),
     })
     const want = why === null
     if (want === this.wanted) return
@@ -190,6 +195,12 @@ class EyedidWeb {
       this.stop(why)
     }
   }
+
+  /**
+   * The desktop agent came or went: stop and give it the camera, or start again in the same mode.
+   * (The agent's Eyedid retries the camera for a few seconds, so the handover works either way.)
+   */
+  refresh = (): void => this.setMode(this.mode)
 
   private onGaze = (g: { x: number; y: number; trackingState: number }) => {
     if (!this.wanted) return
