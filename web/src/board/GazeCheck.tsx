@@ -17,7 +17,7 @@ const TEXT = {
   es: { look: 'Mira el objetivo verde', passed: 'Tu mirada llega a donde miras.', failed: 'La mirada no llegó a los objetivos.' },
 }
 
-export function GazeCheck({ lang, onResult }: { lang: Lang; onResult: (r: GazeCheckResult) => void }) {
+export function GazeCheck({ lang, onResult, targets = 2 }: { lang: Lang; onResult: (r: GazeCheckResult) => void; targets?: 1 | 2 }) {
   const [target, setTarget] = useState(0) // 0 = left, 1 = right, 2 = done
   const [inside, setInside] = useState(false)
   const [result, setResult] = useState<GazeCheckResult>('checking')
@@ -31,9 +31,10 @@ export function GazeCheck({ lang, onResult }: { lang: Lang; onResult: (r: GazeCh
   useEffect(() => {
     const started = performance.now()
     const stop = gaze.subscribe((s) => {
-      if (targetRef.current > 1) return
+      if (targetRef.current > targets - 1) return
       const p = s.found ? s.point : null
-      const onTarget = p !== null && p.y > 0.25 && p.y < 0.75 && (targetRef.current === 0 ? p.x < 0.4 : p.x > 0.6)
+      const onTarget = p !== null && p.y > 0.25 && p.y < 0.75 &&
+        (targets === 1 ? p.x > 0.3 && p.x < 0.7 : targetRef.current === 0 ? p.x < 0.4 : p.x > 0.6)
       setInside(onTarget)
       if (!onTarget) {
         since.current = null
@@ -44,14 +45,14 @@ export function GazeCheck({ lang, onResult }: { lang: Lang; onResult: (r: GazeCh
         since.current = null
         targetRef.current += 1
         setTarget(targetRef.current)
-        if (targetRef.current > 1) {
+        if (targetRef.current > targets - 1) {
           setResult('passed')
           report.current('passed')
         }
       }
     })
     const timer = window.setTimeout(() => {
-      if (targetRef.current <= 1) {
+      if (targetRef.current <= targets - 1) {
         targetRef.current = 3
         setResult('failed')
         report.current('failed')
@@ -62,14 +63,14 @@ export function GazeCheck({ lang, onResult }: { lang: Lang; onResult: (r: GazeCh
       window.clearTimeout(timer)
       void started
     }
-  }, [])
+  }, [targets])
 
   const t = TEXT[lang]
   return (
     <div className="flex w-full max-w-5xl flex-col items-center gap-4">
-      <p className="text-3xl font-bold text-[#007a72]">{result === 'checking' ? t.look : result === 'passed' ? t.passed : t.failed}</p>
-      <div className="flex w-full justify-between">
-        {[0, 1].map((i) => {
+      <p className="text-3xl font-bold text-[#d4a017]">{result === 'checking' ? t.look : result === 'passed' ? t.passed : t.failed}</p>
+      <div className={`flex w-full ${targets === 1 ? 'justify-center' : 'justify-between'}`}>
+        {(targets === 1 ? [0] : [0, 1]).map((i) => {
           const active = result === 'checking' && target === i
           const done = target > i || result === 'passed'
           return (

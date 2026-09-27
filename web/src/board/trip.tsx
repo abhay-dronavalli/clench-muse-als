@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useGazeOver } from '../facetrack/gazeOver'
 import type { CarState, Lang, Screen, TripLayout, WindowsOpen } from '../contracts'
 import type { CarAnim } from './carAnimation'
 import { RouteMap } from './RouteMap'
@@ -197,8 +198,9 @@ export function TripView({
   const picked = pickedTile(screen, anim)
   const locked = anim !== null
   // Half the width in the split layout: one column for three tiles, two for more.
+  // Two tiles (the ride controls: Comfort, Trip changes) share the full width, centered.
   const cols =
-    shared.layout === 'split' ? (screen.tiles.length <= 3 ? 'grid-cols-1' : 'grid-cols-2') : 'grid-cols-3 portrait:grid-cols-2'
+    shared.layout === 'split' ? (screen.tiles.length <= 3 ? 'grid-cols-1' : 'grid-cols-2') : screen.tiles.length <= 2 ? 'grid-cols-2' : 'grid-cols-3 portrait:grid-cols-2'
   return (
     <TripShell lang={screen.lang} tint={tint} {...shared}>
       {screen.path.length > 0 && (
@@ -211,7 +213,7 @@ export function TripView({
           {screen.prompt}
         </p>
       )}
-      <div className={`grid w-full max-w-6xl flex-1 auto-rows-fr gap-6 ${cols}`}>
+      <div className={`mx-auto grid w-full flex-1 auto-rows-fr gap-6 ${screen.tiles.length <= 2 ? '' : 'max-w-6xl'} ${cols}`}>
         {screen.tiles.map((tile, i) => {
           const on = !locked && i === screen.highlight
           const isPicked = i === picked
@@ -273,6 +275,7 @@ export function TripConfirm({
   const s = STRINGS[lang].trip
   const pull = action === 'pull_over'
   const narrow = shared.layout === 'split'
+  const [confirmRef, gazeOn] = useGazeOver<HTMLButtonElement>() // gaze lights Confirm (never Cancel: a clench confirms)
   return (
     <TripShell lang={lang} tint={pull} {...shared}>
       <div className="flex flex-col items-center rounded-[2.5rem] bg-white/95 px-12 py-10 shadow-2xl shadow-black/15">
@@ -281,9 +284,11 @@ export function TripConfirm({
         </p>
         <div className={`flex gap-8 ${narrow ? 'flex-col' : ''}`}>
           <button
+            ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            className={`min-w-72 rounded-3xl px-12 py-8 text-5xl font-bold text-white shadow-lg ${pull ? 'bg-[#c05a2c]' : 'bg-sky-700'}`}
+            aria-current={gazeOn}
+            className={`min-w-72 rounded-3xl px-12 py-8 text-5xl font-bold text-white shadow-lg transition-transform ${gazeOn ? 'scale-105 ring-[10px] ring-amber-400' : ''} ${pull ? 'bg-[#c05a2c]' : 'bg-sky-700'}`}
           >
             {s.confirm}
           </button>

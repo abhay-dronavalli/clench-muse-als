@@ -35,6 +35,7 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
+import { CarOnboarding } from './CarOnboarding'
 import { Onboarding } from './Onboarding'
 import { effectiveTripLayout } from './onboardingFlow'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
@@ -86,6 +87,9 @@ export default function BoardPage() {
   const { toasts, push } = useToasts()
   // Trip mode (SETTINGS trip) and the trip control animation in progress (CAR_ACTION).
   const [trip, setTrip] = useState(false)
+  // Car mode's short onboarding (CarOnboarding): runs each time Car mode opens.
+  const [carSetup, setCarSetup] = useState(false)
+  const tripRef = useRef(false)
   const car = useCarAnimation()
   const [carState, setCarState] = useState<CarState | null>(null) // CAR_STATE: the trip telemetry
   const [layout, setLayout] = useState<TripLayout>('car') // SETTINGS trip_layout
@@ -165,7 +169,12 @@ export default function BoardPage() {
         reportPointingMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
-        if (msg.trip != null) setTrip(msg.trip)
+        if (msg.trip != null) {
+          if (msg.trip && !tripRef.current && !onboardingRef.current) setCarSetup(true) // Car mode just opened
+          if (!msg.trip) setCarSetup(false)
+          tripRef.current = msg.trip
+          setTrip(msg.trip)
+        }
         if (msg.trip_layout != null) setLayout(msg.trip_layout)
         lastSettings.current = msg
         break
@@ -222,7 +231,8 @@ export default function BoardPage() {
   const tripScreen = screen?.screen === 'trip' || screen?.screen === 'support_question' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
   const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
-  const seeThrough = tripShown && nativeCar // the car only in Car mode, never in onboarding (decisions #27)
+  // The car only in Car mode (and its onboarding, where it revolves behind), never in the app onboarding.
+  const seeThrough = (tripShown || carSetup) && nativeCar
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
@@ -246,6 +256,11 @@ export default function BoardPage() {
     // Finishing setup opens the Home board; Car mode is entered from its corner button (decisions #27).
     if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse })
   }
+  useEffect(() => {
+    const current = lastSettings.current
+    if (current && !onboardingRef.current) send({ ...current, onboarding: carSetup })
+  }, [carSetup, send])
+
   const start = (gesture = true) => {
     if (gesture) unlockSpeech()
     resetPending.current = true
@@ -256,8 +271,8 @@ export default function BoardPage() {
   // The tablet shell draws the car behind the page while the trip screen shows, framed for the
   // layout (car / split / map).
   useEffect(() => {
-    if (!onboarding) showNativeCar(tripShown)
-  }, [tripShown, onboarding])
+    if (!onboarding && !carSetup) showNativeCar(tripShown)
+  }, [tripShown, onboarding, carSetup])
   useEffect(() => {
     setNativeCarLayout(displayLayout)
   }, [displayLayout])
@@ -273,6 +288,9 @@ export default function BoardPage() {
   return (
     <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
       {!started && <StartOverlay onStart={start} lang={lang} />}
+      {started && !onboarding && carSetup && trip && (
+        <CarOnboarding lang={lang} paused={!connected || view.kind === 'help'} onDone={() => setCarSetup(false)} />
+      )}
       {started && onboarding && <Onboarding lang={lang} paused={!connected || view.kind === 'help'} onDone={(muse) => openSetup(false, muse)} />}
       {started && onboarding && !connected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#eaf6f4] p-8 text-center text-3xl text-[#007a72]">{STRINGS[lang].connecting}</div>}
       <div className={onboarding && view.kind !== 'help' ? 'hidden' : 'contents'}>
@@ -287,7 +305,7 @@ export default function BoardPage() {
         {started && <GazeNotice lang={lang} mode={mode} />}
       </div>
 
-      {screen?.corner && !onboarding && (
+      {screen?.corner && !onboarding && !carSetup && (
         <CornerButton tile={screen.corner} index={screen.tiles.length} highlighted={screen.highlight === screen.tiles.length} onTap={tapTile} />
       )}
       {/* Never show a stale highlight while disconnected: the Core may have moved on. */}
@@ -296,7 +314,7 @@ export default function BoardPage() {
           {STRINGS[lang].connecting}
         </div>
       )}
-      {tripScreen && (
+      {tripScreen && !carSetup && (
         <>
           <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} onTap={tapTile} {...tripShared} />
           {pointing && <CursorDot />}
@@ -314,6 +332,7 @@ export default function BoardPage() {
       {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support' || view.confirm.action === 'route') && (
         <TripConfirm action={view.confirm.action} text={view.confirm.text} lang={lang} onConfirm={tapConfirm} onCancel={tapCancel} {...tripShared} />
       )}
+      {connected && view.kind === 'confirm' && pointing && <CursorDot />}
       {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && view.confirm.action !== 'route' && (
         <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
       )}
@@ -321,9 +340,9 @@ export default function BoardPage() {
         <TripSpeaking lang={lang} text={view.text} tint={car.tint} {...tripShared} />
       )}
       {connected && view.kind === 'speaking' && !trip && <SpeakingView text={view.text} lang={lang} />}
-      {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
+      {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} onCancel={tapCancel} />}
       {connected && backPrompt && view.kind !== 'help' && (
-        <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />
+        <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} onStay={tapCancel} />
       )}
       <ToastStack toasts={toasts} />
       <MusePanel />

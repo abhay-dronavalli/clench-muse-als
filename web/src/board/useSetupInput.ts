@@ -1,7 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gaze } from '../facetrack/gaze'
-import { nativeEvents } from '../facetrack/native'
-import { SetupBlinks } from './onboardingFlow'
 
 export interface SetupOption { id: string; label: string; act: () => void }
 
@@ -21,7 +19,6 @@ export function useSetupInput(stage: string, options: SetupOption[], enabled: bo
     let holdUntil = 0
     let candidate = -1
     let candidateSince = 0
-    const blinks = new SetupBlinks()
     const select = (index: number) => setSelection({ key, index })
     const offGaze = gaze.subscribe((sample) => {
       if (!sample.found || !sample.point || !latest.current.enabled) return
@@ -39,14 +36,7 @@ export function useSetupInput(stage: string, options: SetupOption[], enabled: bo
       if (hit !== candidate) { candidate = hit; candidateSince = lastSeen; return }
       if (lastSeen - candidateSince >= 250) { index = hit; select(hit) }
     })
-    const offBlink = nativeEvents.subscribe((e) => {
-      if (e.type !== 'blink' || !latest.current.enabled) return
-      const at = performance.now()
-      const option = latest.current.options[index]
-      if (!option) return
-      if (blinks.blink(at, `${stage}:${option.id}`, at - lastSeen < 1500, e.left && e.right)) option.act()
-      holdUntil = at + 800 // keep the highlight steady while the user completes the pair
-    })
+    // No blink input in onboarding (decisions #30): gaze highlights, a touch or the step's timer acts.
     const timer = window.setInterval(() => {
       const at = performance.now()
       const live = gaze.available()
@@ -58,7 +48,7 @@ export function useSetupInput(stage: string, options: SetupOption[], enabled: bo
         lastScan = at
       }
     }, 100)
-    return () => { offGaze(); offBlink(); window.clearInterval(timer) }
+    return () => { offGaze(); window.clearInterval(timer) }
   }, [stage, key])
   return { selected, tracked }
 }

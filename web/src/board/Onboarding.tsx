@@ -153,18 +153,18 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
   const nextLabel = step === 'welcome' ? s.stepEyes : step === 'eyes' ? s.stepBand : s.go
 
   return (
-    <div onPointerDownCapture={unlockSpeech} style={{ display: paused ? 'none' : undefined }} className={`fixed inset-0 z-40 flex flex-col p-5 text-zinc-900 sm:p-8 ${preview ? '' : 'bg-[linear-gradient(160deg,#eaf6f4_0%,#f6f8f8_45%,#e3eef7_100%)]'}`}>
-      <header className="mx-auto w-full max-w-5xl rounded-3xl bg-white/95 px-8 py-5 text-center shadow-sm">
-        <p className="text-lg font-bold uppercase tracking-widest text-[#007a72]">{s.brand}</p>
+    <div onPointerDownCapture={unlockSpeech} style={{ display: paused ? 'none' : undefined }} className={`fixed inset-0 z-40 flex flex-col p-5 text-amber-50 sm:p-8 ${preview ? '' : 'bg-black'}`}>
+      <header className="mx-auto w-full max-w-5xl rounded-3xl bg-zinc-900/95 px-8 py-5 text-center shadow-sm">
+        <p className="text-lg font-bold uppercase tracking-widest text-[#d4a017]">{s.brand}</p>
         <div className="absolute right-8 top-8"><CameraLight lang={lang} /></div>
         <nav aria-label={s.setupProgress} className="my-3 flex justify-center gap-4 text-xl font-semibold">
-          {[s.stepEyes, s.stepBand, s.stepClench].map((label, i) => <span key={label} className={`rounded-full px-4 py-1 ${['eyes', 'band', 'clench'][i] === step ? 'bg-[#007a72] text-white' : 'bg-zinc-100 text-zinc-600'}`}>{i + 1}. {label}</span>)}
+          {[s.stepEyes, s.stepBand, s.stepClench].map((label, i) => <span key={label} className={`rounded-full px-4 py-1 ${['eyes', 'band', 'clench'][i] === step ? 'bg-[#d4a017] text-white' : 'bg-zinc-800 text-zinc-300'}`}>{i + 1}. {label}</span>)}
         </nav>
         <h1 className="text-4xl font-bold sm:text-5xl">{titles[step]}</h1>
-        <p className="mt-3 text-xl text-zinc-600 sm:text-2xl">{text}</p>
+        <p className="mt-3 text-xl text-zinc-300 sm:text-2xl">{text}</p>
       </header>
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 py-4 text-center">
-        {step === 'eyes' && eyes !== 'finished' && <div className="max-w-3xl rounded-3xl bg-white/95 px-8 py-6 text-left text-2xl leading-snug text-zinc-800 shadow-sm">
+        {step === 'eyes' && eyes !== 'finished' && <div className="max-w-3xl rounded-3xl bg-zinc-900/95 px-8 py-6 text-left text-2xl leading-snug text-zinc-800 shadow-sm">
           <ol className="list-decimal space-y-2 pl-8">
             <li>{lang === 'es' ? 'Siéntate cómodo y mantén la cabeza quieta.' : 'Sit comfortably and keep your head still.'}</li>
             <li>{lang === 'es' ? 'Sigue el punto con los ojos hasta que desaparezca.' : 'Follow the dot with your eyes until it disappears.'}</li>
@@ -172,26 +172,26 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
           </ol>
         </div>}
         {step === 'eyes' && eyes === 'finished' && <GazeCheck lang={lang} onResult={setCheck} />}
-        {step === 'band' && <div className="rounded-3xl bg-white p-6 shadow-sm">
+        {step === 'band' && <div className="rounded-3xl bg-zinc-900 p-6 shadow-sm">
           <div className="mb-5 flex flex-wrap justify-center gap-3">{['TP9', 'AF7', 'AF8', 'TP10'].map((name, i) => {
             const value = signal?.ch[i]
             const ok = museFresh(signal, wallNow) && value !== undefined && value >= 1 && value <= 200
-            return <span key={name} className={`rounded-xl px-4 py-3 text-xl font-semibold ${ok ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'}`}>{name}</span>
+            return <span key={name} className={`rounded-xl px-4 py-3 text-xl font-semibold ${ok ? 'bg-emerald-900 text-emerald-200' : 'bg-amber-900 text-amber-200'}`}>{name}</span>
           })}</div>
           <p className="max-w-3xl text-2xl">{bandError ? `${s.bandFailed} ${bandError}` : good ? s.bandGood : signal?.blocked || s.bandLooking}</p>
         </div>}
-        {step === 'clench' && <div className="w-full max-w-xl rounded-3xl bg-white p-8">
+        {step === 'clench' && <div className="w-full max-w-xl rounded-3xl bg-zinc-900 p-8">
           <p className="mb-5 text-2xl">{clenched ? s.clenchWorked : s.clenchWaiting}</p>
           <div className="relative">
             <Meter label={s.stepClench} value={Math.min(1, (signal?.emg ?? 0) / ((signal?.threshold ?? 1) * 2))} />
             <div className="absolute -top-2 left-1/2 h-7 w-1 -translate-x-1/2 rounded bg-zinc-900" aria-hidden />
           </div>
-          <p className="mt-2 text-lg text-zinc-600">{lang === 'es' ? 'Aprieta hasta pasar la línea negra (el umbral).' : 'Clench until the bar passes the black line (the threshold).'}</p>
+          <p className="mt-2 text-lg text-zinc-300">{lang === 'es' ? 'Aprieta hasta pasar la línea negra (el umbral).' : 'Clench until the bar passes the black line (the threshold).'}</p>
         </div>}
       </main>
-      <footer className="mx-auto w-full max-w-5xl shrink-0 rounded-3xl bg-white/95 px-8 py-5 text-center shadow-lg">
-        {step === 'eyes' && <div className="mb-4"><p className="mb-2 text-lg text-[#007a72]">{eyes === 'calibrating' ? s.eyesFollow : eyes === 'failed' ? s.eyesError : trackerReady ? s.calibrationIn(Math.max(0, Math.ceil((phase.until - phase.duration + CALIBRATE_AFTER_MS - now) / 1000))) : s.eyesStarting}</p><Meter label={s.calibrationProgress} value={progress} /></div>}
-        <p className="mb-3 text-xl font-semibold text-[#007a72]">{input.tracked ? s.lookBlink : s.scanBlink}</p>
+      <footer className="mx-auto w-full max-w-5xl shrink-0 rounded-3xl bg-zinc-900/95 px-8 py-5 text-center shadow-lg">
+        {step === 'eyes' && <div className="mb-4"><p className="mb-2 text-lg text-[#d4a017]">{eyes === 'calibrating' ? s.eyesFollow : eyes === 'failed' ? s.eyesError : trackerReady ? s.calibrationIn(Math.max(0, Math.ceil((phase.until - phase.duration + CALIBRATE_AFTER_MS - now) / 1000))) : s.eyesStarting}</p><Meter label={s.calibrationProgress} value={progress} /></div>}
+        <p className="mb-3 text-xl font-semibold text-[#d4a017]">{input.tracked ? s.lookBlink : s.scanBlink}</p>
         <SetupButtons options={options} selected={input.selected} />
         <p className="mb-2 mt-4 text-xl tabular-nums">{s.nextIn(nextLabel, remaining)}</p>
         <Meter label={s.nextStep} value={timedProgress} />
@@ -202,14 +202,14 @@ export function Onboarding({ lang, paused, onDone }: { lang: Lang; paused: boole
 
 function SetupButtons({ options, selected }: { options: SetupOption[]; selected: number }) {
   return <div className="flex flex-wrap justify-center gap-4">{options.map((option, i) => <button key={option.id} data-setup-option={i} type="button" onClick={option.act}
-    className={`min-h-16 rounded-2xl px-8 py-4 text-2xl font-bold focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-teal-800 ${selected === i ? 'bg-[#007a72] text-white ring-4 ring-teal-200' : 'bg-zinc-100 text-zinc-800'}`}>
+    className={`min-h-24 min-w-64 rounded-3xl px-10 py-6 text-4xl font-bold focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-amber-300 ${selected === i ? 'bg-[#d4a017] text-black ring-4 ring-amber-200' : 'bg-zinc-800 text-amber-50'}`}>
     {option.label}
   </button>)}</div>
 }
 
 export function Meter({ label, value }: { label: string; value: number }) {
   const safe = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
-  return <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(safe * 100)} className="h-3 w-full overflow-hidden rounded-full bg-zinc-200">
-    <div className="h-full rounded-full bg-[#007a72] transition-[width] duration-150" style={{ width: `${safe * 100}%` }} />
+  return <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(safe * 100)} className="h-3 w-full overflow-hidden rounded-full bg-zinc-700">
+    <div className="h-full rounded-full bg-[#d4a017] transition-[width] duration-150" style={{ width: `${safe * 100}%` }} />
   </div>
 }

@@ -5,9 +5,9 @@ export type SetupStep = 'welcome' | 'eyes' | 'band' | 'clench' | 'done'
 /** The start screen starts setup by itself after this long (a tap starts it at once, with sound). */
 export const LAUNCH_MS = 4000
 /** How long a step may take at most (a step that succeeds moves on at once). Short where nothing needs doing. */
-export const STEP_MS: Record<SetupStep, number> = { welcome: 2000, eyes: 45000, band: 30000, clench: 20000, done: 2000 }
+export const STEP_MS: Record<SetupStep, number> = { welcome: 5000, eyes: 45000, band: 30000, clench: 20000, done: 2000 }
 /** The eye calibration starts this long after the eyes step opens (time to read the instruction). */
-export const CALIBRATE_AFTER_MS = 1000
+export const CALIBRATE_AFTER_MS = 5000
 /** A clean headband signal this long moves on to the clench test. */
 export const GOOD_SIGNAL_MS = 1000
 /** The eyes step with no eye tracker (a browser): just long enough to read why it is skipped. */
