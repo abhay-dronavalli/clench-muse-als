@@ -13,6 +13,7 @@ When the last board disconnects the session hears FACE_OK false (Auto falls back
 
   /audio/<sha256>.mp3  cached ElevenLabs audio named in PLAY_AUDIO
   /api/head-range      GET / PUT the calibrated head range (HeadRange) in the database profile
+  /api/sensor          GET status; POST start / stop the Muse Sensor Service subprocess
 
 Every incoming message is parsed with parse_message. Invalid ones are logged and ignored; a bad
 message never closes the connection.
@@ -23,24 +24,26 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
 from core.config import dry_run_enabled, load_env, prewarm_enabled
-from core.contracts import FaceOk, HeadRange, Lang, Message, Ready, parse_message
+from core.contracts import FaceOk, HeadRange, Lang, Message, Ready, Signal, Settings, parse_message
 from core.db import DB_PATH, Db
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
 from core.profile import Profile, load_profile
 from core.rank.jev import JevRanker, build_jev
+from core.sensor_service import SensorService
 from core.session import Session, voice_lines
 from core.suggest import build_provider
 from core.suggest.provider import LLMProvider
@@ -56,7 +59,15 @@ ACCEPTS: dict[Role, frozenset[str]] = {
     "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK"}),
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
+    "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'SIGNAL'}),
 }
+
+
+class SensorStart(BaseModel):
+    """POST /api/sensor/start body: which calibration profile to run, and against what."""
+
+    profile: str = "taher"
+    source: str = "muse"
 
 
 def decode(text: str, role: Role) -> Message | None:
@@ -151,6 +162,7 @@ def create_app(
             # Background only: the board works (browser speech for anything not cached) meanwhile.
             prewarm = asyncio.create_task(voice.prewarm(voice_lines(menu, profile)))
         yield
+        app.state.sensor_service.stop()
         if prewarm is not None:
             prewarm.cancel()
         session.stop()
@@ -162,14 +174,24 @@ def create_app(
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
     app.state.hub = hub
+    app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False, blocked='Muse service not connected')
+    app.state.sensor_seen = 0.0
+    app.state.sensor_service = SensorService()
 
     async def serve(ws: WebSocket, role: Role) -> None:
+        if role == 'sensor' and hub.count('sensor'):
+            await ws.close(code=1008, reason='A Muse service is already connected')
+            return
         await ws.accept()
         client = Client(ws, role)
         hub.add(client)
         writer = asyncio.create_task(client.pump())
         session: Session = app.state.session
         hub.send_to(client, session.settings())
+        if role in ('board', 'console'):
+            # Sent after READY for boards to preserve the existing startup ordering.
+            if role == 'console':
+                hub.send_to(client, app.state.sensor_signal)
         try:
             while True:
                 event = await ws.receive()
@@ -183,6 +205,20 @@ def create_app(
                 if msg is None:
                     continue
                 try:
+                    if role == 'sensor':
+                        if isinstance(msg, Signal):
+                            app.state.sensor_signal = msg
+                            app.state.sensor_seen = time.monotonic()
+                            hub.broadcast(msg)
+                            if not msg.connected and session.muse_enabled:
+                                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+                            continue
+                        signal = app.state.sensor_signal
+                        if (not session.muse_enabled or not hub.count('board') or not signal.connected
+                                or signal.blocked or time.monotonic()-app.state.sensor_seen > 2
+                                or not 0 <= time.time()-msg.t <= 1):
+                            log.info('Muse command suppressed: paused, stale, blocked or no patient board')
+                            continue
                     if isinstance(msg, Ready):
                         view = session.current_view()
                         if view is not None:
@@ -196,6 +232,13 @@ def create_app(
         finally:
             hub.remove(client)
             writer.cancel()
+            if role == 'sensor':
+                app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False,
+                    profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')
+                hub.broadcast(app.state.sensor_signal)
+                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+            if role == 'board' and hub.count('board') == 0 and session.muse_enabled:
+                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
             if role == "board" and hub.count("board") == 0 and session.face_ok:
                 log.info("last board disconnected: no webcam face any more")
                 session.handle(FaceOk(ok=False))
@@ -211,6 +254,10 @@ def create_app(
     @app.websocket("/ws/input")
     async def ws_input(ws: WebSocket) -> None:
         await serve(ws, "input")
+
+    @app.websocket('/ws/sensor')
+    async def ws_sensor(ws: WebSocket) -> None:
+        await serve(ws, 'sensor')
 
     @app.get("/audio/{name}")
     async def audio(name: str) -> FileResponse:
@@ -237,6 +284,31 @@ def create_app(
         log.info("head range saved: %s", head_range.model_dump())
         return head_range
 
+    @app.get("/api/sensor")
+    async def get_sensor() -> dict[str, object]:
+        return app.state.sensor_service.status()
+
+    @app.post("/api/sensor/start")
+    async def start_sensor(body: SensorStart, request: Request) -> dict[str, object]:
+        """Launch the Sensor Service so the console can connect the headband itself."""
+        server = request.scope.get("server") or ("127.0.0.1", 8000)
+        # The subprocess dials this Core back, so the URL must name the port we are bound to,
+        # not the web dev server's port that proxied the request here.
+        url = f"ws://127.0.0.1:{server[1]}/ws/sensor"
+        try:
+            return app.state.sensor_service.start(url, body.profile, body.source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/sensor/stop")
+    async def stop_sensor() -> dict[str, object]:
+        status = app.state.sensor_service.stop()
+        # Losing the headband must never leave the board accepting stale clenches.
+        session: Session = app.state.session
+        if session.muse_enabled:
+            session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+        return status
+
     @app.get("/health")
     async def health() -> dict[str, object]:
         session: Session = app.state.session
@@ -261,6 +333,8 @@ def create_app(
             "boards": hub.count("board"),
             "consoles": hub.count("console"),
             "inputs": hub.count("input"),
+            "sensor_service": "running" if app.state.sensor_service.running() else "stopped",
+            "muse_enabled": session.muse_enabled,
         }
 
     return app
