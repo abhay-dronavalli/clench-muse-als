@@ -630,3 +630,64 @@ choices below are Taher's.
   answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
   sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
   unchanged and still preferred.
+
+## 21. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
+
+- New module `core/geo/`, pages `/trip` and `/trip/live` (`web/src/trip/`), tests in `tests/geo/`.
+  Layer 2 ranks drop-off points near the destination; Layer 1 compares routes for comfort. Result
+  shapes map one-to-one onto `RideProfile`, `DropoffRequest` and `LatLng` in
+  `proto/clench/rider/v1/rider.proto` (checked by a test). No gRPC server, no board tiles: the board
+  has no car or trip mode yet.
+- **Google terms decide the data sources.** The Google Maps Platform terms (ToS 3.2.3 and the
+  Service Specific Terms, as of 2026-09) forbid caching Google content (except place IDs and pano
+  IDs), storing results derived from it (3.2.3(a), (c)), using it with or near a non-Google map
+  (3.2.3(e)), speaking it with text-to-speech (3.2.3(a)(iv), (c)(vi)), and using it in connection
+  with a system embedded in a vehicle (3.2.3(f)). So everything that is scored, stored, committed,
+  shown on the map, spoken, or sent to the car comes from open data:
+  - OpenStreetMap: Nominatim (geocoding), Overpass (entrances, kerbs, sidewalks, steps, ramps,
+    signals, stop signs, traffic calming, surfaces, bridges), OSRM on routing.openstreetmap.de
+    (routes, up to 3 alternatives). ODbL: "(c) OpenStreetMap contributors" on every page.
+  - USGS 3DEP elevation (public domain): EPQS (1 m lidar in Miami-Dade) for the short walks,
+    OpenTopoData `ned10m` for routes.
+  - Google Places (accessibility fields) and Street View Static (image + Gemini ramp/steps label) are
+    fetched live on `/trip/live` only, a page with no map, with Google attribution. Never cached,
+    never scored, never spoken, never sent to the car. A candidate the live image shows with steps
+    gets a warning there; its rank does not change (demoting it would be content derived from Street
+    View in a result that goes to the car).
+- Open-data responses are cached on disk in `data/geo_cache/` (git-ignored by its own .gitignore),
+  keyed by request. Each service has its own minimum gap between requests (Nominatim / OSRM /
+  OpenTopoData 1.1 s, EPQS 1 s, Overpass 2 s), a descriptive User-Agent, and timeouts; a 429 pauses
+  30 s and retries once; Overpass tries three public mirrors. A failed request falls back to the
+  cache and the page shows a note. The computed demo result is committed in
+  `data/geo/demo_trip.json`; `scripts/geo_trip.py --send` regenerates it.
+- Drive times are OSRM free-flow estimates (no traffic) and are labelled so everywhere.
+- **Demo destination changed** from HCA Florida Kendall Hospital: OSM has neither its main building
+  nor any entrance within 600 m, so every candidate had entrance access unknown, and the live image
+  of the top pick showed steps. Only 41 entrances within 15 km of FIU are tagged `wheelchair=*`; the
+  best-mapped place is Miami-Dade College Kendall Campus, Jack Kassewitz Building (OSM way
+  106965112): a `main` entrance with `wheelchair=yes`, lowered and flush kerbs, a mapped sidewalk
+  network, and mapped steps and ramps. Pickup stays FIU (11200 SW 8th St).
+- Drop-off scoring: eight factors from 0 (bad) to 1 (good), weights in `data/geo.yaml`. **Unknown
+  is never good**: a factor the data does not give counts as `unknown_penalty` (0.3) and is named in
+  the reason ("unknown: curb"). Missing OSM tags are unknown, not absent ("no steps mapped" is not
+  "no steps"). The walk follows mapped footpaths, step-free first (no `highway=steps`, no
+  `wheelchair=no`); a ramp is a footway with `incline=*`. With no connecting footpath it is a
+  straight line, flagged. Slope over a walk shorter than 10 m is measured over a 10 m line centred
+  on it (lidar is about 10 cm accurate). Targets are the destination building's own entrances; with
+  none mapped, any entrance within 150 m; with none, building walls (entrance unknown).
+- Comfort: sharp turns are runs of turning at >= 1 degree per meter totalling >= 60 degrees (a
+  rounded corner is one turn, a highway curve none). Stop signs and traffic calming count only on an
+  OSM way running with the route, facing our direction (`direction=*`, `oneway` incl. `-1`), so the
+  opposite carriageway and cross streets are not counted. `traffic_calming=no` is not calming.
+  Signals within 40 m are one intersection. Samples on OSM bridges are left out of the grade
+  (bare-earth elevation reads a bridge as a dip). Comfort cost = weights x counts in `data/geo.yaml`;
+  a meter of road with no surface tag costs 0.7 of a rough meter (1 - unknown_penalty), and a route
+  with unknown climb or grade is scored with the worst value known on the other routes.
+- Tiles: "Fastest" and "Smoothest", or one "Fastest and smoothest" tile when one route is both
+  (the demo trip: route 1 via SW 107th Ave is both), plus each other route as "Via <road>" with its
+  trade-off, all text generated from the computed differences. RideProfile can only ask for
+  fastest or smoothest, so an alternative tile has no RideProfile.
+- Rider settings for RideProfile (`uses_wheelchair`, `needs_extra_boarding_time`) live in
+  `data/geo.yaml` for the demo; they are not map data.
+- The proto was in the working tree at `proto/clench/rider.proto`; the branch has it at
+  `proto/clench/rider/v1/rider.proto`, matching its package and its own header comment.

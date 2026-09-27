@@ -39,6 +39,7 @@ from core.config import dry_run_enabled, load_env, prewarm_enabled
 from core.contracts import (Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
                             Message, Ready, Signal, Settings, parse_message)
 from core.db import DB_PATH, Db
+from core.geo.api import build_geo_router
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
@@ -216,6 +217,7 @@ def create_app(
         db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
+    app.include_router(build_geo_router(env))  # /api/geo/*: trip planning from public map data
     app.state.hub = hub
     app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False, blocked='Muse service not connected')
     app.state.sensor_seen = 0.0
