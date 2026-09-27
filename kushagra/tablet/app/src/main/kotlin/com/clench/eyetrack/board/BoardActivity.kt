@@ -30,6 +30,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import camp.visual.eyedid.gazetracker.metrics.state.TrackingState
 import com.clench.eyetrack.BuildConfig
 import com.clench.eyetrack.board.GazeMath.Frac
+import com.clench.eyetrack.car.CarScene
 import com.clench.eyetrack.muse.ClenchProfile
 import com.clench.eyetrack.muse.MuseSensor
 import org.json.JSONArray
@@ -56,6 +57,8 @@ import java.util.Locale
  *     Bluetooth and its clenches go to the Core's /ws/sensor (com.clench.eyetrack.muse.MuseSensor),
  *     in place of the laptop's sensor. Nothing connects until then: the board works without it.
  *   - The page's "browser speech" is Android's text-to-speech (NativeSpeech): WebView has none.
+ *   - The trip screen's 3D car (CarScene, SceneView) is drawn behind the whole WebView, framed in the
+ *     page's car area; the page turns see-through on the trip screen and drives it (carScene, carEffect).
  */
 class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
@@ -86,6 +89,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
     }
 
     private lateinit var speech: NativeSpeech
+    private lateinit var car: CarScene
 
     // The tablet's Muse sensor: main thread only, except the log (locked) and museWanted.
     private var muse: MuseSensor? = null
@@ -124,6 +128,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect on the laptop
         web = WebView(this).apply {
+            // See-through where the page is (the trip screen shows the car behind it); the page paints
+            // its own black everywhere else.
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true // localStorage: gaze settings, /gaze-test results
             settings.mediaPlaybackRequiresUserGesture = false
@@ -158,8 +165,13 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             }
         }
         gazeOverlay = GazeOverlay(this)
+        car = CarScene(this)
         setContentView(
             FrameLayout(this).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                // The whole screen, so the trip screen has one background; the camera puts the car in the
+                // page's car area (its upper part).
+                addView(car.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 addView(gazeOverlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             },
@@ -266,6 +278,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         museWanted = false
         stopMuse()
         speech.shutdown()
+        car.destroy()
         gaze.release()
         web.destroy()
         super.onDestroy()
@@ -327,6 +340,23 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         @JavascriptInterface fun stopSpeaking() = speech.stop()
 
         // The Muse panel's Connect / Disconnect on the tablet (web/src/sensor/service.ts).
+        // The trip screen's 3D car (web/src/board/trip.tsx).
+        @JavascriptInterface fun carScene(on: Boolean) {
+            main.post { if (!destroyed) car.show(on) }
+        }
+
+        @JavascriptInterface fun carEffect(action: String, ms: Int, window: String) {
+            main.post { if (!destroyed) car.play(action, ms.coerceIn(100, 5_000), window) }
+        }
+
+        @JavascriptInterface fun carSpeed(mph: Int) {
+            main.post { if (!destroyed) car.setSpeed(mph) }
+        }
+
+        @JavascriptInterface fun carLayout(mode: String) {
+            main.post { if (!destroyed) car.setLayout(mode) }
+        }
+
         @JavascriptInterface fun museAvailable(): Boolean = BuildConfig.MUSE_PROFILE.isNotEmpty()
 
         @JavascriptInterface fun museStatus(): String = museStatusJson()

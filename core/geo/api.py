@@ -7,7 +7,7 @@
   GET /api/geo/live/place               Google Places accessibility for the destination (live)
   GET /api/geo/live/candidate/{id}      Street View + Gemini for one drop-off candidate (live)
 
-The two live routes spend Google credit and never store anything (docs/decisions.md #21). They
+The two live routes spend Google credit and never store anything (docs/decisions.md #22). They
 are rate-limited per process so a reloading page cannot run up a bill.
 """
 

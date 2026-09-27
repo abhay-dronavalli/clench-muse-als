@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, TripLayout } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -15,7 +15,16 @@ import {
   PointerBadge,
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
-import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
+import {
+  nativeCarAvailable,
+  nativeGazeActive,
+  playNativeCarEffect,
+  setNativeCarLayout,
+  setNativeCarSpeed,
+  reportPointingMode,
+  showNativeCar,
+  subscribeNativeGaze,
+} from '../facetrack/native'
 import { gazeTuning } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
@@ -24,6 +33,8 @@ import { useSocket, type Send } from '../lib/useSocket'
 import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './speech'
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
+import { useCarAnimation } from './carAnimation'
+import { TripConfirm, TripSpeaking, TripView } from './trip'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
 
@@ -67,6 +78,13 @@ export default function BoardPage() {
   // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
   const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
+  // Trip mode (SETTINGS trip) and the trip control animation in progress (CAR_ACTION).
+  const [trip, setTrip] = useState(false)
+  const car = useCarAnimation()
+  const [carState, setCarState] = useState<CarState | null>(null) // CAR_STATE: the trip telemetry
+  const [layout, setLayout] = useState<TripLayout>('car') // SETTINGS trip_layout
+  const lastSettings = useRef<Settings | null>(null) // the layout switch sends it back with the new layout
+  const nativeCar = nativeCarAvailable()
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
 
@@ -111,6 +129,15 @@ export default function BoardPage() {
       case 'CLICK':
         click() // a picked "Other...": no word, a soft click in the sound queue
         break
+      case 'CAR_ACTION':
+        // The Core has locked input for `ms`; the tiles and the tablet's car play the sequence.
+        car.start(msg.action, msg.ms, msg.window ?? null)
+        playNativeCarEffect(msg.action, msg.ms, msg.window ?? null)
+        break
+      case 'CAR_STATE':
+        setCarState(msg)
+        setNativeCarSpeed(msg.speed_mph)
+        break
       case 'SIGNAL':
         break // MusePanel displays sensor telemetry through its console socket.
       case 'ACTION_RESULT':
@@ -124,6 +151,9 @@ export default function BoardPage() {
         reportPointingMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
+        if (msg.trip != null) setTrip(msg.trip)
+        if (msg.trip_layout != null) setLayout(msg.trip_layout)
+        lastSettings.current = msg
         break
       default:
         console.warn('board ignored', msg.type)
@@ -159,6 +189,23 @@ export default function BoardPage() {
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
+  // Touch: a tap on a tile picks it, a tap on the "Say this?" sentence confirms (TAP; the Core checks
+  // the screen is still the one tapped). For a caregiver, or testing without a headband.
+  const tapTile = (tile: number) => {
+    if (screen) send({ type: 'TAP', tile, seq: screen.seq, t: Date.now() / 1000 })
+  }
+  const tapConfirm = () => send({ type: 'TAP', tile: null, seq: null, t: Date.now() / 1000 })
+  const tapCancel = () => send({ type: 'TAP', tile: null, seq: null, cancel: true, t: Date.now() / 1000 })
+  // The trip layout switch: the Core owns the layout (it changes which tiles there are).
+  const changeLayout = (next: TripLayout) => {
+    const cur = lastSettings.current
+    if (cur) send({ type: 'SETTINGS', pointing_mode: cur.pointing_mode, scan_ms: cur.scan_ms, trip_layout: next })
+  }
+  const tripShared = { car: carState, nativeCar, layout, onLayout: changeLayout }
+  const tripScreen = screen?.screen === 'trip' ? screen : null
+  // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
+  const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
+  const seeThrough = tripShown && nativeCar
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
@@ -178,8 +225,25 @@ export default function BoardPage() {
     setStarted(true)
   }
 
+  // The tablet shell draws the car behind the page while the trip screen shows, framed for the
+  // layout (car / split / map).
+  useEffect(() => {
+    showNativeCar(tripShown)
+  }, [tripShown])
+  useEffect(() => {
+    setNativeCarLayout(layout)
+  }, [layout])
+  useEffect(() => () => showNativeCar(false), [])
+
+  // See-through only where the shell draws behind (index.css paints the page black otherwise).
+  useEffect(() => {
+    const bg = seeThrough ? 'transparent' : ''
+    document.documentElement.style.background = bg
+    document.body.style.background = bg
+  }, [seeThrough])
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-black text-white">
+    <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
       {!started && <StartOverlay onStart={start} />}
       <div className="fixed right-4 top-4 z-30 flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
@@ -198,16 +262,31 @@ export default function BoardPage() {
           {STRINGS[lang].connecting}
         </div>
       )}
-      {screen && (
+      {tripScreen && (
         <>
-          <Breadcrumb screen={screen} />
-          <TileGrid screen={screen} />
+          <TripView screen={tripScreen} anim={car.anim} phase={car.phase} tint={car.tint} onTap={tapTile} {...tripShared} />
           {pointing && <CursorDot />}
           {pointing && <DwellRing />}
         </>
       )}
-      {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
-      {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
+      {screen && !tripScreen && (
+        <>
+          <Breadcrumb screen={screen} />
+          <TileGrid screen={screen} onTap={tapTile} />
+          {pointing && <CursorDot />}
+          {pointing && <DwellRing />}
+        </>
+      )}
+      {connected && view.kind === 'confirm' && (view.confirm.action === 'pull_over' || view.confirm.action === 'support') && (
+        <TripConfirm action={view.confirm.action} lang={lang} onConfirm={tapConfirm} onCancel={tapCancel} {...tripShared} />
+      )}
+      {connected && view.kind === 'confirm' && view.confirm.action !== 'pull_over' && view.confirm.action !== 'support' && (
+        <ConfirmView confirm={view.confirm} lang={lang} onTap={tapConfirm} />
+      )}
+      {connected && view.kind === 'speaking' && trip && (
+        <TripSpeaking lang={lang} text={view.text} tint={car.tint} {...tripShared} />
+      )}
+      {connected && view.kind === 'speaking' && !trip && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
       {connected && backPrompt && view.kind !== 'help' && (
         <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} />

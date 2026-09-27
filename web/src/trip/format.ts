@@ -65,7 +65,7 @@ export function calmingText(kinds: Record<string, number>): string {
     .join(', ')
 }
 
-/** The live warning. The ranking is never changed by Google content (docs/decisions.md #21). */
+/** The live warning. The ranking is never changed by Google content (docs/decisions.md #22). */
 export function liveWarning(label: string | undefined): string | null {
   if (label === 'steps') return 'The live image shows steps at this entrance, and no sign of a step-free way.'
   if (label === 'steps_with_accessible_route') return 'The live image shows steps, with a sign of an accessible route nearby.'

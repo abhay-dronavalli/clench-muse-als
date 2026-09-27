@@ -35,6 +35,8 @@ const TEXT: Record<Tile['kind'], string> = {
   // A whole sentence: smaller so it wraps onto a few lines and is never cut off.
   suggestion: 'text-3xl leading-snug xl:text-4xl',
   other: 'text-5xl leading-tight xl:text-6xl',
+  car: 'text-5xl leading-tight xl:text-6xl', // trip controls draw in trip.tsx; here only for completeness
+  back: 'text-5xl leading-tight xl:text-6xl',
 }
 
 function tileLook(tile: Tile, on: boolean): string {
@@ -57,7 +59,7 @@ function tileLook(tile: Tile, on: boolean): string {
  * While the Core is loading AI options (`screen.loading`) the picked tile pulses gently and a
  * "Finding options…" line shows; the Core has paused the scan.
  */
-export function TileGrid({ screen }: { screen: Screen }) {
+export function TileGrid({ screen, onTap }: { screen: Screen; onTap?: (tile: number) => void }) {
   const loading = screen.loading === true
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -70,7 +72,10 @@ export function TileGrid({ screen }: { screen: Screen }) {
               data-tile-index={i} // webcam pointing measures the tiles on screen (facetrack/)
               aria-current={on}
               aria-busy={on && loading}
+              // A touch or click picks this tile (TAP), for a caregiver or testing without a headband.
+              onClick={onTap && !loading ? () => onTap(i) : undefined}
               className={[
+                onTap && !loading ? 'cursor-pointer select-none' : '',
                 'flex items-center justify-center gap-4 rounded-3xl p-6 text-center font-bold',
                 'break-words transition-transform duration-150',
                 TEXT[tile.kind],
@@ -101,12 +106,15 @@ export function TileGrid({ screen }: { screen: Screen }) {
   )
 }
 
-export function ConfirmView({ confirm, lang }: { confirm: Confirm; lang: Lang }) {
+export function ConfirmView({ confirm, lang, onTap }: { confirm: Confirm; lang: Lang; onTap?: () => void }) {
   const s = STRINGS[lang]
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-12 p-12 text-center">
       <p className="text-4xl font-semibold text-yellow-300">{s.confirm[confirm.action]}</p>
-      <p className="max-w-6xl rounded-3xl p-10 text-6xl font-bold leading-tight ring-[12px] ring-yellow-300 xl:text-7xl">
+      <p
+        onClick={onTap} // a touch or click on the sentence confirms it (TAP), like a clench
+        className={`max-w-6xl rounded-3xl p-10 text-6xl font-bold leading-tight ring-[12px] ring-yellow-300 xl:text-7xl ${onTap ? 'cursor-pointer select-none' : ''}`}
+      >
         {confirm.text}
       </p>
       <p className="whitespace-pre text-3xl text-zinc-300">{s.hint}</p>

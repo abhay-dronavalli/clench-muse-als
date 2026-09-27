@@ -6,7 +6,7 @@ import type { Candidate, LiveCandidate, LivePlace, Trip } from './types'
 const GOOGLE_ATTRIBUTION = { fontFamily: 'Roboto, Arial, sans-serif', fontSize: 13, fontWeight: 400 }
 
 /** /trip/live: live Google evidence for one drop-off candidate. Nothing here is stored, scored,
- * spoken, or sent to the car, and there is no map on this page (docs/decisions.md #21). */
+ * spoken, or sent to the car, and there is no map on this page (docs/decisions.md #22). */
 export default function LivePage() {
   const id = new URLSearchParams(window.location.search).get('candidate') ?? ''
   const [candidates, setCandidates] = useState<Candidate[]>([])

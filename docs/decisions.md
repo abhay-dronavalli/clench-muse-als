@@ -630,8 +630,97 @@ choices below are Taher's.
   answers with a `speech` event; the page gives up waiting after 3 s + 150 ms a character, so the
   sound queue never stalls. The dev panel's voice line says "Tablet voice". ElevenLabs audio is
   unchanged and still preferred.
+- Touch on the board (new board message TAP, `docs/contracts.md`): a tap on a tile picks that tile
+  and a tap on the "Say this?" sentence confirms, each exactly as a CLENCH would (same debounce, the
+  confirm step still required; no look-back, the finger names the tile). The tablet has no keyboard
+  for the stand-in and the Muse is often off while testing. Taps are ignored while the go-back prompt
+  is open and during the help countdown, so a stray touch can neither answer the prompt nor cancel a
+  call for help; going back stays the Dev panel's Double blink (then Clench). Always on, also with a
+  mouse on the laptop.
 
-## 21. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
+## 21. The trip screen: car controls and the 3D car (branch muse-on-android)
+
+- The communication menus are the pre-trip flow. A dev panel button (Start trip / End trip, SETTINGS
+  `trip`) switches to the trip screen: exactly six controls (Window up, Window down, Warmer, Cooler,
+  Music, Pull over), no "Other...", no ranking, fixed order so the eyes learn the places
+  (`core/trip.py`). It is a Core screen like any other, so scan, head, gaze, dwell, clench, tap and
+  help all work unchanged. A real "Start trip" tile can replace the dev button later.
+- Routine controls act as soon as they are picked, with no confirm screen (the brief: they repeat
+  often and must stay under a second). PRD D5 still holds: nothing is spoken or sent for them. The
+  Core sends CAR_ACTION and locks input for its `ms` (0.9 s; state ACTING): clenches, taps and
+  pointing are ignored so a stray clench cannot land on a tile as the others fade back. LONG_CLENCH
+  still starts the help countdown during the lock.
+- Pull over is a safety action: it opens its own confirm screen ("Pull over here?", Confirm and
+  Cancel buttons; a clench confirms, a double blink cancels through the usual go-back prompt, a tap
+  on Cancel cancels at once: TAP `cancel`). Confirmed, it says "Please pull over here." and runs a mock
+  `pull_over` action (ACTION_RESULT toast).
+- Trip events are logged but never reach the sentence history or the Suggested list
+  (`node_id` `trip.*` excluded like `help`).
+- The 3D car is drawn natively with SceneView 2.3.0 (Filament) behind the see-through board WebView,
+  full screen, framed in the page's car area. 2.3.0 because it is built with Kotlin 2.0 (the app is on
+  Kotlin 2.1); SceneView 4.x needs Kotlin 2.4. The page drives it over the bridge (`carScene`,
+  `carEffect`); in a normal browser the car area shows a soft placeholder.
+- Look (follow-up): the trip screen is light themed (white status strip and tiles, amber highlight,
+  copper for Pull over). The car drives through a simple daytime world: sky, grass, a road with lane
+  dashes, and trees on both sides. The car stays put while the dashes and trees move past and wrap
+  around, and the camera circles the car once every 45 s (instead of the car swaying). Pull over eases
+  the scenery and the camera to a stop. Trees stand back beyond the camera's circle so none can come
+  between the camera and the car; the camera frames the car at about 17-35% down the screen, above the
+  tiles, with a band of sky at the top (checked on the Tab S9 Ultra).
+- Motion (CarMotion, unit tested): the scrolling and the camera circle above, a small camera push toward the car, and plain
+  line particles per control (windows trace the door up or down, warm lines rise and spread, cool lines
+  settle, music pulses outward in three beats). Every line grows from and shrinks to nothing; no
+  flashing, no hard cuts. Pull over has no particles: the drive eases to a stop, the page takes a warm
+  copper tint, and the sequence is shorter (0.6 s).
+- The model (`kushagra/tablet/app/src/main/assets/jaguar_i-pace.glb`, 8.9 MB) is git-ignored like the
+  face model; without it the car area stays dark and the screen works the same.
+- Follow-up: the trip menu is a small tree instead of six flat controls (`core/trip.py`): Windows >
+  Up / Down > Front left, Front right, Rear left, Rear right, All windows; Temperature > Warmer /
+  Cooler; Music > Louder / Softer; Pull over (confirm); Slow down; Support (confirm, then a mock
+  `support` call: an outward action, so it confirms like messages and calls). Every level below the
+  top ends with a Back tile (touch riders have no double blink; a double blink still works). After a
+  routine control the level stays, so a control can be repeated.
+- The Core keeps a mock car (`Car` in `core/trip.py`) and sends its telemetry as CAR_STATE: speed,
+  arrival, battery, cabin temperature, each window's % open, music volume. Windows move 25% a step,
+  temperature 1°F, volume 1, Slow down takes 5 mph off (never below 10); Pull over stops the car (and
+  Slow down cannot restart it). Arrival and battery move once a minute. The tablet's scenery moves at
+  the telemetry's speed.
+- A translucent white panel rises from the bottom of the trip screen to just below the car; the tiles
+  sit on it. The car is lifted a hair so its tyres sit on the road, and the ground is placed from the
+  car's measured size.
+- Fix in `EyedidGaze` (not trip code): releasing the tracker removed its callbacks while the SDK's
+  gaze thread could still deliver a queued frame, which crashed the app (NullPointerException in
+  GazeTrackerCore) when the pointing mode switched to Scan mid-tracking. Released trackers now get
+  callbacks that ignore everything instead.
+- Trip layouts (`web/src/board/tripLayout.ts`, a Car / Split / Map switch in the telemetry strip,
+  remembered in the browser): the upper part shows the 3D car, the route map on the left with the car
+  on the right (the scene's lens shifts so the car centres in the right half), or the map alone. The
+  tiles never move between layouts, so head and gaze pointing aim at the same places.
+- The route map (`RouteMap.tsx`) is drawn and offline for now: a city of streets, parks and a river,
+  the route (driven part grey), the car and the destination. It shows the whole route when it fits the
+  box and otherwise follows the car; the car advances as arrival counts down (CAR_STATE). It keeps its
+  props so a Google Maps implementation can replace the drawing later (VITE_GOOGLE_MAPS_API_KEY).
+- The trip scene's world is random each time the app starts (`WorldPlan`, unit tested): round trees,
+  pines, cypresses, bushes, houses, flowers, rocks, clouds drifting, far hills, a sun; each piece is
+  re-rolled when it wraps around. Everything taller than a flower stands beyond the camera's circle
+  (tested over many seeds), and there is no traffic, so nothing ever sweeps between the camera and the
+  car. The panel behind the tiles is now dark smoked glass instead of white.
+- Trip layouts are a Core setting now (SETTINGS `trip_layout`, sent by the board's Car / Split / Map
+  switch on `/ws/board`), because Split changes which tiles exist: the route map takes the left half
+  of the screen and the right half shows the car above only the three most important top-level
+  controls (Windows, Pull over, Support; `SPLIT_TOP` in `core/trip.py`). The levels below stay whole.
+  Scan, gaze and clench count the Core's tiles, so this had to live in the Core, not the page.
+- The telemetry moved from a top strip to a column on the left (with the layout switch at its foot),
+  so the 3D scene gets the full height. The car's lens shift centres it in the space right of the
+  column (and in the right half for Split).
+- Google Maps (optional): with `VITE_GOOGLE_MAPS_API_KEY` in the repository's `.env` (Vite now reads
+  that one `.env`; only `VITE_` values reach the page) the map is a real Google map: the driving route
+  from `VITE_TRIP_ORIGIN` to `VITE_TRIP_DESTINATION` (Directions), the driven part in grey and the car as
+  an arrow moving along it with the ride's progress. No dragging or zooming. If the script, the key or
+  the route fails, the drawn map takes over. Not yet run with a real key.
+
+
+## 22. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
 
 - New module `core/geo/`, pages `/trip` and `/trip/live` (`web/src/trip/`), tests in `tests/geo/`.
   Layer 2 ranks drop-off points near the destination; Layer 1 compares routes for comfort. Result

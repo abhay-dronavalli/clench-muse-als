@@ -6,7 +6,7 @@
   uv run python scripts/geo_trip.py --send --refresh ask every service again (falls back to the cache)
 
 Only open data is used here, so the result may be committed and spoken. No Google service is
-called (Places and Street View are live-only on /trip/live; docs/decisions.md #21). All of these
+called (Places and Street View are live-only on /trip/live; docs/decisions.md #22). All of these
 services are free; --send is still required because it sends requests to public servers with
 usage limits (one per second, one Overpass query every 2 s).
 """
