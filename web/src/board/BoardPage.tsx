@@ -238,7 +238,8 @@ export default function BoardPage() {
     nativeBridge()?.setOnboarding?.(on)
     setOnboarding(on)
     const current = lastSettings.current
-    if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse })
+    // Finishing setup starts the ride: the trip screen (3D car, map, car controls), not the menus.
+    if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse, ...(on ? {} : { trip: true }) })
   }
   const start = (gesture = true) => {
     if (gesture) unlockSpeech()

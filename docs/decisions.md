@@ -792,3 +792,7 @@ choices below are Taher's.
 - The board now starts in English (`lang: en` in `data/profile.yaml`; it was Spanish for Luis). Spanish
   stays one tap away (the dev panel's EN/ES) and fully supported; the Spanish help-alert test now asks
   for Spanish explicitly instead of relying on the profile.
+
+- Finishing the onboarding starts the ride: it turns trip mode on (the trip screen with the 3D car,
+  map and car controls). Before, it left the rider on the communication menus, which looked like the
+  old screens; they are still there with trip mode off (Dev panel End trip).
