@@ -267,7 +267,9 @@ def test_switching_modes_live_mid_screen(menu, profile, sched, sent):
     session.handle(settings("scan"))
     assert last_screen(sent).pointer == "scan" and session.highlight == 5
     sched.advance(SCAN_S)
-    assert session.highlight == 0  # scanning on from tile 5, wrapping
+    assert session.highlight == 6  # scanning on from tile 5: the Car mode corner
+    sched.advance(SCAN_S)
+    assert session.highlight == 0  # then wrapping
 
     session.handle(settings("auto"))
     session.handle(FaceOk(ok=True))

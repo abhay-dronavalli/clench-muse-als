@@ -148,3 +148,46 @@ def test_help_works_on_a_support_question_and_cancelling_returns_to_it(in_trip, 
     in_trip.handle(DoubleBlink(t=0.0))
     assert in_trip.state is SessionState.SCANNING
     assert last_screen(sent).screen == "support_question"
+
+
+# --- Car mode entry and exit (the corner button) --------------------------------------------------
+
+
+def test_car_mode_is_entered_only_after_its_confirm(session, sched, sent):
+    session.start()
+    screen = last_screen(sent)
+    assert screen.corner is not None and screen.corner.label == "Car mode"
+    settle(sched)
+    session.handle(Tap(tile=len(screen.tiles), seq=screen.seq, t=0.0))
+    assert isinstance(sent[-1], Confirm) and sent[-1].action == "car_mode"
+    assert session.trip is False and session.ride_active is False
+    settle(sched)
+    session.handle(Tap(tile=None, seq=None, t=0.0))
+    assert session.trip is True and session.ride_active is True
+    assert last_screen(sent).screen == "trip" and last_screen(sent).corner.label == "Home"
+
+
+def test_leaving_car_mode_keeps_the_ride_and_the_corner_brings_it_back(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Comfort", "Cooler")
+    sched.advance(1.0)
+    temp = in_trip.car.cabin_temp_f
+    screen = last_screen(sent)
+    settle(sched)
+    in_trip.handle(Tap(tile=len(screen.tiles), seq=screen.seq, t=0.0))  # the Home corner: no confirm
+    assert in_trip.trip is False and in_trip.ride_active is True
+    home = last_screen(sent)
+    assert home.screen == "menu" and home.corner.label == "Car mode"
+    settle(sched)
+    in_trip.handle(Tap(tile=len(home.tiles), seq=home.seq, t=0.0))
+    settle(sched)
+    in_trip.handle(Tap(tile=None, seq=None, t=0.0))  # confirm "Start Car mode?"
+    assert in_trip.trip is True
+    assert in_trip.car.cabin_temp_f == temp  # the same ride, not a new one
+
+
+def test_scan_reaches_the_corner_and_help_works_in_car_mode(in_trip, sched, sent):
+    screen = last_screen(sent)
+    sched.advance(len(screen.tiles) * SCAN_S)
+    assert last_screen(sent).highlight == len(screen.tiles)  # the corner, after the grid
+    in_trip.handle(LongClench(t=0.0, duration=2.5))
+    assert in_trip.state is SessionState.HELP_COUNTDOWN

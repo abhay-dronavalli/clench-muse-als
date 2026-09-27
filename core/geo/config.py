@@ -26,6 +26,15 @@ class DemoTrip(_Strict):
     destination_osm_way: int | None = None
 
 
+class SavedPlace(_Strict):
+    """A destination tile under Car mode > Trip > Plan a trip."""
+
+    key: str
+    label_en: str
+    label_es: str
+    query: str  # Nominatim search
+
+
 class Rider(_Strict):
     uses_wheelchair: bool = False
     needs_extra_boarding_time: bool = False
@@ -99,6 +108,7 @@ class HttpConfig(_Strict):
 class GeoConfig(_Strict):
     demo_trip: DemoTrip
     rider: Rider
+    places: list[SavedPlace] = Field(default_factory=list)
     unknown_penalty: float = Field(ge=0, le=1)
     dropoff: DropoffConfig
     comfort: ComfortConfig

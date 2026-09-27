@@ -26,7 +26,7 @@ ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibra
 # (core/car, proto clench.rider.v1).
 ActionName = Literal[
     "speak", "send_message", "place_call", "room_control", "help_alert", "pull_over", "support",
-    "dropoff", "route", "support_answer",
+    "dropoff", "route", "support_answer", "car_mode",
 ]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
@@ -34,8 +34,9 @@ UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
 # suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options);
 # car = a trip control or a trip menu level (core/trip.py); back = the trip menu's Back tile;
-# answer = an answer option to a Support question.
-TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back", "answer"]
+# answer = an answer option to a Support question; corner = the corner button outside the grid
+# (Car mode on Home, back to Home in Car mode).
+TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back", "answer", "corner"]
 # How the car answered a request (proto ActionResult.Status).
 CarStatus = Literal["ACCEPTED", "COMPLETED", "DELAYED", "REJECTED"]
 # The ride's phase (proto RideState.Phase, the ones the mock car uses).
@@ -229,6 +230,10 @@ class Screen(_Msg):
     pointer: ActivePointer | None = None
     # The question on a support_question screen ("Support asks: Are you hurt?"); None elsewhere.
     prompt: str | None = None
+    # The corner button outside the six-tile grid: "Car mode" on Home, "Home" in Car mode; None
+    # elsewhere. It is tile index len(tiles): the highlight, POINT and TAP use that index for it,
+    # and the scan reaches it last.
+    corner: Tile | None = None
 
 
 class Confirm(_Msg):
@@ -348,11 +353,12 @@ class CarLog(_Msg):
 
 
 class CarSim(_Msg):
-    """/car-sim -> Core: ask the rider a Support question, or change the mock car's situation."""
+    """/car-sim -> Core: ask the rider a Support question, change the mock car's situation, or plan a
+    trip to any address (a caregiver typing the destination)."""
 
     type: Literal["CAR_SIM"] = "CAR_SIM"
-    command: Literal["ask", "set"]
-    text: str | None = None  # ask: the question
+    command: Literal["ask", "set", "plan"]
+    text: str | None = None  # ask: the question; plan: the destination address
     options: list[str] = Field(default_factory=list, max_length=5)  # ask: answer labels
     timeout_s: int = Field(default=30, ge=5, le=300)
     urgent: bool = False

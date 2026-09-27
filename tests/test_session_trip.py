@@ -276,6 +276,8 @@ def test_a_scan_covers_every_tile_of_a_level_back_included(in_trip, sched, sent)
     sched.advance(3 * SCAN_S)
     assert last_screen(sent).highlight == 3  # Back
     sched.advance(SCAN_S)
+    assert last_screen(sent).highlight == 4  # the Home corner, after the grid
+    sched.advance(SCAN_S)
     assert last_screen(sent).highlight == 0
 
 

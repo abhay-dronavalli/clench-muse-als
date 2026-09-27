@@ -233,7 +233,8 @@ def create_app(
         db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
-    app.include_router(build_geo_router(env))  # /api/geo/*: trip planning from public map data
+    # /api/geo/*: trip planning from public map data; /api/geo/trip serves the Core's current trip
+    app.include_router(build_geo_router(env, current=lambda: app.state.session.geo_trip if hasattr(app.state, "session") else None))
     app.state.hub = hub
     app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False, blocked='Muse service not connected')
     app.state.sensor_seen = 0.0
@@ -290,7 +291,7 @@ def create_app(
                             continue
                     if role == "carsim":
                         if isinstance(msg, CarSim):
-                            car_sim(app.state.car, msg)
+                            car_sim(app.state.car, msg, session)
                         else:  # READY: the car's state now
                             hub.send_to(client, app.state.car.state())
                         continue
@@ -429,9 +430,12 @@ def create_app(
     return app
 
 
-def car_sim(car: MockCar, msg: CarSim) -> None:
-    """/car-sim plays the car's side: ask the rider a Support question, or change the situation."""
-    if msg.command == "ask" and msg.text:
+def car_sim(car: MockCar, msg: CarSim, session: Session) -> None:
+    """/car-sim plays the car's side: ask the rider a Support question, change the situation, or plan
+    a trip to an address a caregiver typed."""
+    if msg.command == "plan" and msg.text:
+        session.plan_trip(msg.text.strip(), msg.text.strip())
+    elif msg.command == "ask" and msg.text:
         car.ask(msg.text, msg.options, msg.timeout_s, msg.urgent)
     elif msg.command == "set":
         car.set_situation(on_highway=msg.on_highway, phase=msg.phase)

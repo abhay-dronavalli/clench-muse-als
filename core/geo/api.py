@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -46,13 +46,14 @@ class _Gate:
             self._last = now
 
 
-def build_geo_router(env: Mapping[str, str], cfg: GeoConfig | None = None) -> APIRouter:
+def build_geo_router(env: Mapping[str, str], cfg: GeoConfig | None = None, current: Callable[[], Trip | None] | None = None) -> APIRouter:
+    """`current`: the trip the Core is using now (a trip planned live in Car mode), else the committed one."""
     cfg = cfg or load_geo_config()
     router = APIRouter(prefix="/api/geo")
     gate = _Gate()
 
     def committed() -> Trip:
-        trip = load_trip()
+        trip = (current() if current is not None else None) or load_trip()
         if trip is None:
             raise HTTPException(status_code=404, detail="No demo trip yet: run uv run python scripts/geo_trip.py --send")
         return trip

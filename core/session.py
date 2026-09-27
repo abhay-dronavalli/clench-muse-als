@@ -116,6 +116,7 @@ from core.profile import Profile
 from core.car.link import ActionRequest, CarLink, SupportAnswer, SupportQuestion
 from core.car.mock import MockCar
 from core.geo.model import Trip as GeoTrip
+from core.geo.config import load_geo_config
 from core.geo.trip import load_trip
 from core.trip import BACK_LABEL, CONFIRM_PHRASE, MUSIC_ON, SPLIT_TOP, PULL_OVER_S, ROOT as TRIP_ROOT, ROUTINE_S, Car, TripNode
 from core.rank import Entry, Ranker
@@ -270,6 +271,12 @@ def _unique(items: list[Item], lang: Lang) -> list[Item]:
     return out
 
 
+PLAN_TIMEOUT_S = 20.0  # a live trip plan slower than this falls back to the demo trip
+CORNER_CAR: dict[Lang, str] = {"en": "Car mode", "es": "Modo auto"}
+CORNER_HOME: dict[Lang, str] = {"en": "Home", "es": "Inicio"}
+CAR_MODE_PHRASE: dict[Lang, str] = {"en": "Start Car mode?", "es": "¿Iniciar el modo auto?"}
+
+
 def _drop_short(description: str) -> str:
     """ "Main entrance, Jack Kassewitz Building (I)(9) from service road" -> the part before "from"."""
     return description.split(" from ", 1)[0]
@@ -328,6 +335,9 @@ class Session:
         self.muse_enabled = False
         self.onboarding = False
         self.trip = False  # trip mode: the trip screen instead of the menus (core/trip.py)
+        # A ride is under way. Leaving Car mode (the Home corner) only leaves the screen: the ride goes on,
+        # and the Car mode corner on Home brings the rider straight back to it.
+        self.ride_active = False
         self.trip_layout: TripLayout = "car"  # car / split (map beside the car: fewer top tiles) / map
         self._trip_path: list[TripNode] = [TRIP_ROOT]  # the trip menu levels, top first
         # The car (core/car): the in-process mock unless main passes another link. The trip tiles
@@ -342,6 +352,8 @@ class Session:
         self._question: SupportQuestion | None = None  # an open Support question (it takes the screen)
         self._question_timer: TimerHandle | None = None
         self.input_connected: Callable[[], bool] = lambda: True  # main: is a board / input connected
+        self._planning: str | None = None  # the destination being planned live (core/geo/plan.py)
+        self._plan_note: str | None = None  # why the last plan fell back to the demo trip
         self._acting_timer: TimerHandle | None = None
         self._ride_timer: TimerHandle | None = None
         self.tile_switch_margin = profile.tile_switch_margin
@@ -647,6 +659,10 @@ class Session:
         if self._question is not None:
             self._pick_answer(index)
             return
+        corner = self._corner()
+        if corner is not None and index == self._grid_count():
+            self._pick_corner(corner)
+            return
         if self.trip:
             self._pick_trip(index)
             return
@@ -703,6 +719,12 @@ class Session:
         self._shortcut_from = None
         text = item.phrase(self.lang)
         ctx = self._context(text, item.contact)
+        if item.kind == "corner":  # "Start Car mode?" confirmed: nothing to say or send
+            self._pending = None
+            self._set_trip(True)
+            if self.state is SessionState.CONFIRMING:  # _change_trip leaves a confirm screen for us to close
+                self._go_home(first_tile=True)
+            return
         self._record(item, confirmed=True, text=text)
         if item.kind in ("car", "answer"):
             # A HIGH-safety trip request or a Support answer: confirmed, so now it goes to the car
@@ -792,6 +814,12 @@ class Session:
             self._enter_frame()
             return
         assert node.car_id is not None
+        if node.car_id.startswith("plan:"):
+            place = next(p for p in load_geo_config().places if p.key == node.car_id.removeprefix("plan:"))
+            self._trip_path.pop()  # back to the Trip level, which shows the planning
+            self._enter_frame()
+            self.plan_trip(place.query, place.label_en if self.lang == "en" else place.label_es)
+            return
         if node.confirm:
             self._car_confirm = node
             self._confirm(
@@ -818,14 +846,93 @@ class Session:
         if t is not None and t.dropoff is not None and t.dropoff.request is not None:
             short = _drop_short(t.dropoff.request.description)
             nodes.append(TripNode("dropoff", f"Drop off at {short}?", f"¿Bajar en {short}?", car_id="dropoff", confirm=True))
+        nodes.append(TripNode("plan", "Plan a trip", "Planear un viaje", dynamic="plan"))
         return nodes
+
+    def _plan_nodes(self) -> list[TripNode]:
+        return [TripNode(p.key, p.label_en, p.label_es, car_id=f"plan:{p.key}") for p in load_geo_config().places][:5]
+
+    def plan_trip(self, query: str, label: str) -> None:
+        """Plan a new trip live (layers 1 and 2) in a worker thread. On success its routes and drop-off
+        replace the Trip level's; after PLAN_TIMEOUT_S or a failure the demo trip stays, and the rider
+        is told why. MDC Kendall is the committed demo trip itself (no live planning needed)."""
+        if self._planning is not None:
+            log.info("already planning a trip to %s; %r ignored", self._planning, label)
+            return
+        self._planning = label
+        self._plan_note = None
+        self._voice.speak(("Planning your trip to " if self.lang == "en" else "Planeando tu viaje a ") + label + ".", self.lang, "system")
+        self._redraw_trip()
+        self._spawn(self._plan_task(query, label))
+
+    async def _plan_task(self, query: str, label: str) -> None:
+        trip = None
+        why = ""
+        try:
+            demo = load_trip()
+            if demo is not None and demo.dropoff is not None and query == next((p.query for p in load_geo_config().places if p.key == "mdc"), None):
+                trip = demo  # MDC Kendall: the committed demo trip
+            else:
+                from core.geo.plan import plan_trip
+
+                work = asyncio.ensure_future(asyncio.to_thread(plan_trip, query, label))
+                try:
+                    trip = await asyncio.wait_for(asyncio.shield(work), PLAN_TIMEOUT_S)
+                except asyncio.TimeoutError:
+                    # Keep the demo trip now; if the plan still finishes, offer it then (and it is cached).
+                    work.add_done_callback(lambda f: self._late_plan(f, label))
+                    raise
+                if trip.dropoff is None or trip.ride is None:
+                    why = "; ".join(trip.notes) or "the map services did not answer"
+                    trip = None
+        except asyncio.TimeoutError:
+            why = f"it took more than {PLAN_TIMEOUT_S:.0f} seconds"
+        except Exception as e:  # a planning failure must never break the session
+            log.exception("trip planning failed")
+            why = type(e).__name__
+        self._planning = None
+        if trip is not None and trip.dropoff is not None and trip.ride is not None:
+            self.geo_trip = trip
+            if isinstance(self.car_link, MockCar):
+                self.car_link.routes = {t.route_id: t.label for t in trip.ride.tiles}
+            text = f"Your trip to {label} is planned." if self.lang == "en" else f"Tu viaje a {label} está listo."
+        else:
+            self._plan_note = (f"Could not plan {label} ({why}); showing the demo trip." if self.lang == "en"
+                               else f"No se pudo planear {label} ({why}); se muestra el viaje de demostración.")
+            text = self._plan_note
+        log.info("trip plan: %s", text)
+        self._voice.speak(text, self.lang, "system")
+        self._redraw_trip()
+
+    def _late_plan(self, work: "asyncio.Future[GeoTrip]", label: str) -> None:
+        """A plan that missed PLAN_TIMEOUT_S finished after all: use it, and say so (unless another
+        plan started meanwhile)."""
+        if self._planning is not None or work.cancelled() or work.exception() is not None:
+            return
+        trip = work.result()
+        if trip.dropoff is None or trip.ride is None:
+            return
+        self.geo_trip = trip
+        self._plan_note = None
+        if isinstance(self.car_link, MockCar):
+            self.car_link.routes = {t.route_id: t.label for t in trip.ride.tiles}
+        text = f"Your trip to {label} is ready now." if self.lang == "en" else f"Tu viaje a {label} ya está listo."
+        log.info("trip plan (late): %s", text)
+        self._voice.speak(text, self.lang, "system")
+        self._redraw_trip()
+
+    def _redraw_trip(self) -> None:
+        if self.trip and self.state in (SessionState.SCANNING, SessionState.ACTING) and self._question is None:
+            self._emit(self._screen())
 
     def _ride_prompt(self) -> str | None:
         """What the Trip level says above its tiles: the drop-off's reason and each route's trade-off."""
         t = self.geo_trip
+        if self._planning is not None:
+            return ("Planning your trip to " if self.lang == "en" else "Planeando tu viaje a ") + self._planning + "…"
         if t is None:
-            return None
-        parts = []
+            return self._plan_note
+        parts = [self._plan_note] if self._plan_note else []
         if t.ride is not None:
             parts += [f"{tile.label}: {tile.detail}" for tile in t.ride.tiles[:2]]
             parts.append(t.duration_note)
@@ -967,9 +1074,11 @@ class Session:
     def _change_trip(self) -> None:
         """Trip mode on or off. A new trip starts a fresh (mock) ride. While scanning, the board switches
         screens at once (first tile); otherwise (confirming, speaking, help) it applies from the next screen."""
-        log.info("trip mode %s", "on: the trip screen" if self.trip else "off: the menus")
-        self._cancel_ride()
-        if self.trip:
+        log.info("trip mode %s", "on: the trip screen" if self.trip else "off: the menus (the ride goes on)")
+        if self.trip and self.ride_active:
+            self._emit(self.car_link.state())  # back to the ride under way
+        elif self.trip:
+            self.ride_active = True
             self.car_link.start_ride()  # a fresh (mock) ride; its CAR_STATE comes back through on_car_state
             self._ride_timer = self._scheduler.call_later(RIDE_MINUTE_S, self._ride_tick)
         if self.state in (SessionState.SCANNING, SessionState.LOADING, SessionState.ACTING):
@@ -984,7 +1093,7 @@ class Session:
     def _ride_tick(self) -> None:
         """Another minute of the mock ride: arrival closer, a little battery used."""
         self._ride_timer = None
-        if not self.trip:
+        if not self.ride_active:
             return
         self.car_link.tick()
         self._ride_timer = self._scheduler.call_later(RIDE_MINUTE_S, self._ride_tick)
@@ -996,18 +1105,52 @@ class Session:
 
     def _tile_count(self) -> int:
         """Tiles on the current screen: a Support question's options, the trip level's (Back included),
-        or the frame's items plus "Other..."."""
+        or the frame's items plus "Other...", then the corner button when there is one."""
+        return self._grid_count() + (1 if self._corner() is not None else 0)
+
+    def _grid_count(self) -> int:
         if self._question is not None:
             return len(self._question.options)
         if self.trip:
             return len(self._trip_children()) + (1 if len(self._trip_path) > 1 else 0)
         return len(self.frame.items) + 1
 
+    def _corner(self) -> Tile | None:
+        """The corner button outside the grid: "Home" in Car mode (leaves the screen, not the ride),
+        "Car mode" on the Home screen. None on a Support question and below Home."""
+        if self._question is not None:
+            return None
+        if self.trip:
+            return Tile(id="corner.home", label=CORNER_HOME[self.lang], kind="corner")
+        if len(self._stack) == 1 and self.frame.kind == "menu":
+            return Tile(id="corner.car_mode", label=CORNER_CAR[self.lang], kind="corner")
+        return None
+
+    def _pick_corner(self, corner: Tile) -> None:
+        self._echo(corner.label)
+        if corner.id == "corner.car_mode":
+            # Entering Car mode starts or resumes a ride: a HIGH-safety step, so it confirms first.
+            self._confirm(Item(kind="corner", id=corner.id, event_id="trip.car_mode", text=CAR_MODE_PHRASE[self.lang],
+                               ai_label=corner.label, action="car_mode"))
+            return
+        log.info("Car mode: back to Home (the ride goes on)")
+        self._set_trip(False)
+
+    def _set_trip(self, on: bool) -> None:
+        """Show or leave the car screen, as the dev panel's SETTINGS `trip` does, and tell every client."""
+        if on == self.trip:
+            return
+        self.trip = on
+        self._change_trip()
+        self._emit(self.settings())
+
     def _trip_children(self) -> list[TripNode]:
         """The trip level's controls; at the top of the split layout only the most important ones."""
         level = self._trip_path[-1]
         if level.dynamic == "ride":
             return self._ride_nodes()
+        if level.dynamic == "plan":
+            return self._plan_nodes()
         if self.trip_layout == "split" and self.pointer.source != "scan" and len(self._trip_path) == 1:
             return [n for n in level.children if n.key in SPLIT_TOP]
         music_off = self.car_link.state().music_playing is False
@@ -1445,7 +1588,7 @@ class Session:
         self._ask_jev(self.frame)  # an answer already cached re-ranks here, before the screen is drawn
         home = len(self._stack) == 1
         shortcut_jev = self._prefetch_shortcut() if home else None
-        count = len(self.frame.items) + 1
+        count = self._tile_count()
         self.pointer.on_tiles_changed(count)
         if first_tile:
             self.pointer.place(count, 0)
@@ -1681,7 +1824,7 @@ class Session:
             if self.state in (SessionState.SCANNING, SessionState.LOADING):
                 self._enter_frame()
                 return
-            self.pointer.on_tiles_changed(len(self.frame.items) + 1)
+            self.pointer.on_tiles_changed(self._tile_count())
         elif self.state is SessionState.LOADING:
             self._cancel_wait()
             self._resume()
@@ -1734,15 +1877,17 @@ class Session:
         else:
             tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind) for i in frame.items]
             tiles.append(self._other_tile(frame))
-        key = tuple((t.id, t.label, t.kind) for t in tiles)
+        corner_tile = self._corner()
+        key = tuple((t.id, t.label, t.kind) for t in tiles + ([corner_tile] if corner_tile is not None else []))
         if key != self._tiles_key:  # new tiles: a new seq, so a POINT for the old ones is ignored
             if self.trip:
                 # Preserve controls by id when loss of gaze expands Split to six tiles.
                 old = self._tiles_key or ()
                 index = self.pointer.highlight
                 selected = old[index][0] if 0 <= index < len(old) else None
-                ids = [t.id for t in tiles]
-                self.pointer.place(len(tiles), ids.index(selected) if selected in ids else 0)
+                corner = self._corner()
+                ids = [t.id for t in tiles] + ([corner.id] if corner is not None else [])  # the corner is the last index
+                self.pointer.place(len(ids), ids.index(selected) if selected in ids else 0)
             self._tiles_key = key
             self._seq += 1
         highlight = self.pointer.highlight
@@ -1757,6 +1902,7 @@ class Session:
             loading=self.state is SessionState.LOADING,
             pointer=self.pointer.source,
             prompt=prompt,
+            corner=self._corner(),
         )
 
     def _note_highlight(self, highlight: int) -> None:

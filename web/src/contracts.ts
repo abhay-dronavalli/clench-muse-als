@@ -25,7 +25,7 @@ export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 
 /** dropoff / route / support_answer: trip requests confirmed and sent to the car (core/car) */
 export type ActionName =
   | 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over' | 'support'
-  | 'dropoff' | 'route' | 'support_answer'
+  | 'dropoff' | 'route' | 'support_answer' | 'car_mode'
 /** How the car answered a request (proto ActionResult.Status) */
 export type CarStatus = 'ACCEPTED' | 'COMPLETED' | 'DELAYED' | 'REJECTED'
 /** The ride's phase (proto RideState.Phase, the ones the mock car uses) */
@@ -40,7 +40,7 @@ export type UtteranceKind = 'phrase' | 'echo' | 'system'
  * suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
  */
 /** car = a trip menu level or control (core/trip.py); back = the trip menu's Back tile */
-export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car' | 'back' | 'answer'
+export type TileKind = 'branch' | 'leaf' | 'suggestion' | 'other' | 'car' | 'back' | 'answer' | 'corner'
 /** What a trip control does (core/trip.py). */
 export type CarActionName =
   | 'window_up'
@@ -218,6 +218,11 @@ export interface Screen {
   pointer?: ActivePointer | null
   /** the question on a support_question screen ("Support asks: Are you hurt?"); null elsewhere */
   prompt?: string | null
+  /**
+   * the corner button outside the six-tile grid ("Car mode" on Home, "Home" in Car mode); null
+   * elsewhere. It is tile index tiles.length for the highlight, POINT and TAP; the scan reaches it last.
+   */
+  corner?: Tile | null
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */
@@ -344,10 +349,10 @@ export interface CarLog {
   rtt_ms?: number | null
 }
 
-/** /car-sim -> Core: ask the rider a Support question, or change the mock car's situation. */
+/** /car-sim -> Core: ask the rider a Support question, change the mock car's situation, or plan a trip to any address. */
 export interface CarSim {
   type: 'CAR_SIM'
-  command: 'ask' | 'set'
+  command: 'ask' | 'set' | 'plan'
   text?: string | null
   options?: string[]
   timeout_s?: number

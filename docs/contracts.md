@@ -326,14 +326,14 @@ suggestions screen keeps its leaf's id. The AI never chooses the action or the c
 takes them from its level, an AI sentence from its leaf.
 
 ```json
-{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam", "prompt": null}
+{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam", "prompt": null, "corner": null}
 ```
 
 **Suggestions screen** (PRD section 5 step 6). Up to 3 AI sentences, then the leaf's fixed phrase
 (when the AI did not already write it), then "Other..." (more sentences):
 
 ```json
-{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan", "prompt": null}
+{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan", "prompt": null, "corner": null}
 ```
 
 **Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
@@ -346,7 +346,7 @@ Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Pa
 para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
-{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null, "prompt": null}
+{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null, "prompt": null, "corner": null}
 ```
 
 **Pointing** (PRD D2, A3.3a). The Core has one pointer slot, set live by SETTINGS `pointing_mode`:
@@ -528,6 +528,17 @@ that connects during a trip. The tablet's 3D scene drives at `speed_mph` (0 afte
 {"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4, "phase": "EN_ROUTE", "music_playing": true, "on_highway": false}
 ```
 
+### SCREEN: the corner button (Car mode)
+
+On Home the Core adds a corner button outside the six-tile grid, "Car mode" (`corner`, kind `corner`,
+tile index `len(tiles)`). Gaze, head, taps and the scan reach it like any tile; picking it opens the
+confirm screen (`action` `car_mode`, "Start Car mode?"). In Car mode the corner is "Home": it leaves the
+car screen without confirm and without ending the ride; the Car mode button brings the rider back to it.
+
+```json
+{"type": "SCREEN", "screen": "menu", "seq": 3, "tiles": [{"id": "suggested", "label": "Suggested", "kind": "branch"}], "highlight": 1, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "gaze", "prompt": null, "corner": {"id": "corner.car_mode", "label": "Car mode", "kind": "corner"}}
+```
+
 ### SCREEN: a Support question
 
 When the car's Support team asks the rider something (core/car, proto `SupportQuestion`), the trip
@@ -536,7 +547,7 @@ one opens the confirm screen (`action` `support_answer`); nothing is sent before
 answer before the question's timeout the Core sends `SupportAnswer.no_response`. Help works as usual.
 
 ```json
-{"type": "SCREEN", "screen": "support_question", "seq": 40, "tiles": [{"id": "support.q1.yes", "label": "Yes", "kind": "answer"}, {"id": "support.q1.no", "label": "No", "kind": "answer"}, {"id": "support.q1.not_sure", "label": "Not sure", "kind": "answer"}], "highlight": 0, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "scan", "prompt": "Support asks: Are you hurt?"}
+{"type": "SCREEN", "screen": "support_question", "seq": 40, "tiles": [{"id": "support.q1.yes", "label": "Yes", "kind": "answer"}, {"id": "support.q1.no", "label": "No", "kind": "answer"}, {"id": "support.q1.not_sure", "label": "Not sure", "kind": "answer"}], "highlight": 0, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "scan", "prompt": "Support asks: Are you hurt?", "corner": null}
 ```
 
 ### CAR_RESULT
@@ -584,7 +595,8 @@ One request or answer crossing the car link, with the round trip for answers.
 ### CAR_SIM
 
 `ask` sends a Support question to the rider; `set` changes the mock car's situation (on the highway,
-the ride's phase).
+the ride's phase); `plan` plans a trip to the address in `text` (a caregiver typing any destination):
+layers 1 and 2 are computed live, or the demo trip stays after 20 s or a failure.
 
 ```json
 {"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"], "timeout_s": 30, "urgent": true, "on_highway": null, "phase": null}

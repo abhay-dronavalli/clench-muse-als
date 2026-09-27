@@ -122,7 +122,9 @@ def test_scan_moves_and_wraps(session, sched, sent):
     sched.advance(SCAN_S)
     assert last_screen(sent).highlight == 1
     sched.advance(5 * SCAN_S)
-    assert last_screen(sent).highlight == 0  # 6 tiles: wrapped around
+    assert last_screen(sent).highlight == 6  # 6 tiles, then the Car mode corner
+    sched.advance(SCAN_S)
+    assert last_screen(sent).highlight == 0  # wrapped around
 
 
 def test_walk_pain_back_a_lot_then_speak(session, sched, sent):

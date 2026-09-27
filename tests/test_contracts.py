@@ -93,7 +93,7 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
             "path": [],
             "countdown": None,
             "loading": False,
-            "pointer": "scan", "prompt": None,
+            "pointer": "scan", "prompt": None, "corner": None,
         },
     ),
     "CONFIRM": (
