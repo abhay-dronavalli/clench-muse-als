@@ -304,38 +304,37 @@ def test_pull_over_from_the_split_layout_still_confirms(in_trip, sched, sent):
 
 
 def test_tracking_loss_expands_split_preserves_control_and_restores_preference(in_trip, sched, sent):
+    # The split layout keeps SPLIT_TOP at the top level; since the merged trip menu (decisions #23) that
+    # is all three levels, so losing the gaze changes the scanning, not the tiles.
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, trip_layout="split"))
-    assert labels(sent) == TOP  # no gaze at startup: all six controls are available
+    assert labels(sent) == TOP
     in_trip.handle(FaceOk(ok=True))
     in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
-    assert labels(sent) == ["Windows", "Pull over", "Support"]
+    assert labels(sent) == TOP
     in_trip.handle(Point(source="gaze", tile=1, seq=in_trip.seq, t=0.0))
-    old_seq = in_trip.seq
     in_trip.handle(FaceOk(ok=False))
     sched.advance(2.9)
-    assert len(labels(sent)) == 3  # a blink never expands the layout
+    assert in_trip.highlight == 1  # a blink never starts the scan
     sched.advance(0.2)
     assert labels(sent) == TOP
-    assert last_screen(sent).tiles[in_trip.highlight].label == "Pull over"
+    assert last_screen(sent).tiles[in_trip.highlight].label == "Comfort"
     assert in_trip.settings().trip_layout == "split"
-    in_trip.handle(Tap(tile=1, seq=old_seq, t=0.0))
-    assert in_trip.state is SessionState.SCANNING  # stale Split tile cannot pick Temperature
-    sched.advance(6 * SCAN_S)
-    assert in_trip.highlight == 3  # wraps across all six controls
+    sched.advance(3 * SCAN_S)
+    assert in_trip.highlight == 1  # the scan wraps across all three controls
     in_trip.handle(FaceOk(ok=True))
-    in_trip.handle(Point(source="gaze", tile=3, seq=in_trip.seq, t=0.0))
-    assert labels(sent) == ["Windows", "Pull over", "Support"]
-    assert in_trip.highlight == 1
+    in_trip.handle(Point(source="gaze", tile=2, seq=in_trip.seq, t=0.0))
+    assert labels(sent) == TOP
+    assert in_trip.highlight == 2
 
 
 def test_tracking_recovery_keeps_the_current_submenu(in_trip, sched, sent):
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, trip_layout="split"))
-    tap_label(in_trip, sched, sent, "Temperature")
+    tap_label(in_trip, sched, sent, "Comfort")
     before = labels(sent)
     in_trip.handle(FaceOk(ok=True))
     in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
-    assert labels(sent) == before == ["Warmer", "Cooler", "Back"]
-    assert last_screen(sent).path == ["Temperature"]
+    assert labels(sent) == before == COMFORT
+    assert last_screen(sent).path == ["Comfort"]
 
 
 def test_setup_input_never_operates_hidden_tiles_but_help_still_works(in_trip, sched, sent):
@@ -352,12 +351,12 @@ def test_setup_input_never_operates_hidden_tiles_but_help_still_works(in_trip, s
     in_trip.handle(DoubleBlink(t=0))
     assert in_trip.state is SessionState.SCANNING
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=False))
-    tap_label(in_trip, sched, sent, "Windows")
+    go(in_trip, sched, sent, "Comfort", "Windows")
     assert labels(sent) == ["Up", "Down", "Back"]
 
 
 def test_setup_timeout_cannot_confirm_an_existing_outward_action(in_trip, sched, sent):
-    tap_label(in_trip, sched, sent, "Support")
+    go(in_trip, sched, sent, "Trip changes", "Contact Support")
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=True))
     in_trip.handle(Clench(t=0, strength=1))
     in_trip.handle(Tap(tile=None, seq=None, t=0))
