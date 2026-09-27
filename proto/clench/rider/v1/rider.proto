@@ -1,0 +1,308 @@
+// Clench Rider API, v1
+//
+// Lets a vehicle (for example a driverless car's onboard software) talk to a
+// rider who communicates through Clench: one reliable movement (jaw clench,
+// eyebrow raise) plus eye tracking, instead of touch or voice.
+//
+// Design rules:
+// - One bidirectional stream per ride. Either side can send at any time.
+// - The car stays in charge. Everything Clench sends is a REQUEST; the car
+//   decides whether, when, and how to act, and always answers with an
+//   ActionResult.
+// - Clench only sends a request after the rider has confirmed it on the
+//   confirm screen. High-safety actions are never offered as one-step
+//   shortcuts.
+// - Capabilities, not diagnoses. Nothing here carries medical information.
+// - Help does not depend on this API: Clench alerts caregivers directly and
+//   only informs the car.
+//
+// Versioning: follow protobuf rules. Never reuse or renumber a field; add new
+// fields with new numbers; breaking changes go in a new package (v2).
+//
+// Generate code, for example in Python:
+//   python -m grpc_tools.protoc -I proto --python_out=. --grpc_python_out=. \
+//     proto/clench/rider/v1/rider.proto
+
+syntax = "proto3";
+
+package clench.rider.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "ai.clench.rider.v1";
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+service RiderLink {
+  // The car opens one stream when a Clench rider's trip begins and closes it
+  // when the trip ends.
+  rpc Session(stream CarMessage) returns (stream RiderMessage);
+}
+
+// ---------------------------------------------------------------------------
+// Envelopes
+// ---------------------------------------------------------------------------
+
+// Car -> Clench.
+message CarMessage {
+  string ride_id = 1;
+  // Increases by one per message from the car, so gaps and reordering are
+  // detectable after a reconnect.
+  uint64 sequence = 2;
+  google.protobuf.Timestamp sent_at = 3;
+
+  oneof body {
+    SessionStart start = 10;
+    RideState state = 11;
+    ActionCatalog actions = 12;
+    SupportQuestion support_question = 13;
+    SupportMessage support_message = 14;
+    ActionResult action_result = 15;
+    SessionEnd end = 16;
+  }
+}
+
+// Clench -> car.
+message RiderMessage {
+  string ride_id = 1;
+  uint64 sequence = 2;
+  google.protobuf.Timestamp sent_at = 3;
+
+  oneof body {
+    SessionAck ack = 10;
+    ActionRequest action_request = 11;
+    SupportAnswer support_answer = 12;
+    RideProfile ride_profile = 13;
+    DropoffRequest dropoff_request = 14;
+    RiderStatus rider_status = 15;
+    HelpAlert help_alert = 16;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session lifecycle
+// ---------------------------------------------------------------------------
+
+message SessionStart {
+  string vehicle_id = 1;
+  // BCP-47 language the car's Support team will use, e.g. "en", "es".
+  string preferred_language = 2;
+  LatLng pickup = 3;
+  LatLng destination = 4;
+  string destination_label = 5;
+}
+
+message SessionAck {
+  // Language the rider's board is using.
+  string rider_language = 1;
+  // False if Clench cannot currently receive input from the rider (for
+  // example the headband is disconnected). The car should route anything
+  // important to Support until a RiderStatus says otherwise.
+  bool rider_can_respond = 2;
+}
+
+message SessionEnd {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_ARRIVED = 1;
+    REASON_CANCELED = 2;
+    REASON_SUPPORT_ENDED = 3;
+  }
+  Reason reason = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Car state and available actions
+// ---------------------------------------------------------------------------
+
+message RideState {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_WAITING_FOR_PICKUP = 1;
+    PHASE_BOARDING = 2;
+    PHASE_EN_ROUTE = 3;
+    PHASE_ARRIVING = 4;
+    PHASE_ARRIVED = 5;
+    PHASE_PULLED_OVER = 6;
+  }
+  Phase phase = 1;
+  uint32 eta_seconds = 2;
+  float cabin_temperature_c = 3;
+  float target_temperature_c = 4;
+  bool music_playing = 5;
+  // 0 to 100.
+  uint32 volume_percent = 6;
+  repeated WindowState windows = 7;
+}
+
+message WindowState {
+  string position = 1;   // "front_left", "rear_right", ...
+  uint32 open_percent = 2;
+}
+
+// Everything the car will accept right now. The car resends the full catalog
+// whenever it changes (for example "pull over" becomes unavailable on a
+// highway). Clench only ever offers actions from the latest catalog.
+message ActionCatalog {
+  repeated Action actions = 1;
+}
+
+message Action {
+  // Stable id, e.g. "ac_down", "music_off", "pull_over", "contact_support".
+  string id = 1;
+  // Short tile label, at most about 20 characters, e.g. "Cooler".
+  string label = 2;
+  // One plain sentence about what it does. Clench uses it to rank tiles.
+  string description = 3;
+  Safety safety = 4;
+  bool available = 5;
+  // Spoken to the rider if they try an unavailable action.
+  string unavailable_reason = 6;
+}
+
+enum Safety {
+  SAFETY_UNSPECIFIED = 0;
+  // Comfort: temperature, music, volume, windows.
+  SAFETY_LOW = 1;
+  // Changes the trip or involves people: pull over, add stop, contact Support.
+  SAFETY_HIGH = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Rider requests and the car's answers
+// ---------------------------------------------------------------------------
+
+message ActionRequest {
+  // Unique per request. If the stream reconnects and a request is resent,
+  // the car must act on it only once.
+  string request_id = 1;
+  string action_id = 2;
+  // When the rider confirmed it on the confirm screen.
+  google.protobuf.Timestamp confirmed_at = 3;
+  InputMethod input_method = 4;
+}
+
+enum InputMethod {
+  INPUT_METHOD_UNSPECIFIED = 0;
+  INPUT_METHOD_CLENCH = 1;
+  INPUT_METHOD_EYEBROW = 2;
+  INPUT_METHOD_GAZE = 3;
+  INPUT_METHOD_CAREGIVER = 4;
+}
+
+message ActionResult {
+  string request_id = 1;
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_ACCEPTED = 1;    // will happen
+    STATUS_COMPLETED = 2;   // has happened
+    STATUS_DELAYED = 3;     // will happen once safe
+    STATUS_REJECTED = 4;    // will not happen
+  }
+  Status status = 2;
+  // Short sentence Clench speaks to the rider, e.g. "Pulling over in about
+  // 30 seconds" or "Can't stop here, next safe spot in 1 minute".
+  string message = 3;
+  uint32 expected_in_seconds = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Support (a remote human agent) <-> rider
+// ---------------------------------------------------------------------------
+
+// A question the rider answers by picking one option.
+message SupportQuestion {
+  string question_id = 1;
+  string text = 2;                     // "Are you hurt?"
+  repeated AnswerOption options = 3;   // Yes / No / Not sure
+  // If the rider has not answered by then, Clench sends
+  // SupportAnswer.no_response, which is itself important information.
+  uint32 timeout_seconds = 4;
+  bool urgent = 5;
+}
+
+message AnswerOption {
+  string id = 1;
+  string label = 2;
+}
+
+message SupportAnswer {
+  string question_id = 1;
+  oneof result {
+    string option_id = 2;
+    NoResponse no_response = 3;
+  }
+  google.protobuf.Timestamp answered_at = 4;
+}
+
+message NoResponse {
+  // Whether Clench could see the rider's input (headband and eye tracker
+  // connected) while waiting. "Connected but no answer" and "input lost" mean
+  // very different things to Support.
+  bool input_connected = 1;
+}
+
+// Something Support says that needs no answer; Clench speaks and shows it.
+message SupportMessage {
+  string text = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Trip preferences from public map data
+// ---------------------------------------------------------------------------
+
+// What the rider prefers. The car's planner decides how to honor it.
+message RideProfile {
+  enum RoutePreference {
+    ROUTE_PREFERENCE_UNSPECIFIED = 0;
+    ROUTE_PREFERENCE_FASTEST = 1;
+    // Fewer sharp turns, stops, bumps, and steep grades.
+    ROUTE_PREFERENCE_SMOOTHEST = 2;
+  }
+  RoutePreference route_preference = 1;
+  bool uses_wheelchair = 2;
+  bool needs_extra_boarding_time = 3;
+}
+
+// Clench scores candidate drop-off points near the destination (slope from
+// elevation data, entrance accessibility, ramps vs steps, sidewalks) and asks
+// the car to use the best one it can safely reach.
+message DropoffRequest {
+  string request_id = 1;
+  LatLng point = 2;
+  // Spoken and shown, e.g. "Side entrance with a ramp".
+  string description = 3;
+  // Why this point: "gentle slope, ramp at entrance".
+  string reason = 4;
+  // Next best choice if the first cannot be reached.
+  LatLng fallback_point = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Rider input health and help
+// ---------------------------------------------------------------------------
+
+message RiderStatus {
+  bool rider_can_respond = 1;
+  bool headband_connected = 2;
+  bool eye_tracker_connected = 3;
+}
+
+// Sent when the rider triggers help (long clench). Clench has already alerted
+// the rider's caregivers directly; this tells the car so Support can check in.
+message HelpAlert {
+  google.protobuf.Timestamp triggered_at = 1;
+  bool caregivers_notified = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+message LatLng {
+  double latitude = 1;
+  double longitude = 2;
+}
