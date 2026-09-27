@@ -74,3 +74,30 @@ $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
   recalibrate. Back cancels a calibration or the check.
 - `/gaze-test` in the same app has "Calibrate <name>" (saved per name) and the SDK filter switch.
 - The page is debuggable from the laptop at `chrome://inspect`.
+
+## The Muse on the tablet (`muse/`)
+
+With `MUSE_PROFILE` set, the "Clench Board" app reads the Muse 2 over Bluetooth itself and sends its
+clenches to the Core, in place of the laptop's `python -m sensor.main`. Same detector as `sensor/`
+(checked against BrainFlow's numbers), same events on `/ws/sensor`. No double blink yet.
+
+1. Calibrate on the laptop with the Muse bench (`test/clench_detect.py`), which writes
+   `test/calibration.<name>.json`. Disconnect the Muse from the laptop afterwards: it pairs with one
+   device at a time.
+2. In `local.properties` (or `-PMUSE_PROFILE=<name>` on the Gradle command line):
+
+   ```
+   MUSE_PROFILE=<name>          # reads ../../test/calibration.<name>.json at build time
+   # optional
+   MUSE_NAME=Muse-1234          # this headband only; otherwise the first Muse seen
+   MUSE_MOTION_LIMIT=30.0       # gyroscope degrees/s above which clenches are blocked
+   ```
+
+3. Run `run-tablet.bat`, allow Bluetooth ("Nearby devices") on the tablet, and turn the Muse on.
+   Do not press Connect headband on the laptop: the Core accepts one sensor.
+4. On the board, enable Muse clenches (Muse panel) once it shows connected.
+
+`adb logcat -s MuseSensor MuseBle` shows the search, the connection, the clock offset to the Core,
+and every gesture sent. Pure logic lives in `EmgFilter`, `ClenchInput`, `MuseWindow`, `SensorLoop`
+(unit tested: `.\gradlew.bat testDebugUnitTest`); `MuseBle` and `MuseSensor` are the Android side.
+After changing `sensor/detect/clench.py`'s filter, rerun `tools/muse_golden.py` and the tests.

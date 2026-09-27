@@ -595,3 +595,27 @@ choices below are Taher's.
   (never the highlighted tile) and locks its settings during a run. Dwell is unchanged: the dwell and
   clench race is left to the Core confirm-window fix on the safety work, and dwell stays off whenever
   the headband is in use.
+
+## 20. The Muse on the tablet: clenches without the laptop's Bluetooth (branch muse-on-android)
+
+- The tablet app can read the Muse 2 itself and be the Sensor Service: `kushagra/tablet/.../muse/`
+  talks Bluetooth LE to the headband directly (the muse-js / muse-lsl protocol: preset `p21`, TP9,
+  AF7, AF8, TP10 and the gyroscope), since BrainFlow's Muse support does not run on Android. It sends
+  the same SIGNAL, CLENCH and LONG_CLENCH to the Core's `/ws/sensor`, through the Vite proxy on the
+  `adb reverse` port the board already uses. Off unless the build sets `MUSE_PROFILE`.
+- Clench detection is a port of `sensor/`, not a new detector: the same envelope, EdgeDetector,
+  600 ms re-arm, pause and motion gating, contact and gap checks, SIGNAL thinning and reconnect
+  back-off. The envelope matches BrainFlow to about 1e-8 uV (`EmgFilterTest` on windows from
+  `kushagra/tablet/tools/muse_golden.py`), so a profile calibrated on the laptop works unchanged.
+  BrainFlow details this depends on: its zero-phase pass keeps the filter state between the forward
+  and backward runs, and FIFTY_AND_SIXTY runs the 60 Hz band-stop in one direction only.
+- The profile is read at build time from the same git-ignored `test/calibration.<name>.json` the
+  Python sensor loads, and built into `BuildConfig`. Calibrating stays on the laptop's Muse bench.
+- No DOUBLE_BLINK from the tablet yet: the Python sensor uses MNE's `find_eog_events`, which has no
+  Android port. Going back works from the keyboard stand-in meanwhile. Porting it is the next step.
+- The Core refuses gestures more than 1 s off its clock, and the tablet's clock is its own, so the
+  Core gains `GET /api/time` and the tablet moves every timestamp onto the Core's clock (fastest of
+  five round trips, again every minute). Without it the tablet uses its own clock and logs a warning.
+- The Bluetooth link and the Core link are independent: a Core restart does not drop the headband.
+  The Core still accepts one sensor, so the laptop's Connect headband and the tablet cannot both run;
+  the second one is refused and retries.
