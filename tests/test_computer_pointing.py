@@ -104,3 +104,30 @@ def test_auto_webcam_lookback_does_not_use_scan_history():
         assert c.selection.level=="menu"
         await c.aclose();s.stop()
     asyncio.run(run())
+
+
+def test_dwell_is_bound_to_layout_and_paused_during_calibration_and_help():
+    async def run():
+        s,clock,_=make()
+        await settle()
+        c=s.computer
+        s.handle(Settings(pointing_mode="gaze",scan_ms=500))
+        layout(c)
+        clock.advance(.4)
+        stale=point(c,1,pick=True)
+        s.handle(stale)
+        assert c.selection.level=="menu"
+        layout(c)
+        clock.advance(.4)
+        s.handle(stale)
+        assert c.selection.level=="menu" and not c.busy
+        c._event({"kind":"control","control":{"action":"calibrate"}})
+        s.handle(point(c,4,pick=True))
+        assert c.active and c.view().paused
+        s.handle(LongClench(t=0,duration=3))
+        assert c.help==5
+        c._event({"kind":"control","control":{"action":"calibration_done"}})
+        s.handle(DoubleBlink(t=0))
+        assert c.active and c.help is None and not c.calibrating
+        await c.aclose();s.stop()
+    asyncio.run(run())

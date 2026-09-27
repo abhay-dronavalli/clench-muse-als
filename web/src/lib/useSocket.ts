@@ -4,6 +4,12 @@ import type { Message } from '../contracts'
 export type SocketStatus = 'connecting' | 'open' | 'closed'
 export type Send = (msg: Message) => boolean
 
+export interface LocalTransport {
+  send: Send
+  subscribe: (receive: (msg: Message) => void) => () => void
+}
+declare global { interface Window { clenchTransport?: LocalTransport } }
+
 interface Options {
   /** Connect only while true (default true). */
   enabled?: boolean
@@ -21,7 +27,7 @@ function wsUrl(path: string): string {
 
 /** WebSocket to the Core with automatic reconnect (backoff up to 5 s). */
 export function useSocket(path: string, { enabled = true, onOpen, onMessage }: Options = {}) {
-  const [status, setStatus] = useState<SocketStatus>('closed')
+  const [status, setStatus] = useState<SocketStatus>(() => window.clenchTransport ? 'open' : 'closed')
   const wsRef = useRef<WebSocket | null>(null)
   const handlers = useRef({ onOpen, onMessage })
   useEffect(() => {
@@ -29,6 +35,7 @@ export function useSocket(path: string, { enabled = true, onOpen, onMessage }: O
   })
 
   const send = useCallback<Send>((msg) => {
+    if (window.clenchTransport) return window.clenchTransport.send(msg)
     const ws = wsRef.current
     if (ws?.readyState !== WebSocket.OPEN) return false
     ws.send(JSON.stringify(msg))
@@ -37,6 +44,11 @@ export function useSocket(path: string, { enabled = true, onOpen, onMessage }: O
 
   useEffect(() => {
     if (!enabled) return
+    if (window.clenchTransport) {
+      const stop = window.clenchTransport.subscribe(msg => handlers.current.onMessage?.(msg, send))
+      handlers.current.onOpen?.(send)
+      return stop
+    }
     let stopped = false
     let attempt = 0
     let retry: number | undefined

@@ -22,14 +22,14 @@ type Phase =
  * comfortably toward it. The medians become the range, saved to the Core so it survives reloads.
  * Esc cancels. Nothing is sent to the Core but the result (no video, no frames).
  */
-export function CalibrationOverlay({ lang, onSaved, onClose }: { lang: Lang; onSaved: (r: HeadRange) => void; onClose: () => void }) {
+export function CalibrationOverlay({ lang, onSaved, onClose, save = saveHeadRange }: { lang: Lang; onSaved: (r: HeadRange) => void; onClose: () => void; save?: typeof saveHeadRange }) {
   const s = STRINGS[lang].calibrate
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' })
   const [progress, setProgress] = useState(0) // 0..1 within the current step
   const cameraOn = useTrackerStatus().kind === 'on'
-  const done = useRef({ onSaved, onClose })
+  const done = useRef({ onSaved, onClose, save })
   useEffect(() => {
-    done.current = { onSaved, onClose }
+    done.current = { onSaved, onClose, save }
   })
 
   useEffect(() => {
@@ -71,7 +71,7 @@ export function CalibrationOverlay({ lang, onSaved, onClose }: { lang: Lang; onS
         return
       }
       setPhase({ kind: 'saving' })
-      saveHeadRange(result.range).then(
+      done.current.save(result.range).then(
         (saved) => {
           done.current.onSaved(saved)
           setPhase({ kind: 'saved' })

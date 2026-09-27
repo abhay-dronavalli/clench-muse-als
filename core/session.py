@@ -86,6 +86,7 @@ from core.contracts import (
     DoubleBlink,
     FaceOk,
     ComputerPoint,
+    ComputerTelemetry,
     Lang,
     LongClench,
     Message,
@@ -435,6 +436,8 @@ class Session:
                     self.pointer.on_point(msg)
             case ComputerPoint():
                 self.computer.on_point(msg)
+            case ComputerTelemetry():
+                self.computer.on_telemetry(msg)
             case FaceOk():
                 if msg.ok != self.face_ok:
                     log.info("webcam %s", "sees a face" if msg.ok else "lost the face")

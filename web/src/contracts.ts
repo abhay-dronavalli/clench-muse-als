@@ -133,6 +133,29 @@ export interface ComputerPoint {
   found: boolean
   status: 'tracking' | 'no_tracker' | 'lost' | 'camera_error' | 'starting' | 'off'
   t: number
+  pick?: boolean
+}
+
+export interface ComputerTelemetry {
+  type: 'COMPUTER_TELEMETRY'
+  x: number | null
+  y: number | null
+  show_cursor: boolean
+  dwell: boolean
+  progress: number
+  camera: 'on' | 'off' | 'starting' | 'error'
+  yaw: number | null
+  pitch: number | null
+  eye_connected: boolean
+  head_range: HeadRange | null
+  voice_source: string | null
+}
+
+export interface ComputerControl {
+  type: 'COMPUTER_CONTROL'
+  action: 'cursor' | 'dwell' | 'retry' | 'calibrate' | 'calibration_done' | 'head_range'
+  value?: boolean
+  head_range?: HeadRange
 }
 
 // --- Board -> Core ---
@@ -377,6 +400,8 @@ export type Message =
   | FaceOk
   | ComputerState
   | ComputerPoint
+  | ComputerTelemetry
+  | ComputerControl
   | Ready
   | Reset
   | AudioDone

@@ -106,10 +106,20 @@ interface Props {
   cameraWanted: boolean
   /** open the head-range calibration overlay on the board */
   onCalibrate: () => void
+  /** Managed Chromium supplies its trusted keyboard and shared transport. */
+  controlledOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  keyboard?: boolean
 }
 
-export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate }: Props) {
-  const [open, setOpen] = useState(false)
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, controlledOpen, onOpenChange, keyboard = true }: Props) {
+  const [localOpen, setLocalOpen] = useState(false)
+  const open = controlledOpen ?? localOpen
+  const setOpen = (next: boolean | ((old: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next
+    setLocalOpen(value)
+    onOpenChange?.(value)
+  }
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
   const [scanMs, setScanMs] = useState<number | null>(null)
@@ -171,6 +181,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
 
   // Keyboard: Space / B / backtick.
   useEffect(() => {
+    if (!keyboard) return
     let longTimer: number | undefined
     let spaceHeld = false
     let longSent = false
@@ -195,7 +206,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       } else if (e.code === 'KeyB') {
         if (!e.repeat) doubleBlink()
       } else if (e.code === 'Backquote') {
-        if (!e.repeat) setOpen((v) => !v)
+        if (!e.repeat) setLocalOpen((v) => !v)
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
@@ -215,7 +226,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       window.removeEventListener('blur', onBlur)
       window.clearTimeout(longTimer)
     }
-  }, [clench, doubleBlink, longClench, longClenchMs])
+  }, [clench, doubleBlink, longClench, longClenchMs, keyboard])
 
   // Every change keeps the other values as the Core last reported them. The Core answers with
   // SETTINGS, which is what the controls then show.

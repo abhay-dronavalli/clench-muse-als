@@ -6,8 +6,8 @@ import { gaze } from './gaze'
 import { gazePointerTuning } from './gazeTuning'
 import { nativeGazeActive } from './native'
 import { chooseSource, fromHead, type PointSample } from './source'
-import { gazeTuning } from './stores'
-import { HEAD_TUNING } from './tilePointer'
+import { gazeTuning, showCursor } from './stores'
+import { DwellTimer, HEAD_TUNING } from './tilePointer'
 import { tracker } from './tracker'
 
 interface Options {
@@ -18,6 +18,9 @@ interface Options {
   connected: boolean
   paused: boolean
   send: Send
+  pick: (seq: number, tile: number) => boolean
+  savedRange: HeadRange | null
+  voiceSource: string | null
 }
 
 export function useComputerPointing(options: Options) {
@@ -28,6 +31,8 @@ export function useComputerPointing(options: Options) {
     tracker.setBackground(active)
     if (!active) return
     const pointer = new ComputerPointer(HEAD_TUNING)
+    const dwell = new DwellTimer()
+    let lastSeq = -1, progress = 0
     const sample = (s: PointSample) => {
       const { state, mode, margin, send, paused } = latest.current
       if (!state?.active || s.source !== chooseSource(mode, gaze.available(s.t), !nativeGazeActive())) return
@@ -36,15 +41,28 @@ export function useComputerPointing(options: Options) {
         tracker.status.kind === 'error' ? 'camera_error' : tracker.status.kind === 'starting' ? 'starting' : 'lost'
       const msg = pointer.update(s, paused ? { ...state, paused: true } : state, tuning, status)
       if (msg) send(msg)
+      if (state.seq !== lastSeq) { dwell.reset(); lastSeq = state.seq }
+      const prefs = gazeTuning.get()
+      dwell.dwellMs = prefs.dwellMs
+      const d = dwell.update(prefs.dwell && s.source === 'gaze' && s.found && !paused && !state.paused ? pointer.tile : null, s.t)
+      progress = d.progress
+      if (d.fire && pointer.tile !== null) latest.current.pick(state.seq, pointer.tile)
     }
     const head = tracker.subscribeSample(s => sample(fromHead(s, latest.current.range)))
     const eyes = gaze.subscribe(sample)
     const watch = window.setInterval(() => {
       const now = performance.now()
       const source = chooseSource(latest.current.mode, gaze.available(now), !nativeGazeActive())
+      if (!source) { pointer.point = null; progress = 0; dwell.reset() }
       if (source === 'gaze' && !gaze.connected(now)) sample({ source, t: now, point: null, found: false, confidence: 0 })
       if (source === 'head' && now - tracker.sample.t > 500) sample({ source, t: now, point: null, found: false, confidence: 0 })
-    }, 200)
+      const { send, savedRange, voiceSource } = latest.current
+      const angles = tracker.sample.raw
+      send({ type: 'COMPUTER_TELEMETRY', x: pointer.point?.x ?? null, y: pointer.point?.y ?? null,
+        show_cursor: showCursor.get(), dwell: gazeTuning.get().dwell, progress,
+        camera: tracker.status.kind, yaw: angles?.yaw ?? null, pitch: angles?.pitch ?? null,
+        eye_connected: gaze.connected(now), head_range: savedRange, voice_source: voiceSource })
+    }, 100)
     return () => { head(); eyes(); window.clearInterval(watch); tracker.setBackground(false) }
   }, [active])
 }

@@ -601,8 +601,31 @@ Its sequence changes when choices or geometry change. It does not change the boa
 while samples arrive; only locally filtered target indices and status leave it, never video.
 Stale sequences, invalid indices and points during help/busy/dev-panel states cannot select.
 One second without samples marks tracking lost; Auto then uses its existing 3-second fallback.
-The same clench/back/help events perform actions; gaze does not auto-click in computer mode.
+The same clench/back/help events perform actions. The board's optional gaze dwell setting also
+applies to computer choices; help, busy states and the open Dev panel pause dwell.
+For a dwell pick, `pick: true` on COMPUTER_POINT keeps the action tied to that layout sequence;
+the core ignores stale picks and uses the existing clench handler for a valid gaze pick.
 
 ```json
-{"type":"COMPUTER_POINT","seq":7,"tile":0,"source":"gaze","found":true,"status":"tracking","t":1790474400.25}
+{"type":"COMPUTER_POINT","seq":7,"tile":0,"source":"gaze","found":true,"status":"tracking","t":1790474400.25,"pick":false}
+```
+
+`COMPUTER_TELEMETRY` (board -> Core, `/ws/board` only) mirrors the cursor and local controls at
+10 Hz during computer mode. It carries normalized nullable `x`/`y`, `show_cursor`, `dwell`,
+`progress` (0..1), `camera` (on/off/starting/error), nullable numeric `yaw`/`pitch`,
+`eye_connected`, nullable saved `head_range` and nullable `voice_source`. No video is included.
+The core forwards it to the existing DevPanel component in Chromium's isolated world.
+
+```json
+{"type":"COMPUTER_TELEMETRY","x":0.3,"y":0.5,"show_cursor":true,"dwell":false,"progress":0,"camera":"off","yaw":null,"pitch":null,"eye_connected":true,"head_range":null,"voice_source":"Browser"}
+```
+
+`COMPUTER_CONTROL` (Core -> board, originating only in the trusted Chromium controls) requests
+the board's existing local control: `cursor`, `dwell`, `retry`, `calibrate`, `calibration_done`
+or `head_range`. `value` is the toggle value; `head_range` is required by the save action.
+Calibration pauses board pointing while the existing calibration component runs in Chromium;
+the board saves through its existing API and acknowledges through telemetry.
+
+```json
+{"type":"COMPUTER_CONTROL","action":"cursor","value":true,"head_range":null}
 ```

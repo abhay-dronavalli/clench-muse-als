@@ -22,11 +22,15 @@ def test_computer_screen_contract_matches_typescript():
 
 # One example of each message, matching docs/contracts.md.
 EXAMPLES: dict[str, tuple[type, dict]] = {
+    "COMPUTER_TELEMETRY": (contracts.ComputerTelemetry, {"type":"COMPUTER_TELEMETRY","x":0.3,"y":0.5,
+        "show_cursor":True,"dwell":False,"progress":0,"camera":"off","yaw":None,"pitch":None,
+        "eye_connected":False,"head_range":None,"voice_source":None}),
+    "COMPUTER_CONTROL": (contracts.ComputerControl, {"type":"COMPUTER_CONTROL","action":"cursor","value":True,"head_range":None}),
     "COMPUTER_STATE": (contracts.ComputerState, {"type":"COMPUTER_STATE", "active":True, "seq":3,
         "tiles":[{"id":"menu","label":"Browser menu","left":0.1,"top":0.8,"right":0.4,"bottom":0.9}],
         "highlight":0,"paused":False,"pointer":"gaze"}),
     "COMPUTER_POINT": (contracts.ComputerPoint, {"type":"COMPUTER_POINT","seq":3,"tile":0,
-        "source":"gaze","found":True,"status":"tracking","t":1727300011.2}),
+        "source":"gaze","found":True,"status":"tracking","t":1727300011.2,"pick":False}),
     "CLENCH": (contracts.Clench, {"type": "CLENCH", "t": 1727300000.12, "strength": 0.83}),
     "DOUBLE_BLINK": (contracts.DoubleBlink, {"type": "DOUBLE_BLINK", "t": 1727300003.4}),
     "LONG_CLENCH": (

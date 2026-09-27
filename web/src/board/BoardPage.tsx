@@ -5,7 +5,8 @@ import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
-import { loadHeadRange } from '../facetrack/headRange'
+import { loadHeadRange, saveHeadRange } from '../facetrack/headRange'
+import { tracker } from '../facetrack/tracker'
 import {
   CameraLight,
   CameraNotice,
@@ -17,7 +18,7 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import { nativeGazeActive, reportPointingMode, subscribeNativeGaze } from '../facetrack/native'
-import { gazeTuning } from '../facetrack/stores'
+import { gazeTuning, showCursor } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
@@ -53,6 +54,7 @@ type View =
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
   const [computer, setComputer] = useState<ComputerState | null>(null)
+  const computerShown = useRef<ComputerState | null>(null)
   const [view, setViewState] = useState<View>({ kind: 'waiting' })
   // What is on screen as of the last Core message, updated synchronously (not after a render), so
   // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
@@ -67,6 +69,7 @@ export default function BoardPage() {
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  const [computerCalibrating, setComputerCalibrating] = useState(false)
   // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
   const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
@@ -82,7 +85,17 @@ export default function BoardPage() {
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
       case 'COMPUTER_STATE':
+        computerShown.current = msg
         setComputer(msg)
+        if (!msg.active) setComputerCalibrating(false)
+        break
+      case 'COMPUTER_CONTROL':
+        if (msg.action === 'cursor') showCursor.set(!!msg.value)
+        if (msg.action === 'dwell') gazeTuning.set({ ...gazeTuning.get(), dwell: !!msg.value })
+        if (msg.action === 'retry') void tracker.start()
+        if (msg.action === 'calibrate') setComputerCalibrating(true)
+        if (msg.action === 'calibration_done') setComputerCalibrating(false)
+        if (msg.action === 'head_range' && msg.head_range) void saveHeadRange(msg.head_range).then(setRange).catch(console.error)
         break
       case 'SCREEN':
         setLang(msg.lang)
@@ -178,7 +191,12 @@ export default function BoardPage() {
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
   usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
-  useComputerPointing({ state: computer, mode, connected, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
+  useComputerPointing({ state: computer, mode, connected, send, range: range ?? DEFAULT_RANGE,
+    savedRange: range, voiceSource, paused: calibrating || computerCalibrating, margin, pick: (seq, tile) => {
+      const current = computerShown.current
+      if (!current?.active || current.seq !== seq || current.paused || shown.current.kind !== 'computer') return false
+      return send({ type: 'COMPUTER_POINT', seq, tile, source: 'gaze', found: true, status: 'tracking', t: Date.now()/1000, pick: true })
+    } })
 
   const start = () => {
     unlockSpeech()

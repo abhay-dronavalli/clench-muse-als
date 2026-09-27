@@ -10,7 +10,7 @@ from core.computer.browser import BrowserWorker
 from core.computer.model import MENU, Selection, Target
 from core.computer.policy import Policy
 from core.computer.search import SearchPanel, unique_queries, fallback_queries, site_for, clean_query
-from core.contracts import Clench, DoubleBlink, LongClench, Settings, Reset, Point, ComputerState, ComputerTile
+from core.contracts import Clench, DoubleBlink, LongClench, Settings, Reset, Point, ComputerState, ComputerTile, ComputerControl
 from core.pointer import make_pointer
 from core.pointer.scan import ScanPointer
 
@@ -58,6 +58,8 @@ class Computer:
         self.last_view = None
         self.lookback = lookback_ms / 1000
         self.trail = deque(maxlen=100)
+        self.telemetry = None
+        self.calibrating = False
 
     def _spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -75,6 +77,7 @@ class Computer:
         self.help = None
         self.search = None
         self.dev_open = False
+        self.calibrating = False
         self.face_ok = False
         self.pointer.on_face(False)
         self.layout_key = None
@@ -163,6 +166,12 @@ class Computer:
                 self.on_input(Settings(**{**self.settings.model_dump(), **event["patch"]}))
             except (ValueError, TypeError, KeyError):
                 log.warning("invalid Chromium settings ignored")
+        elif kind == "control":
+            command = ComputerControl(**event["control"])
+            if command.action in ("calibrate", "calibration_done"):
+                self.calibrating = command.action == "calibrate"
+                self._refresh()
+            self.emit(command)
         elif kind == "layout":
             self._layout(event)
         elif kind == "targets":
@@ -215,6 +224,8 @@ class Computer:
             self.pointer.on_point(Point(source=msg.source, tile=msg.tile, seq=msg.seq, t=msg.t))
         if changed:
             self._render()
+        if msg.pick and msg.source == "gaze" and msg.found and msg.tile is not None and not self.view().paused:
+            self.on_input(Clench(t=msg.t, strength=1))
 
     def _tracking_lost(self):
         self.watchdog = None
@@ -223,10 +234,15 @@ class Computer:
         self.pointer.on_face(False)
         self._render()
 
+    def on_telemetry(self, msg):
+        if self.active:
+            self.telemetry = msg.model_dump()
+            self._render()
+
     def view(self):
         return ComputerState(active=self.active, seq=self.seq, tiles=self.rects if self.active else [],
                              highlight=self.selection.index if self.rects and self.active else None,
-                             paused=not self.ready or self.busy or self.help is not None or self.dev_open,
+                             paused=not self.ready or self.busy or self.help is not None or self.dev_open or self.calibrating,
                              pointer=self.pointer.source)
 
     def _layout(self, event):
@@ -254,7 +270,7 @@ class Computer:
             self.rects = []
             self.trail.clear()
         self.pointer.place(len(self.items()), self.selection.index)
-        if self.ready and not self.busy and self.help is None and not self.dev_open:
+        if self.ready and not self.busy and self.help is None and not self.dev_open and not self.calibrating:
             if restart or not self.pointer_running:
                 self.pointer.start()
                 self.pointer_running = True
@@ -274,6 +290,7 @@ class Computer:
             self.last_view = view
             self.emit(view)
         state = dict(level=self.search.mode if self.search else self.selection.level,
+                     telemetry=self.telemetry,
                      seq=self.seq, settings=self.settings.model_dump(), devOpen=self.dev_open,
                      pointer=self.pointer.source, trackingStatus=self.tracking_status, faceOk=self.face_ok,
                      lang=self.lang, searchPage=self.search.page if self.search else 0,
@@ -303,7 +320,7 @@ class Computer:
     def pick(self):
         if not self.active or not self.ready or self.busy or self.help is not None:
             return
-        if self.dev_open:
+        if self.dev_open or self.calibrating:
             return
         if self.pointer.source in ("webcam", "gaze") and not self.face_ok:
             return

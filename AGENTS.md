@@ -375,13 +375,14 @@ The demo seed now includes simulated evening YouTube searches in both languages.
 clears search history; never run it on the shared database without authorization.
 
 Foreground Chromium supports Scan, Webcam/head, Gaze and Auto with the same clench inputs.
-Press backtick (or click the top-right Dev pill) for pointing mode, scan speed, language,
-speak-picks, learning, Muse input, hold duration, sticky edges and gesture buttons. The panel
+Press backtick (or click the bottom-left Dev pill) for the same `DevPanel.tsx` as Home: pointing,
+scan speed, language, speak-picks, learning, sticky edges, cursor, gaze dwell and gesture buttons. The panel
 pauses selection; Back closes it, and Help remains available. Head tilt still falls back to scan.
 Keep the started board open on the same display: it owns the camera/eye-tracker connection and
 audio. Webcam uses the board's calibrated head range; Gaze requires an eye tracker feeding the
 existing gaze slot (see `docs/eye-tracking.md`). Calibrate and inspect the camera in the board's
-Dev panel. Chromium receives only normalized target selections, never camera video. Auto returns
+Dev panel or from Chromium's shared calibration overlay. Chromium receives pointing diagnostics,
+never camera video; its camera preview shows live angles while video stays on the board. Auto returns
 to scanning when tracking stops. The broader grouping/UI redesign remains deferred.
 See [computer search checks](docs/computer-search.md) for the manual flow and isolated demo seed.
 
@@ -390,6 +391,8 @@ The browser keyboard listener runs in a Chromium isolated world so website scrip
 help events. No Muse, AI key or cloud voice is needed. Start/unlock the board's audio first.
 
 First-time setup: `uv sync`, then `uv run playwright install chromium`.
+Run `npm --prefix web run build` after changing web controls; it also builds the shared React
+panel bundle that the core injects into Chromium's isolated world (no website WebSocket).
 The managed profile is `data/browser-profile/` (git-ignored; contains login cookies). Use one
 core/browser owner for this profile at a time. For a one-time caregiver Spotify login, first Exit
 computer mode, then run `uv run playwright open --browser chromium --user-data-dir data/browser-profile https://open.spotify.com`.

@@ -10,6 +10,7 @@ from threading import Thread
 
 from core.computer.policy import Policy
 from core.computer.search import clean_query
+from core.contracts import ComputerControl
 
 log = logging.getLogger("clench.computer")
 ASSETS = Path(__file__).parent
@@ -35,6 +36,7 @@ class Browser:
         self.overlay = {}
         self.input_contexts = set()
         self.cdp = None
+        self.main_frame_id = None
         self.field = None
         self.field_url = None
         self.script = (ASSETS / "bridge.js").read_text(encoding="utf-8").replace(
@@ -66,10 +68,17 @@ class Browser:
         self.cdp.on("Runtime.executionContextsCleared", lambda _: self.input_contexts.clear())
         self.cdp.on("Runtime.bindingCalled", self._trusted_input)
         await self.cdp.send("Page.enable")
+        self.main_frame_id = (await self.cdp.send("Page.getFrameTree"))["frameTree"]["frame"]["id"]
         await self.cdp.send("Runtime.enable")
         await self.cdp.send("Runtime.addBinding", {"name": "clenchTrustedInput", "executionContextName": "clench-input"})
         await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {
             "source": (ASSETS / "input.js").read_text(encoding="utf-8"), "worldName": "clench-input"})
+        controls = ASSETS.parents[1] / "web" / "dist" / "computer"
+        if not (controls / "controls.js").is_file():
+            raise RuntimeError("Build the shared Chromium controls: npm --prefix web run build")
+        await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "globalThis.clenchControlsCSS=" + json.dumps((controls / "controls.css").read_text(encoding="utf-8")) + ";\n" +
+                      (controls / "controls.js").read_text(encoding="utf-8"), "worldName": "clench-input"})
         await self.page.expose_binding("clenchBridge", self._binding)
         await self.page.add_init_script(script=self.script)
         await self.page.goto(self.policy.start_url, wait_until="domcontentloaded", timeout=15000)
@@ -99,7 +108,8 @@ class Browser:
 
     def _input_context(self, event):
         context = event["context"]
-        if context.get("name") == "clench-input" and not context.get("auxData", {}).get("isDefault", True):
+        aux = context.get("auxData", {})
+        if context.get("name") == "clench-input" and not aux.get("isDefault", True) and aux.get("frameId") == self.main_frame_id:
             self.input_contexts.add(context["id"])
 
     def _trusted_input(self, event):
@@ -114,8 +124,14 @@ class Browser:
             self.on_event({"kind": "input", "event": name})
         elif name == "SETTINGS" and isinstance(payload.get("patch"), dict):
             allowed = {"pointing_mode", "scan_ms", "lang", "speak_picks", "learning", "long_clench_ms", "tile_switch_margin", "muse_enabled"}
-            if set(payload["patch"]) <= allowed:
-                self.on_event({"kind": "settings", "patch": payload["patch"]})
+            patch = {k:v for k,v in payload["patch"].items() if k != "type"}
+            if set(patch) <= allowed:
+                self.on_event({"kind": "settings", "patch": patch})
+        elif name == "CONTROL":
+            try:
+                self.on_event({"kind": "control", "control": ComputerControl(**payload["control"]).model_dump()})
+            except (ValueError, TypeError, KeyError):
+                pass
 
     async def _loaded(self):
         try:
@@ -135,7 +151,7 @@ class Browser:
                 try:
                     await self.cdp.send("Runtime.evaluate", {"contextId": context,
                         "expression": "globalThis.clenchInputSettings?.(" + json.dumps({k:state.get(k) for k in
-                            ("longClenchMs", "settings", "devOpen", "pointer", "trackingStatus", "faceOk", "help")}) + ")"})
+                            ("longClenchMs", "settings", "devOpen", "pointer", "trackingStatus", "faceOk", "help", "telemetry")}) + ")"})
                 except Exception:
                     pass  # destroyed document; the next context gets current settings
         if self.page and not self.page.is_closed():

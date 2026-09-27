@@ -10,6 +10,8 @@ export class ComputerPointer {
   private lastSent = -Infinity
   private lastTile: number | null = null
   private lastFound = false
+  point: { x: number; y: number } | null = null
+  tile: number | null = null
 
   constructor(tuning: PointerTuning) { this.pointer = new TilePointer(tuning) }
 
@@ -25,9 +27,13 @@ export class ComputerPointer {
     }
     this.pointer.tuning = tuning
     let tile: number | null = null
+    this.point = sample.found ? sample.point : null
     if (sample.found && sample.point && !state.paused) {
-      tile = this.pointer.update(sample.point, sample.t, state.tiles).tile
+      const step = this.pointer.update(sample.point, sample.t, state.tiles)
+      tile = step.tile
+      this.point = step.point
     } else this.pointer.lost()
+    this.tile = tile
     if (!changed && tile === this.lastTile && sample.found === this.lastFound && sample.t - this.lastSent < 200) return null
     this.lastTile = tile
     this.lastFound = sample.found

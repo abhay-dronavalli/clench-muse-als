@@ -806,3 +806,29 @@ redesign now; the immediate request is to retain this feedback for work after Pa
 - Validation: 517 Python tests passed (one real-network test skipped), 95 web tests passed, and
   build, lint and contract import passed. The Chromium Dev screenshot was inspected. The
   different-model re-review found no remaining blocker in pointing, layout or lookback.
+
+## Reuse the Home controls in Chromium (2026-09-27)
+
+- The user rejected the separate Chromium Dev design. Removed its hand-written UI. The web build
+  now bundles the actual `DevPanel.tsx`, styles, cursor, gaze notice and `CalibrationOverlay` for
+  Chromium's isolated world. Home retains its existing socket and keyboard behavior; Chromium
+  supplies the same component with a trusted transport and its existing trusted keyboard listener.
+- The previous relay omitted the board's cursor and optional dwell selection. Computer pointing now
+  uses the existing DwellTimer and shared gaze preferences; the same Dev toggles affect both windows.
+  A disconnected gaze slot shows the existing no-eye-tracker notice. Webcam/head and Gaze remain
+  distinct; no artificial eye tracker is inferred from a camera seeing a face.
+- The board remains the camera owner to avoid Windows camera contention. Only cursor coordinates,
+  numeric head pose and control status are mirrored, not video. The shared camera component shows
+  live angles in Chromium and keeps video on the board. Shared head calibration runs in Chromium
+  using those samples, pauses pointing, and uses the board's existing API to save and acknowledge.
+- Added COMPUTER_TELEMETRY and COMPUTER_CONTROL to both contracts and their docs/tests. External
+  pages cannot call controls: only the main frame's isolated input context is accepted. Build the
+  web before launching computer mode so the shared controls bundle exists.
+- Integration checks use simulated gaze through the real board and local Chromium: actual React
+  controls change mode, cursor and dwell; dwell selects a browser choice and pauses with Dev open.
+  Physical eye-tracker accuracy remains a hands-on check. No service keys or patient DB in tests.
+- Review fixes bind dwell picks to COMPUTER_POINT's layout sequence at both board and core, and
+  cancel calibration when help starts so Escape still cancels the countdown. Validation: 522
+  Python tests and 95 web tests passed, with the real-network test skipped; build and lint passed.
+  The final local Chromium test also passed under strict Trusted Types and connect-src CSP,
+  including cursor/dwell toggles and Escape during help. The shared-panel screenshot was inspected.

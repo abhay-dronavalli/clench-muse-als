@@ -83,6 +83,13 @@ class Tracker {
 
   getStatus = () => this.status
 
+  /** Controls in Chromium mirror numeric diagnostics; the board keeps the camera stream. */
+  mirror(status: TrackerStatus, angles: Angles | null): void {
+    if (JSON.stringify(status) !== JSON.stringify(this.status)) this.setStatus(status)
+    this.sample = { t: performance.now(), face: angles !== null, raw: angles, angles }
+    this.sampleListeners.forEach(fn => fn(this.sample))
+  }
+
   private setStatus(s: TrackerStatus) {
     this.status = s
     this.statusListeners.forEach((fn) => fn())

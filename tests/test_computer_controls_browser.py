@@ -21,6 +21,12 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
     async def run():
         app=create_app(env={"ELEVENLABS_PREWARM":"false","COMPUTER_START_URL":"http://127.0.0.1:8001/computer/start"},
                        audio_dir=tmp_path / "audio",lang="en")
+        @app.middleware("http")
+        async def strict_site(request, call_next):
+            response=await call_next(request)
+            if request.url.path=="/computer/start":
+                response.headers["Content-Security-Policy"]="require-trusted-types-for 'script'; trusted-types 'none'; connect-src 'none'"
+            return response
         # Production assets avoid depending on a second server or on the user's open board.
         app.mount("/",StaticFiles(directory=Path("web/dist"),html=True))
         server=uvicorn.Server(uvicorn.Config(app,host="127.0.0.1",port=8001,log_level="warning"))
@@ -81,17 +87,44 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
                 await page.keyboard.press("Backquote")
                 await until(lambda:c.dev_open and not c.pointer_running)
                 await c.browser.cdp.send("DOM.enable")
-                tree=await c.browser.cdp.send("DOM.getDocument",{"depth":-1,"pierce":True})
                 def walk(node):
                     yield node
                     for child in node.get("children",[])+node.get("shadowRoots",[]):
                         yield from walk(child)
-                host=next(n for n in walk(tree["root"]) if "clench-dev" in n.get("attributes",[]))
-                select=next(n for n in walk(host) if n["nodeName"]=="SELECT")
-                await c.browser.cdp.send("DOM.focus",{"nodeId":select["nodeId"]})
-                await page.keyboard.press("Home")
-                await page.keyboard.press("ArrowDown")  # Auto -> Scan
-                await page.keyboard.press("Tab")
+                async def panel():
+                    async with asyncio.timeout(5):
+                        while True:
+                            tree=await c.browser.cdp.send("DOM.getDocument",{"depth":-1,"pierce":True})
+                            host=next((n for n in walk(tree["root"]) if "clench-dev" in n.get("attributes",[])),None)
+                            if host and any(n["nodeName"]=="ASIDE" for n in walk(host)):
+                                return host
+                            await asyncio.sleep(.02)
+                host=await panel()
+                async def click_node(node):
+                    box=await c.browser.cdp.send("DOM.getBoxModel",{"nodeId":node["nodeId"]})
+                    q=box["model"]["content"]
+                    await page.mouse.click((q[0]+q[2])/2,(q[1]+q[5])/2)
+                def toggle(label):
+                    row=next(n for n in walk(host) if n["nodeName"]=="DIV" and any(
+                        k["nodeName"]=="SPAN" and any(t.get("nodeValue")==label for t in k.get("children",[])) for k in n.get("children",[])))
+                    return next(n for n in row["children"] if n["nodeName"]=="BUTTON")
+                await click_node(toggle("Dwell select (gaze)"))
+                await until(lambda: c.telemetry and c.telemetry["dwell"])
+                await click_node(toggle("Cursor dot"))
+                await until(lambda: not c.telemetry["show_cursor"])
+                await asyncio.sleep(1.6)
+                assert c.selection.level=="targets"  # open panel pauses gaze dwell
+                await page.keyboard.press("Backquote")
+                await until(lambda:not c.dev_open)
+                await page.keyboard.press("KeyB")
+                await until(lambda:c.selection.level=="bands")
+                await gaze_at("menu")
+                await until(lambda:c.selection.level=="menu")  # existing dwell setting now works in Chromium
+                await page.keyboard.press("Backquote")
+                await until(lambda:c.dev_open)
+                host=await panel()
+                scan=next(n for n in walk(host) if n["nodeName"]=="BUTTON" and any(k.get("nodeValue")=="Scan" for k in n.get("children",[])))
+                await click_node(scan)
                 await until(lambda:c.mode=="scan" and session.pointing_mode=="scan")
                 await page.screenshot(path=str(tmp_path / "chromium-dev-panel.png"))
                 await page.keyboard.press("Backquote")
@@ -103,6 +136,13 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
                 }""")
                 await asyncio.sleep(.1)
                 assert not c.dev_open and c.mode=="scan"
+                context=next(iter(c.browser.input_contexts))
+                await c.browser.cdp.send("Runtime.evaluate",{"contextId":context,"expression":"globalThis.clenchCalibrating=true"})
+                await page.keyboard.down("Space")
+                await until(lambda:c.help is not None)
+                await page.keyboard.up("Space")
+                await page.keyboard.press("Escape")
+                await until(lambda:c.help is None and not c.calibrating)
                 await board.evaluate("clearInterval(window.gazeTestTimer)")
                 await board_browser.close()
                 board_browser=None
