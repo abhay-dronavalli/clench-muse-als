@@ -16,6 +16,7 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import {
+  nativeBridge,
   nativeCarAvailable,
   nativeGazeActive,
   playNativeCarEffect,
@@ -34,6 +35,7 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
+import { Onboarding } from './Onboarding'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
@@ -219,9 +221,17 @@ export default function BoardPage() {
   }
   usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
 
+  // Onboarding (eyes, headband, a test clench) opens right after "Click to start"; the Dev panel's
+  // Run setup opens it again. The shell holds its own calibration prompt back meanwhile.
+  const [onboarding, setOnboarding] = useState(false)
+  const openSetup = (on: boolean) => {
+    nativeBridge()?.setOnboarding?.(on)
+    setOnboarding(on)
+  }
   const start = () => {
     unlockSpeech()
     resetPending.current = true
+    openSetup(true)
     setStarted(true)
   }
 
@@ -245,6 +255,7 @@ export default function BoardPage() {
   return (
     <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
       {!started && <StartOverlay onStart={start} />}
+      {started && onboarding && <Onboarding lang={lang} onDone={() => openSetup(false)} />}
       <div className="fixed right-4 top-4 z-30 flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
           {pointing && <EyesNotice lang={lang} />}
@@ -302,7 +313,8 @@ export default function BoardPage() {
         voiceSource={voiceSource}
         headRange={range}
         cameraWanted={camera}
-        onCalibrate={() => setCalibrating(true)}
+        onSetup={() => openSetup(true)}
+          onCalibrate={() => setCalibrating(true)}
       />
     </div>
   )

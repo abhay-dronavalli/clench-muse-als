@@ -20,6 +20,8 @@ export interface ClenchNativeBridge {
   setPointingMode(mode: string): void
   /** open the shell's calibration screen for this person; it saves the result under that name */
   calibrate(person: string): void
+  /** the page's onboarding is running: the shell skips its own startup calibration prompt */
+  setOnboarding?(on: boolean): void
   /** whose calibration is loaded ("" = none) */
   person(): string
   /** the SDK's own gaze filter (on by default) */
