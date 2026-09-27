@@ -35,6 +35,7 @@ const TEXT: Record<Tile['kind'], string> = {
   // A whole sentence: smaller so it wraps onto a few lines and is never cut off.
   suggestion: 'text-3xl leading-snug xl:text-4xl',
   other: 'text-5xl leading-tight xl:text-6xl',
+  car: 'text-5xl leading-tight xl:text-6xl', // trip controls draw in trip.tsx; here only for completeness
 }
 
 function tileLook(tile: Tile, on: boolean): string {
