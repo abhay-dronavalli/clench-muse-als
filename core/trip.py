@@ -121,7 +121,7 @@ class Car:
         default_factory=lambda: {"front_left": 0, "front_right": 0, "rear_left": 0, "rear_right": 0}
     )  # % open, 0 = fully up
     volume: int = 4
-    phase: str = "EN_ROUTE"  # EN_ROUTE / PULLED_OVER / ARRIVED (core/car)
+    phase: str = "EN_ROUTE"  # BOARDING / EN_ROUTE / PULLED_OVER / ARRIVED (core/car)
     music_playing: bool = True
     on_highway: bool = False
 

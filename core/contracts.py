@@ -39,7 +39,8 @@ TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back", "answ
 # How the car answered a request (proto ActionResult.Status).
 CarStatus = Literal["ACCEPTED", "COMPLETED", "DELAYED", "REJECTED"]
 # The ride's phase (proto RideState.Phase, the ones the mock car uses).
-RidePhase = Literal["EN_ROUTE", "PULLED_OVER", "ARRIVED"]
+# BOARDING: the rider is in, the car is parked while the trip is planned; it leaves once a route is confirmed.
+RidePhase = Literal["BOARDING", "EN_ROUTE", "PULLED_OVER", "ARRIVED"]
 # What a trip control does (core/trip.py).
 CarActionName = Literal[
     "window_up", "window_down", "warmer", "cooler", "louder", "softer", "slow_down", "pull_over", "support"

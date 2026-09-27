@@ -186,7 +186,7 @@ def create_app(
         sched = scheduler or AsyncioScheduler()
         geo_trip = load_trip()
         # The car (core/car): the in-process mock, with a simulated round trip. /car-sim plays its side.
-        car = MockCar(sched, latency_s=CAR_LATENCY_S,
+        car = MockCar(sched, latency_s=CAR_LATENCY_S, boarding=True,
                       routes={t.route_id: t.label for t in geo_trip.ride.tiles} if geo_trip and geo_trip.ride else {})
         car.on_log(hub.broadcast)
         app.state.car = car

@@ -979,7 +979,14 @@ class Session:
             self._go_home(first_tile=True)
         else:
             self._stack = [self._home()]
-            self._trip_path = [TRIP_ROOT]
+            self._trip_path = self._trip_home()
+
+    def _trip_home(self) -> list[TripNode]:
+        """Where trip mode's home is: the Trip level (routes and drop-off) while the car is parked for
+        boarding, so the ride starts on planning the trip; the top of the trip menu once under way."""
+        if self.car_link.state().phase == "BOARDING":
+            return [TRIP_ROOT, next(n for n in TRIP_ROOT.children if n.dynamic == "ride")]
+        return [TRIP_ROOT]
 
     def _ride_tick(self) -> None:
         """Another minute of the mock ride: arrival closer, a little battery used."""
@@ -1043,7 +1050,7 @@ class Session:
 
     def _go_home(self, *, first_tile: bool = False) -> None:
         self._stack = [self._home()]
-        self._trip_path = [TRIP_ROOT]  # in trip mode, home is the top of the trip menu
+        self._trip_path = self._trip_home()  # in trip mode, home is the top of the trip menu (or planning)
         self._effort.reset()  # metrics count from home
         self._enter_frame(first_tile=first_tile)
 

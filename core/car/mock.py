@@ -86,8 +86,11 @@ BASE_CATALOG: list[CarActionSpec] = [
 
 class MockCar:
     def __init__(self, scheduler: Scheduler, *, latency_s: float = 0.0, routes: dict[str, str] | None = None,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time, boarding: bool = False) -> None:
         self._scheduler = scheduler
+        # boarding: a ride starts parked (BOARDING) and leaves once a confirmed route is accepted. Off, a
+        # ride starts already under way (the tests of the controls during a ride).
+        self.boarding = boarding
         self.latency_s = latency_s
         self._clock = clock
         self._listeners: list[CarListener] = []
@@ -122,6 +125,8 @@ class MockCar:
 
     def start_ride(self) -> None:
         self.car = Car()
+        if self.boarding:
+            self.car.speed_mph, self.car.phase = 0, "BOARDING"
         self.open_questions.clear()
         self._state_changed()
 
@@ -171,7 +176,7 @@ class MockCar:
         c = self.car
         if phase is not None:
             c.phase = phase
-            if phase in ("PULLED_OVER", "ARRIVED"):
+            if phase in ("BOARDING", "PULLED_OVER", "ARRIVED"):
                 c.speed_mph, c.on_highway = 0, False
                 if phase == "ARRIVED":
                     c.eta_min = 0
@@ -230,6 +235,8 @@ class MockCar:
                 return [Step(0, "REJECTED", ("We're stopped.", "Estamos detenidos."))]
             return [Step(0, "COMPLETED", ("Slowing down.", "Bajando la velocidad."), effect=lambda: c.apply("slow_down"))]
         if a == "pull_over":
+            if c.phase == "BOARDING":
+                return [Step(0, "REJECTED", ("We haven't left yet.", "Todavía no hemos salido."))]
             if stopped:
                 return [Step(0, "REJECTED", ("We're already stopped.", "Ya estamos detenidos."))]
             stop = lambda: c.apply("pull_over")  # noqa: E731
@@ -249,8 +256,15 @@ class MockCar:
                                          "Te conecto con soporte. Alguien te hablará en un momento."))]
         if a.startswith("route:"):
             name = self.routes[a.partition(":")[2]]
+            if c.phase == "BOARDING":
+                return [Step(0, "ACCEPTED", (f"Okay, taking {name}. Here we go.", f"De acuerdo, voy por {name}. Vamos."),
+                             effect=self._depart)]
             return [Step(0, "ACCEPTED", (f"Okay, taking {name}.", f"De acuerdo, voy por {name}."))]
         return [Step(0, "REJECTED", ("That isn't available right now.", "Eso no está disponible ahora."))]
+
+    def _depart(self) -> None:
+        """Leave the pick-up: en route at city speed."""
+        self.car.phase, self.car.speed_mph = "EN_ROUTE", CITY_SPEED
 
     # --- plumbing -----------------------------------------------------------------
 

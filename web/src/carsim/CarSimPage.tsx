@@ -58,6 +58,7 @@ export default function CarSimPage() {
           <h2 className="font-semibold">Situation</h2>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => set({ on_highway: !state?.on_highway })}>{state?.on_highway ? 'Leave the highway' : 'Get on the highway'}</Button>
+            <Button onClick={() => set({ phase: 'BOARDING' })}>Boarding</Button>
             <Button onClick={() => set({ phase: 'EN_ROUTE' })}>En route</Button>
             <Button onClick={() => set({ phase: 'PULLED_OVER' })}>Pulled over</Button>
             <Button onClick={() => set({ phase: 'ARRIVED' })}>Arrived</Button>

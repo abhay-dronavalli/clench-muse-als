@@ -523,6 +523,7 @@ that connects during a trip. The tablet's 3D scene drives at `speed_mph` (0 afte
 | `cabin_temp_f` | int | °F, 60 to 85; Warmer / Cooler move it by 1 |
 | `windows` | object | `front_left`, `front_right`, `rear_left`, `rear_right`: % open, 0 (up) to 100 (down), 25 per Up / Down |
 | `volume` | int | music volume 0 to 10; Louder / Softer move it by 1 |
+| `phase` | string | `BOARDING` (parked while the trip is planned; speed 0, arrival not counting down), `EN_ROUTE`, `PULLED_OVER`, `ARRIVED`. A ride starts `BOARDING` and leaves (`EN_ROUTE`, city speed) when the car accepts a confirmed route |
 
 ```json
 {"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4, "phase": "EN_ROUTE", "music_playing": true, "on_highway": false}

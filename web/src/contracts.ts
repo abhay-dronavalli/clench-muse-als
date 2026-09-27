@@ -28,8 +28,11 @@ export type ActionName =
   | 'dropoff' | 'route' | 'support_answer'
 /** How the car answered a request (proto ActionResult.Status) */
 export type CarStatus = 'ACCEPTED' | 'COMPLETED' | 'DELAYED' | 'REJECTED'
-/** The ride's phase (proto RideState.Phase, the ones the mock car uses) */
-export type RidePhase = 'EN_ROUTE' | 'PULLED_OVER' | 'ARRIVED'
+/**
+ * The ride's phase (proto RideState.Phase, the ones the mock car uses). BOARDING: the rider is in, the
+ * car is parked while the trip is planned; it leaves once a route is confirmed.
+ */
+export type RidePhase = 'BOARDING' | 'EN_ROUTE' | 'PULLED_OVER' | 'ARRIVED'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
