@@ -5,6 +5,8 @@
 #   - a branch: `children` (1 to 5 nodes), or `from_contacts: true` (children are built from
 #     data/contacts.yaml: one branch per contact with Call / Text / Say out loud), or
 #   - a leaf: phrase_en, phrase_es and action (speak | send_message | place_call | room_control).
+#   - media: `media: {provider: youtube | spotify, id: <video / playlist id>, image?: <https cover>}`;
+#     picking it plays on the board with big control tiles. Nothing is said or sent: no confirm.
 # Any node may say `urgent: true` (pain, bathroom, help): when the body state is elevated it moves
 # up (PRD D10: body state only reorders, never acts). A branch counts as urgent if anything in it is.
 # The session adds "Other..." as the sixth tile on every level (PRD D8: at most 6 tiles). It asks the
@@ -271,10 +273,159 @@ home:
         phrase_es: "Me siento feliz. Gracias."
         action: speak
 
+  # Computer: YouTube and Spotify play right here on the board, in the person's own browser (so
+  # their logins apply), with big control tiles while they play (Pause / Play, Restart, Volume,
+  # Back). Nothing is said or sent, so there is no confirm step. Web browser is the managed
+  # Chromium for everything else (core/computer). Every id below was checked with YouTube's /
+  # Spotify's oEmbed; swap in your own from a share link (the part after watch?v= / playlist/).
   - id: computer
     label_en: Computer
     label_es: Computadora
-    computer: true
+    children:
+      - id: youtube
+        label_en: YouTube
+        label_es: YouTube
+        children:
+          - id: lofi
+            label_en: "Lofi radio"
+            label_es: "Radio lofi"
+            media:
+              provider: youtube
+              id: "jfKfPfyJRdk"
+          - id: bohemian
+            label_en: "Bohemian Rhapsody"
+            label_es: "Bohemian Rhapsody"
+            media:
+              provider: youtube
+              id: "fJ9rUzIMcZQ"
+          - id: despacito
+            label_en: "Despacito"
+            label_es: "Despacito"
+            media:
+              provider: youtube
+              id: "kJQP7kiw5Fk"
+          - id: blinding
+            label_en: "Blinding Lights"
+            label_es: "Blinding Lights"
+            media:
+              provider: youtube
+              id: "4NRXx6U8ABQ"
+          - id: uptown
+            label_en: "Uptown Funk"
+            label_es: "Uptown Funk"
+            media:
+              provider: youtube
+              id: "OPf0YbXqDm0"
+        more:
+          - id: prayer
+            label_en: "Livin' On A Prayer"
+            label_es: "Livin' On A Prayer"
+            media:
+              provider: youtube
+              id: "lDK9QqIzhwk"
+          - id: paradise
+            label_en: "Paradise"
+            label_es: "Paradise"
+            media:
+              provider: youtube
+              id: "1G4isv_Fylg"
+          - id: hello
+            label_en: "Hello (Adele)"
+            label_es: "Hello (Adele)"
+            media:
+              provider: youtube
+              id: "YQHsXMglC9A"
+          - id: shape
+            label_en: "Shape of You"
+            label_es: "Shape of You"
+            media:
+              provider: youtube
+              id: "JGwWNGJdvx8"
+          - id: rick
+            label_en: "Never Gonna Give You Up"
+            label_es: "Never Gonna Give You Up"
+            media:
+              provider: youtube
+              id: "dQw4w9WgXcQ"
+      - id: spotify
+        label_en: Spotify
+        label_es: Spotify
+        children:
+          - id: top_hits
+            label_en: "Today's Top Hits"
+            label_es: "Éxitos de hoy"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DXcBWIGoYBM5M"
+              image: "https://i.scdn.co/image/ab67706f0000000209dec89719704eea4f218966"
+          - id: piano
+            label_en: "Peaceful Piano"
+            label_es: "Piano tranquilo"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DX4sWSpwq3LiO"
+              image: "https://i.scdn.co/image/ab67706f0000000270e1fb7db7b45809d6a80377"
+          - id: latino
+            label_en: "Viva Latino"
+            label_es: "Viva Latino"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DX10zKzsJ2jva"
+              image: "https://i.scdn.co/image/ab67706f00000002e094e442df52f234985c01b1"
+          - id: lofi_beats
+            label_en: "Lofi beats"
+            label_es: "Lofi beats"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DWWQRwui0ExPn"
+              image: "https://i.scdn.co/image/ab67706f00000002266beb50b0032b0f140a749e"
+          - id: eighties
+            label_en: "All Out 80s"
+            label_es: "Lo mejor de los 80"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DX4UtSsGT1Sbe"
+              image: "https://i.scdn.co/image/ab67706f00000002fb8e01f2c022ab1a32e2c5a0"
+        more:
+          - id: chill
+            label_en: "Chill Hits"
+            label_es: "Éxitos tranquilos"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DX4WYpdgoIcn6"
+              image: "https://i.scdn.co/image/ab67706f000000020408713c731caaf1f800615a"
+          - id: focus
+            label_en: "Deep Focus"
+            label_es: "Concentración"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DWZeKCadgRdKQ"
+              image: "https://i.scdn.co/image/ab67706f000000026020f2f6476db518ef747da4"
+          - id: car
+            label_en: "Songs to Sing in the Car"
+            label_es: "Canciones para el coche"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DWWMOmoXKqHTD"
+              image: "https://i.scdn.co/image/ab67706f0000000292af799a11403259b8474500"
+          - id: rock
+            label_en: "Rock Classics"
+            label_es: "Clásicos del rock"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DWXRqgorJj26U"
+              image: "https://i.scdn.co/image/ab67706f00000002694bf33281695f3b7542a09a"
+          - id: rap
+            label_en: "RapCaviar"
+            label_es: "RapCaviar"
+            media:
+              provider: spotify
+              id: "37i9dQZF1DX0XUsuxWHRQd"
+              image: "https://i.scdn.co/image/ab67706f000000026f25a0d402c37b865b89b807"
+      - id: browser
+        label_en: Web browser
+        label_es: Navegador
+        computer: true
 
 # Home "Other..." when the AI has nothing (the old "Say something" phrases).
 more:

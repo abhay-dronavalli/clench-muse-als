@@ -56,8 +56,8 @@ def test_ai_options_inherit_action_and_contact_from_the_path(menu):
     # Room actions remain supported for custom menus, though Home now opens Computer.
     room = MenuNode.model_validate(yaml.safe_load((Path(__file__).parent / "room_fixture.yaml").read_text(encoding="utf-8")))
     assert room.inherited() == ("room_control", None)
-    assert find(menu.root, "computer").computer
-    assert find(menu.root, "computer").leaves() == []
+    assert find(menu.root, "computer", "browser").computer
+    assert find(menu.root, "computer", "browser").leaves() == []
     assert find(menu.root, "people").inherited() == ("speak", None)
     assert menu.root.inherited() == ("speak", None)
 

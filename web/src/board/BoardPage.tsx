@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { ControlRow, MediaPlayer, type NowPlaying } from './MediaPlayer'
 import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen, ComputerState } from '../contracts'
 import { useComputerPointing } from '../facetrack/useComputerPointing'
 import DevPanel from '../dev/DevPanel'
@@ -68,6 +69,9 @@ export default function BoardPage() {
     setViewState(v)
   }
   const [lang, setLang] = useState<Lang>('en')
+  // Computer > YouTube / Spotify: what plays on the board, and the last control command for it.
+  const [media, setMedia] = useState<NowPlaying | null>(null)
+  const [mediaCommand, setMediaCommand] = useState<{ action: 'pause' | 'resume' | 'restart' | 'volume_down' | 'volume_up'; n: number } | null>(null)
   const [mode, setMode] = useState<PointingMode | null>(null)
   const [margin, setMargin] = useState(STICKY_MARGIN) // SETTINGS tile_switch_margin
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
@@ -110,6 +114,13 @@ export default function BoardPage() {
         break
       case 'CONFIRM':
         setView({ kind: 'confirm', confirm: msg })
+        break
+      case 'MEDIA':
+        if (msg.action === 'play' && msg.provider && msg.id) {
+          setMedia({ provider: msg.provider, id: msg.id, title: msg.title ?? '' })
+          setMediaCommand(null)
+        } else if (msg.action === 'stop') setMedia(null)
+        else if (msg.action !== 'play') setMediaCommand((c) => ({ action: msg.action as 'pause', n: (c?.n ?? 0) + 1 }))
         break
       case 'BACK_PROMPT':
         setBackPrompt(msg.open ? { kind: msg.kind, ms: msg.timeout_ms, at: Date.now() } : null)
@@ -233,7 +244,15 @@ export default function BoardPage() {
           {STRINGS[lang].connecting}
         </div>
       )}
-      {screen && (
+      {screen && screen.screen === 'player' && media && (
+        <>
+          <MediaPlayer media={media} command={mediaCommand} />
+          <ControlRow screen={screen} />
+          {pointing && <CursorDot />}
+          {pointing && <DwellRing />}
+        </>
+      )}
+      {screen && !(screen.screen === 'player' && media) && (
         <>
           <Breadcrumb screen={screen} />
           <TileGrid screen={screen} />

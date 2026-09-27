@@ -20,7 +20,9 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'computer'
+/** player = a YouTube video or Spotify playlist playing on the board, its controls as the tiles. */
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'computer' | 'player'
+export type MediaProvider = 'youtube' | 'spotify'
 export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
@@ -215,6 +217,8 @@ export interface Tile {
   id: string
   label: string
   kind: TileKind
+  /** a picture for the tile (video thumbnail, playlist cover), https; only media tiles have one */
+  image?: string
 }
 
 /** What the board should draw. The Core owns the highlight; the board only draws it. */
@@ -242,6 +246,22 @@ export interface Screen {
 }
 
 /** The "Send this?" screen. Nothing is spoken or sent without a confirming clench (PRD D5). */
+/**
+ * Play, or control, a YouTube video or Spotify playlist on the board (Computer > YouTube / Spotify).
+ * The board embeds the provider's own player in this page, in the person's browser, so their YouTube
+ * / Spotify login applies. Nothing is said or sent, so there is no confirm step.
+ */
+export interface Media {
+  type: 'MEDIA'
+  action: 'play' | 'pause' | 'resume' | 'restart' | 'volume_down' | 'volume_up' | 'stop'
+  /** play only */
+  provider?: MediaProvider | null
+  /** play only: the YouTube video id or Spotify playlist id */
+  id?: string | null
+  /** play only: what is playing */
+  title?: string | null
+}
+
 export interface Confirm {
   type: 'CONFIRM'
   text: string
@@ -408,6 +428,7 @@ export type Message =
   | Settings
   | Screen
   | Confirm
+  | Media
   | BackPrompt
   | Speak
   | PlayAudio
