@@ -154,8 +154,8 @@ is the input target.
    check, English by default.
 6. **Scroll, drag, launcher** (done). Scroll and drag from the palette, the 200 ms highlight hold,
    `scripts/start_desktop.ps1`.
-7. **Next.** A large-key gaze keyboard for text the board's phrases cannot make (addresses,
-   passwords are out of scope), and a packaged build (PyInstaller) so the laptop needs no uv.
+7. **Next.** A large-key gaze keyboard for text the board's phrases cannot make (a web address, a
+   name), and a packaged build (PyInstaller) so the laptop needs no uv.
 
 ## The Eyedid SDK
 
