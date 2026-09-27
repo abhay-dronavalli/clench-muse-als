@@ -379,6 +379,10 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             main.post { if (!destroyed) car.play(action, ms.coerceIn(100, 5_000), window) }
         }
 
+        @JavascriptInterface fun carSpeed(mph: Int) {
+            main.post { if (!destroyed) car.setSpeed(mph) }
+        }
+
         @JavascriptInterface fun carLayout(mode: String) {
             main.post { if (!destroyed) car.setLayout(mode) }
         }

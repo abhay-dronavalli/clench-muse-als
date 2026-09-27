@@ -806,3 +806,8 @@ choices below are Taher's.
 - Onboarding waits are shorter: welcome and "all set" 2 s, the eye calibration starts 1 s into its
   step, 1 s of clean headband signal moves on, 2 s for the no-eye-tracker note. Steps still move on
   at once when they succeed.
+
+- Correction: "just the car" is for the onboarding preview only. In the app the car drives through
+  its world again (road, grass, trees, houses, clouds, hills, day sky; `CarWorld` / `WorldPlan` and the
+  `carSpeed` bridge are back). The preview hides the world and shows the car on a soft light
+  platform against a plain backdrop.
