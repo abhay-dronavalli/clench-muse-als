@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Settings, Signal } from '../contracts'
 import { useSocket } from '../lib/useSocket'
-import { getSensor, startSensor, stopSensor, type BlinkMode, type SensorStatus } from './service'
+import { getSensor, isTabletSensor, startSensor, stopSensor, type BlinkMode, type SensorStatus } from './service'
 import { museFresh, museState } from './status'
 
 /**
@@ -13,7 +13,8 @@ import { museFresh, museState } from './status'
  *   4. the service's own output, always visible, so a Bluetooth failure is never hidden.
  * Closed, it leaves only a small tab on the left edge showing the headband state.
  *
- * Acquisition runs in sensor.main (started through /api/sensor), never in the browser.
+ * Acquisition runs in sensor.main (started through /api/sensor), never in the browser; in the tablet
+ * shell built with a Muse profile, in the tablet app itself (Connect pairs the tablet, clenches only).
  */
 
 const CHANNELS = ['TP9', 'AF7', 'AF8', 'TP10'] as const
@@ -125,6 +126,7 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const tone = good ? 'bg-emerald-400' : fresh ? 'bg-amber-300' : 'bg-rose-500'
   const age = signal ? Math.max(0, now - signal.t) : null
   const profiles = service?.profiles ?? []
+  const tablet = isTabletSensor()
 
   if (!open) {
     return (
@@ -158,7 +160,7 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
                 : <option value="">no calibration profiles</option>}
             </select>
             <label htmlFor="muse-blink" className="text-zinc-400">Double blink</label>
-            <select id="muse-blink" value={running ? (service?.blink === 'off' ? 'off' : 'auto') : blink} disabled={running || busy}
+            <select id="muse-blink" value={tablet || running ? (service?.blink === 'off' ? 'off' : 'auto') : blink} disabled={tablet || running || busy}
               onChange={(e) => setBlink(e.target.value as BlinkMode)}
               className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-1 disabled:opacity-50">
               <option value="auto">MNE (on)</option>
@@ -166,7 +168,7 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
             </select>
             <span className="text-zinc-400">Service</span>
             <span className={running ? 'text-emerald-400' : 'text-zinc-500'}>
-              {running ? `running (${service?.source}, pid ${service?.pid})` : service?.exit_code != null ? `exited (${service.exit_code})` : 'stopped'}
+              {running ? `running (${service?.source}${service?.pid != null ? `, pid ${service.pid}` : ''})` : service?.exit_code != null ? `exited (${service.exit_code})` : 'stopped'}
             </span>
           </div>
           <button type="button" disabled={busy || (!running && !profile)}
@@ -174,7 +176,7 @@ export function MusePanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
             className={`mt-2 w-full rounded-lg px-3 py-2 font-semibold disabled:opacity-40 ${running ? 'border border-zinc-600 text-zinc-200' : 'bg-zinc-100 text-zinc-950'}`}>
             {busy ? '…' : running ? 'Disconnect' : 'Connect headband'}
           </button>
-          {!running && (
+          {!running && !tablet && (
             <button type="button" disabled={busy} onClick={() => act(() => startSensor('demo', 'demo', 'auto'))}
               className="mt-1.5 w-full rounded-lg border border-zinc-800 px-3 py-1 text-xs text-zinc-400 disabled:opacity-40">
               Run the simulated demo source (no headband)

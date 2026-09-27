@@ -1,5 +1,7 @@
 // The Android tablet shell (kushagra/tablet, BoardActivity) around this page: a native eye tracker
 // (Eyedid) that owns the front camera and feeds the gaze slot. docs/eye-tracking.md, "Native shell".
+// It also speaks with Android's text-to-speech (WebView has no speechSynthesis; board/nativeSpeech.ts)
+// and can run the Muse Sensor Service itself (sensor/service.ts).
 //
 //   shell -> page   window.clenchGaze.feed({ x, y, found, confidence, state })   about 30 times a second
 //                   window.clenchNativeEvent({ type: 'blink' | 'tracker' | 'calibration', ... })
@@ -23,6 +25,20 @@ export interface ClenchNativeBridge {
   /** the SDK's own gaze filter (on by default) */
   gazeFilter(): boolean
   setGazeFilter(on: boolean): void
+
+  // Optional: older shells do not have these.
+
+  /** Say `text` with Android's voice (volume 0..1); a 'speech' event follows. False = cannot now. */
+  speak?(id: string, text: string, lang: string, volume: number): boolean
+  /** stop whatever the Android voice is saying (no 'speech' event is needed for it) */
+  stopSpeaking?(): void
+  /** the shell has its own Muse sensor (the build names a calibration profile) */
+  museAvailable?(): boolean
+  /** the shell's sensor as the Core's /api/sensor status (JSON) */
+  museStatus?(): string
+  /** start or stop the shell's sensor; both answer with museStatus() */
+  museConnect?(): string
+  museDisconnect?(): string
 }
 
 export type NativeEvent =
@@ -33,6 +49,7 @@ export type NativeEvent =
       state: 'started' | 'finished' | 'canceled' | 'loaded' | 'validation_passed' | 'validation_failed'
       person: string
     }
+  | { type: 'speech'; id: string; state: 'done' | 'error'; detail?: string }
 
 declare global {
   interface Window {

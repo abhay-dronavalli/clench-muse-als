@@ -32,6 +32,11 @@ import com.clench.eyetrack.BuildConfig
 import com.clench.eyetrack.board.GazeMath.Frac
 import com.clench.eyetrack.muse.ClenchProfile
 import com.clench.eyetrack.muse.MuseSensor
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * The patient board in a WebView (BOARD_URL, by default http://localhost:5173/ through
@@ -47,8 +52,10 @@ import com.clench.eyetrack.muse.MuseSensor
  *   - Gaze goes to the page as fractions of the WebView, about 30 times a second.
  *   - Calibration: five points on a native screen, saved per person and reloaded at start, then
  *     checked with one target; a miss asks to recalibrate.
- *   - With MUSE_PROFILE set, the Muse 2 connects to the tablet over Bluetooth and its clenches go to
- *     the Core's /ws/sensor (com.clench.eyetrack.muse.MuseSensor), in place of the laptop's sensor.
+ *   - With MUSE_PROFILE set, the Muse panel's Connect headband pairs the Muse 2 with the tablet over
+ *     Bluetooth and its clenches go to the Core's /ws/sensor (com.clench.eyetrack.muse.MuseSensor),
+ *     in place of the laptop's sensor. Nothing connects until then: the board works without it.
+ *   - The page's "browser speech" is Android's text-to-speech (NativeSpeech): WebView has none.
  */
 class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
@@ -76,13 +83,22 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) gaze.fail("camera permission denied") else reconcile()
-        startMuse() // after the camera prompt, so the two prompts never overlap
     }
 
+    private lateinit var speech: NativeSpeech
+
+    // The tablet's Muse sensor: main thread only, except the log (locked) and museWanted.
     private var muse: MuseSensor? = null
+    @Volatile private var museWanted = false
+    private val museLog = ArrayDeque<String>()
 
     private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted.values.all { it }) startMuse() else Log.w(TAG, "Muse: Bluetooth permission denied; the tablet will not read the headband")
+        if (granted.values.all { it }) {
+            startMuse()
+        } else {
+            museWanted = false
+            museLine("Bluetooth permission denied: allow Nearby devices for Clench Board, then Connect again")
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -102,6 +118,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
         person = prefs.getString(KEY_PERSON, "") ?: ""
         gaze = EyedidGaze(applicationContext, this)
+        speech = NativeSpeech(this) { id, state, detail ->
+            main.post { event("speech", "id" to GazeMath.str(id), "state" to GazeMath.str(state), "detail" to GazeMath.str(detail)) }
+        }
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect on the laptop
         web = WebView(this).apply {
@@ -152,7 +171,7 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         web.loadUrl(BuildConfig.BOARD_URL)
         // Ask for the camera now, so the prompt does not interrupt the person later. The tracker itself
         // starts only when the page's pointing mode needs it.
-        if (!hasCamera()) cameraPermission.launch(Manifest.permission.CAMERA) else startMuse()
+        if (!hasCamera()) cameraPermission.launch(Manifest.permission.CAMERA)
     }
 
     private val bluetoothPermissions =
@@ -162,22 +181,58 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
-    /** The Muse on the tablet, if this build names a calibration profile (MUSE_PROFILE). */
+    /** Connect headband on the tablet: the Muse sensor with this build's profile (MUSE_PROFILE). Main thread. */
     private fun startMuse() {
-        if (muse != null || destroyed || BuildConfig.MUSE_PROFILE.isEmpty()) return
+        if (muse != null || destroyed || !museWanted) return
         val missing = bluetoothPermissions.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isNotEmpty()) return bluetoothPermission.launch(missing.toTypedArray())
+        if (missing.isNotEmpty()) {
+            museLine("Asking for Bluetooth permission")
+            return bluetoothPermission.launch(missing.toTypedArray())
+        }
         val profile = try {
             ClenchProfile(BuildConfig.MUSE_PROFILE, BuildConfig.MUSE_EMG_REST, BuildConfig.MUSE_EMG_THRESHOLD,
                 BuildConfig.MUSE_EMG_PEAK.takeIf { it.isFinite() })
         } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "Muse: profile ${BuildConfig.MUSE_PROFILE} is unusable: ${e.message}")
+            museWanted = false
+            museLine("Profile ${BuildConfig.MUSE_PROFILE} is unusable: ${e.message}")
             return
         }
         val origin = android.net.Uri.parse(BuildConfig.BOARD_URL).let { "${it.scheme}://${it.encodedAuthority}" }
-        muse = MuseSensor(applicationContext, profile, origin, BuildConfig.MUSE_NAME.ifEmpty { null }, BuildConfig.MUSE_MOTION_LIMIT)
+        museLine("Starting: profile ${profile.name}, threshold ${String.format(Locale.US, "%.1f", profile.emgThreshold)} uV, clenches only")
+        muse = MuseSensor(applicationContext, profile, origin, BuildConfig.MUSE_NAME.ifEmpty { null }, BuildConfig.MUSE_MOTION_LIMIT, ::museLine)
             .also { it.start() }
     }
+
+    /** Disconnect: release the headband; the Core pauses Muse input when the sensor goes. Main thread. */
+    private fun stopMuse() {
+        // museWanted is the bridge's to set: a Connect right after this Disconnect must still start.
+        muse?.let {
+            it.stop()
+            museLine("Stopped: the headband is released")
+        }
+        muse = null
+        if (museWanted) startMuse() // Disconnect then Connect again, both queued before this ran
+    }
+
+    private fun museLine(text: String) {
+        val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+        synchronized(museLog) {
+            museLog.addLast("$stamp $text")
+            while (museLog.size > MUSE_LOG_LINES) museLog.removeFirst()
+        }
+    }
+
+    /** The Core's /api/sensor status shape, for the Muse panel (web/src/sensor/service.ts). */
+    private fun museStatusJson(): String = JSONObject()
+        .put("running", museWanted)
+        .put("pid", JSONObject.NULL)
+        .put("profile", BuildConfig.MUSE_PROFILE)
+        .put("source", "tablet")
+        .put("blink", "off")
+        .put("exit_code", JSONObject.NULL)
+        .put("profiles", JSONArray(listOf(BuildConfig.MUSE_PROFILE)))
+        .put("log", JSONArray(synchronized(museLog) { museLog.toList() }))
+        .toString()
 
     private fun hasCamera() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -208,8 +263,9 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
     override fun onDestroy() {
         destroyed = true
-        muse?.stop()
-        muse = null
+        museWanted = false
+        stopMuse()
+        speech.shutdown()
         gaze.release()
         web.destroy()
         super.onDestroy()
@@ -262,6 +318,31 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
 
         @JavascriptInterface fun calibrate(who: String) {
             main.post { calibrate(who.trim().ifEmpty { DEFAULT_PERSON }) }
+        }
+
+        // Android's voice for the page's "browser speech" (web/src/board/nativeSpeech.ts).
+        @JavascriptInterface fun speak(id: String, text: String, lang: String, volume: Double): Boolean =
+            speech.speak(id, text, lang, volume.toFloat())
+
+        @JavascriptInterface fun stopSpeaking() = speech.stop()
+
+        // The Muse panel's Connect / Disconnect on the tablet (web/src/sensor/service.ts).
+        @JavascriptInterface fun museAvailable(): Boolean = BuildConfig.MUSE_PROFILE.isNotEmpty()
+
+        @JavascriptInterface fun museStatus(): String = museStatusJson()
+
+        @JavascriptInterface fun museConnect(): String {
+            if (BuildConfig.MUSE_PROFILE.isNotEmpty() && !museWanted) {
+                museWanted = true
+                main.post { startMuse() }
+            }
+            return museStatusJson()
+        }
+
+        @JavascriptInterface fun museDisconnect(): String {
+            museWanted = false
+            main.post { stopMuse() }
+            return museStatusJson()
         }
     }
 
@@ -436,5 +517,6 @@ class BoardActivity : ComponentActivity(), EyedidGaze.Listener {
         private const val SETTLE_BEFORE_SAMPLES_MS = 1_000L // the SDK sample waits 1 s on each dot
         private const val VALIDATE_SETTLE_MS = 800L
         private const val VALIDATE_COLLECT_MS = 1_500L
+        private const val MUSE_LOG_LINES = 60
     }
 }

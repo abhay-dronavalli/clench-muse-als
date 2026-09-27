@@ -1,4 +1,6 @@
 import type { Lang, UtteranceKind } from '../contracts'
+import { nativeBridge, nativeEvents } from '../facetrack/native'
+import { speakNative, type SpeechBridge } from './nativeSpeech'
 import { SoundQueue } from './queue'
 
 /**
@@ -17,9 +19,11 @@ import { SoundQueue } from './queue'
  *   - If the audio file fails to load or play, the same text is said with browser speech.
  *   - Echo plays at 70% volume, phrase and system at 100%.
  *   - onEnd runs exactly once for every utterance: finished, failed, dropped or interrupted.
+ *   - In the Android tablet shell, "browser speech" is Android's own voice (nativeSpeech.ts):
+ *     WebView has no speechSynthesis.
  */
 
-export type VoiceSource = 'ElevenLabs (cached)' | 'ElevenLabs' | 'Browser'
+export type VoiceSource = 'ElevenLabs (cached)' | 'ElevenLabs' | 'Browser' | 'Tablet voice'
 
 export interface Utterance {
   id: string
@@ -52,6 +56,14 @@ let player: HTMLAudioElement | null = null
 let current: SpeechSynthesisUtterance | null = null
 let run = 0 // bumps on every start and stop, so callbacks of an older item do nothing
 let clicks: AudioContext | null = null
+let cancelNative: (() => void) | null = null // the tablet voice's line in progress
+
+/** The tablet shell's Android voice, or null in a normal browser (or an older shell). */
+function nativeVoice(): SpeechBridge | null {
+  const b = nativeBridge()
+  if (!b?.speak || !b.stopSpeaking) return null
+  return { speak: b.speak.bind(b), stopSpeaking: b.stopSpeaking.bind(b) }
+}
 
 function speechAvailable(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window
@@ -93,6 +105,8 @@ function pickVoice(tag: string): SpeechSynthesisVoice | undefined {
 /** Stop the audio player and browser speech without firing any of their callbacks. */
 function stopAll(): void {
   run++
+  cancelNative?.()
+  cancelNative = null
   if (player) {
     player.onended = null
     player.onerror = null
@@ -111,6 +125,15 @@ function stopAll(): void {
 
 /** Browser speech; `onDone` runs once, when speech ends or fails. */
 function speakWithBrowser(text: string, lang: Lang, volume: number, onDone: () => void): void {
+  const tabletVoice = nativeVoice()
+  if (tabletVoice) {
+    cancelNative = speakNative(tabletVoice, nativeEvents.subscribe, text, LANG_TAG[lang], volume, () => {
+      cancelNative = null
+      onDone()
+    })
+    if (cancelNative) return
+    // The shell could not take it (its voice is still starting): browser speech, if any.
+  }
   if (!speechAvailable()) {
     console.warn('speechSynthesis not available')
     onDone()
@@ -174,7 +197,7 @@ function start(sound: Sound, done: () => void): void {
     window.clearTimeout(startTimer)
     stopAll()
     run = mine // still this item: its browser speech must be able to finish it
-    onSource('Browser')
+    onSource(nativeVoice() ? 'Tablet voice' : 'Browser')
     speakWithBrowser(u.text, u.lang, VOLUME[u.kind], finish)
   }
 
