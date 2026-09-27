@@ -34,3 +34,8 @@ Thumbs.db
 
 # Browser test artifacts
 .playwright-mcp/
+
+# Eyedid Windows SDK (downloaded by hand, licensed; docs/desktop-control.md)
+desktop/eyedid/third_party/
+# Desktop agent runtime data (calibrations)
+data/desktop/
