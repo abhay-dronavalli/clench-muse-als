@@ -1,4 +1,4 @@
-"""Google Places (New) and Street View Static, LIVE ONLY (docs/decisions.md #22).
+"""Google Places (New) and Street View Static, LIVE ONLY (docs/decisions.md #25).
 
 The Google Maps Platform terms (ToS 3.2.3, Service Specific Terms, as of 2026-09) forbid caching
 Google content (except place IDs and pano IDs), storing results derived from it, showing it with a

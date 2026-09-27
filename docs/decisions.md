@@ -719,8 +719,105 @@ choices below are Taher's.
   an arrow moving along it with the ride's progress. No dragging or zooming. If the script, the key or
   the route fails, the drawn map takes over. Not yet run with a real key.
 
+## 22. Onboarding: eyes, headband, a test clench (branch muse-on-android)
 
-## 22. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
+- "Click to start" opens a short onboarding (`web/src/board/Onboarding.tsx`; the Dev panel's Run setup
+  opens it again), styled as a calm ride welcome with a teal accent. Ride-themed but without any
+  company's name or logo. Steps: (1) the eye tracker's calibration (the shell's own five targets,
+  started with `ClenchNative.calibrate`; the tracker is switched to Auto pointing first if it was off),
+  (2) the headband: connect with the saved profile (no Muse calibration here: the tablet's built-in
+  profile, or the laptop sensor's newest `test/calibration.*.json`), wait for a live signal with every
+  sensor touching for 2 s, (3) one test clench. Every step can be skipped.
+- The test clench is recognised from the Core's input log (INPUT_EVENT) while Muse input is still
+  paused, so it never picks anything on the board. Muse input is switched on only when the clench has
+  worked and the rider presses Finish.
+- The shell holds its own startup "not calibrated yet" prompt back while the onboarding runs
+  (`ClenchNative.setOnboarding`).
+- Calibration targets are large and high-contrast (teal disc, white centre, a ring that fills) on a
+  light backdrop, and the calibration area is inset (8% of the screen, at least the target's size) so
+  no target is drawn off the edge. If the SDK refuses the inset area it falls back to the whole
+  screen (logged).
+- Fix (not onboarding code): `ClenchNative.calibrate` never calibrated. Inside the bridge class, the
+  bare `calibrate(...)` call resolved to the bridge method itself, so it re-posted itself to the main
+  thread forever. It now calls the activity's method explicitly.
+
+## 23. Tablet layout controls and onboarding entry readability
+
+- The Kotlin board shell renders Car / Split / Map and the startup screen from the web app, so
+  these visual changes live in `web/src/board/`. Layout labels grow from 20 px to 30 px semibold,
+  with buttons at least 72 px tall and more space between them. The existing sidebar width stays
+  288 px to preserve the native car framing. Telemetry scrolls independently on short screens so
+  the three layout buttons stay visible. Selected state is also exposed with `aria-pressed`.
+- The startup screen uses onboarding's light gradient, white rounded card and teal palette. Its
+  explicit "Click to start" button uses dark teal for readable white text, with hover, pressed and
+  keyboard focus states. It still unlocks speech and opens the existing setup flow on a deliberate
+  click; clicking the surrounding background no longer starts setup.
+
+## 24. Timed eye onboarding, blink selection, and complete scan fallback
+
+- Requested follow-up: launch shows an 8 s countdown and Start now. Setup then progresses through
+  welcome (6 s), eyes (up to 45 s), headband (up to 30 s), test clench (up to 20 s when the headband
+  passed), and completion (6 s). Each step shows its countdown/progress. Touch or a deliberate
+  double blink can advance sooner; successful calibration, 2 s of clean signal, and a verified
+  clench advance their steps early. Timers pause while disconnected, during help, or when hidden.
+  Expiry skips unavailable hardware; it never declares calibration successful or enables Muse.
+  Without a compatible native eye tracker, the eye introduction lasts 6 s instead of waiting 45 s.
+- Eye setup shows the existing Jaguar I-Pace model from the tablet's 3D scene at the centre. The
+  parked car stays upright: horizontal gaze turns the camera at up to 30 degrees/s with eased
+  acceleration, fixed radius and fixed height. Centre gaze stops it; lost gaze eases to a stop.
+  Native calibration targets appear over the car and report progress to the web page. Native
+  bridge additions and compatibility behavior are in `docs/eye-tracking.md`.
+- Setup options scan every 2.2 s until gaze is available. Live gaze holds the highlight and can
+  select an option after 250 ms looking inside its button. Two bilateral blinks 100-750 ms apart
+  activate the same option; the highlight holds for 800 ms during the pair, and selection has a
+  1.2 s cooldown. A pair cannot cross steps or options, and requires eyes seen within 1.5 s.
+  Blinks select setup options only, never patient messages, calls, or safety confirmations.
+- SETTINGS gains optional `onboarding`. The Core ignores ordinary picks during setup, including
+  test clenches and taps on a hidden confirm. LONG_CLENCH and help cancellation remain available.
+  The gate clears when the last board leaves. Muse remains paused until a verified test clench and
+  fresh, unblocked contact on all four channels; the timer cannot turn it on. The keyboard stand-in
+  stays mounted for the emergency fallback.
+- Both Auto and explicit Gaze now scan before eye detection and after 3 s without tracking. Gaze
+  still accepts only gaze points. While scanning, Car layout and the six top-level trip controls
+  are shown. Split/Map remain the preference and return when pointing resumes, at the current menu
+  depth. Changes preserve the highlighted control by id and invalidate stale points/taps with seq.
+- The Android shell supplies native TTS without a browser gesture. A normal browser can auto-open
+  setup visually but still requires a tap to unlock speech; Start and setup touch interaction do
+  that. With no native shell, the preview explains that the 3D car requires the updated tablet app.
+- Tests that expected explicit Gaze never to scan, or Split to scan only three tiles, were updated
+  to the requested fallback behavior; new tests cover the loss/recovery path and stale selection.
+  Exact SETTINGS fixtures now include the announced `onboarding: false` value.
+
+
+- The board now starts in English (`lang: en` in `data/profile.yaml`; it was Spanish for Luis). Spanish
+  stays one tap away (the dev panel's EN/ES) and fully supported; the Spanish help-alert test now asks
+  for Spanish explicitly instead of relying on the profile.
+
+- Finishing the onboarding starts the ride: it turns trip mode on (the trip screen with the 3D car,
+  map and car controls). Before, it left the rider on the communication menus, which looked like the
+  old screens; they are still there with trip mode off (Dev panel End trip).
+
+- Calibration fix: the calibration area was measured on the calibration overlay, which is still 0 x 0
+  when nothing has shown it yet (the onboarding holds the startup prompt back), so the SDK refused every
+  start. The area (and the one-dot check) is now measured on the full-screen board WebView.
+- The trip scene is just the car: a soft light platform and a plain light backdrop, no road or
+  scenery (removed `CarWorld` / `WorldPlan`, and the `carSpeed` bridge that moved the scenery). The
+  camera still circles; the line particles and the Pull over stop are unchanged.
+- Onboarding waits are shorter: welcome and "all set" 2 s, the eye calibration starts 1 s into its
+  step, 1 s of clean headband signal moves on, 2 s for the no-eye-tracker note. Steps still move on
+  at once when they succeed.
+
+- Correction: "just the car" is for the onboarding preview only. In the app the car drives through
+  its world again (road, grass, trees, houses, clouds, hills, day sky; `CarWorld` / `WorldPlan` and the
+  `carSpeed` bridge are back). The preview hides the world and shows the car on a soft light
+  platform against a plain backdrop.
+
+- Cleaner onboarding text: one language at a time (the start screen had Spanish printed next to the
+  English; it now follows the board's language like the rest), and short lines instead of full
+  sentences of instructions ("Follow the dots when they appear.", "Next: Headband in 3s", "Tap or double
+  blink to choose"). The start screen starts setup by itself after 4 s instead of 8.
+
+## 25. Trip planning from public map data: comfort routes and accessible drop-off (branch geo/public-data)
 
 - New module `core/geo/`, pages `/trip` and `/trip/live` (`web/src/trip/`), tests in `tests/geo/`.
   Layer 2 ranks drop-off points near the destination; Layer 1 compares routes for comfort. Result
@@ -781,9 +878,9 @@ choices below are Taher's.
 - The proto was in the working tree at `proto/clench/rider.proto`; the branch has it at
   `proto/clench/rider/v1/rider.proto`, matching its package and its own header comment.
 
-## 23. One ride flow: Car mode on the board, the car link, and /car-sim (branch integration/waymo)
+## 26. One ride flow: Car mode on the board, the car link, and /car-sim (branch integration/waymo)
 
-- Integration of geo/public-data (#22) and android-ui-enhancement (#21). tablet-kushi-ui (the native
+- Integration of geo/public-data (#25) and android-ui-enhancement (#21). tablet-kushi-ui (the native
   "Clench Mobility" app) is not merged: it has its own input path (a debug bar; Muse and gaze were
   to-dos), its own confirm and emergency screens and its own fake car. Its content is reused in the
   board instead: the trip confirm, the destination and drop-off wording, "help on the way".

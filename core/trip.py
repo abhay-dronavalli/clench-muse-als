@@ -12,7 +12,7 @@ Every level below the top one ends with a Back tile. LOW-safety comfort controls
 sent to the car at once (decisions #21): the Core sends CAR_ACTION and locks input while the board and
 the tablet play the short animation, and stays on the same level so a control can be repeated. The car
 may still refuse (a window at highway speed); its reason is said. HIGH-safety requests always open the
-confirm screen first. The car answers every request through the car link (core/car, decisions #23).
+confirm screen first. The car answers every request through the car link (core/car, decisions #26).
 """
 
 from __future__ import annotations

@@ -50,30 +50,33 @@ function Telemetry({
     </div>
   )
   return (
-    <aside className="relative z-30 flex w-72 shrink-0 flex-col gap-6 border-r border-black/5 bg-white/85 px-6 py-6 shadow-md">
-      {item(s.speed, car ? `${car.speed_mph} ${s.mph}` : dash)}
-      {item(s.eta, car ? `${car.eta_min} ${s.min}` : dash)}
-      {item(s.battery, car ? `${car.battery_pct}%` : dash)}
-      {item(s.temp, car ? `${car.cabin_temp_f}°F` : dash)}
-      <div className="flex flex-col">
-        <span className="text-lg text-zinc-500">{s.windows}</span>
-        <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
-          {WINDOW_ORDER.map((w) => (
-            <span key={w} className="flex items-baseline gap-2">
-              <span className="text-base text-zinc-500">{s.windowShort[w]}</span>
-              <span className="text-2xl font-semibold tabular-nums text-zinc-900">{car ? `${car.windows[w]}%` : dash}</span>
-            </span>
-          ))}
+    <aside className="relative z-30 flex min-h-0 w-72 shrink-0 flex-col gap-6 border-r border-black/5 bg-white/85 px-6 py-6 shadow-md">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
+        {item(s.speed, car ? `${car.speed_mph} ${s.mph}` : dash)}
+        {item(s.eta, car ? `${car.eta_min} ${s.min}` : dash)}
+        {item(s.battery, car ? `${car.battery_pct}%` : dash)}
+        {item(s.temp, car ? `${car.cabin_temp_f}°F` : dash)}
+        <div className="flex flex-col">
+          <span className="text-lg text-zinc-500">{s.windows}</span>
+          <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+            {WINDOW_ORDER.map((w) => (
+              <span key={w} className="flex items-baseline gap-2">
+                <span className="text-base text-zinc-500">{s.windowShort[w]}</span>
+                <span className="text-2xl font-semibold tabular-nums text-zinc-900">{car ? `${car.windows[w]}%` : dash}</span>
+              </span>
+            ))}
+          </div>
         </div>
+        {item(s.volume, car ? `${car.volume}/10` : dash)}
       </div>
-      {item(s.volume, car ? `${car.volume}/10` : dash)}
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="flex shrink-0 flex-col gap-3">
         {TRIP_LAYOUTS.map((l) => (
           <button
             key={l}
             type="button"
             onClick={() => onLayout(l)}
-            className={`rounded-2xl px-4 py-2 text-xl ${l === layout ? 'bg-zinc-900 font-semibold text-white' : 'bg-zinc-100 text-zinc-600 ring-1 ring-black/10'}`}
+            aria-pressed={l === layout}
+            className={`min-h-18 rounded-2xl px-4 py-4 text-3xl font-semibold leading-tight transition-colors focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#007a72] ${l === layout ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-800 ring-1 ring-black/10 hover:bg-zinc-200'}`}
           >
             {s.layout[l]}
           </button>

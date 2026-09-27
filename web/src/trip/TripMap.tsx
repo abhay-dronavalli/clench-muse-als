@@ -5,7 +5,7 @@ import { decodePolyline } from './format'
 import type { Candidate, LatLng, RouteStats } from './types'
 
 // OpenStreetMap tiles (no key in the browser). Only open data is drawn on this map: Google
-// content never appears on or next to it (docs/decisions.md #22).
+// content never appears on or next to it (docs/decisions.md #25).
 const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 

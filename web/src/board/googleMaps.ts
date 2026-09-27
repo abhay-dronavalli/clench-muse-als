@@ -2,7 +2,7 @@
  * Loading Google's Maps JavaScript API once, only when a key is set (VITE_GOOGLE_MAPS_API_KEY in the
  * repository's .env). The key goes to the browser, as with any Maps JavaScript key: restrict it in
  * Google Cloud to the Maps JavaScript API, and to http://localhost:5173/* and 5174. No Directions: the
- * route drawn is our own open-data route (OSRM, /api/geo/trip), docs/decisions.md #23.
+ * route drawn is our own open-data route (OSRM, /api/geo/trip), docs/decisions.md #26.
  *
  * Only the handful of Maps classes the trip map uses are typed here (no @types/google.maps).
  */

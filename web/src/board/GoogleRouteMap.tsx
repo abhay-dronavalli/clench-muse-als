@@ -6,7 +6,7 @@ import { STRINGS } from './strings'
 
 /**
  * The trip map on Google Maps: our open-data route from /api/geo/trip (OSRM, FIU to the MDC Kendall
- * drop-off; no Google Directions, decisions #23), the part already driven in grey, and the car as a blue arrow moving along the route as the ride goes
+ * drop-off; no Google Directions, decisions #26), the part already driven in grey, and the car as a blue arrow moving along the route as the ride goes
  * on. The map cannot be dragged or zoomed (a stray touch must not move it). If the script, the key or
  * the route fail, `onFail` hands over to the drawn map.
  */

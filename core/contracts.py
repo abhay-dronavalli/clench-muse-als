@@ -190,6 +190,7 @@ class Settings(_Msg):
     # before the highlight moves there, 0 to 0.2. Omit to keep it.
     tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
     muse_enabled: bool | None = None  # session-only; startup is paused
+    onboarding: bool | None = None  # block ordinary board picks while setup owns input
     # Trip mode: the board shows the trip screen (car controls) instead of the menus. Session-only;
     # omit to keep it.
     trip: bool | None = None

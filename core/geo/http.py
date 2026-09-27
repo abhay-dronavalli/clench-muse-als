@@ -6,7 +6,7 @@ User-Agent, and a timeout. A failed request falls back to the cached response an
 that the trip page shows; with nothing cached it raises FetchError.
 
 Google responses must never go through this module: the Google Maps Platform terms forbid caching
-them (docs/decisions.md #22). core/geo/google.py has its own uncached client.
+them (docs/decisions.md #25). core/geo/google.py has its own uncached client.
 """
 
 from __future__ import annotations

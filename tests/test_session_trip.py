@@ -13,6 +13,7 @@ from core.contracts import (
     Clench,
     Confirm,
     DoubleBlink,
+    FaceOk,
     LongClench,
     Point,
     Screen,
@@ -279,6 +280,8 @@ def test_a_scan_covers_every_tile_of_a_level_back_included(in_trip, sched, sent)
 
 
 def test_the_split_layout_keeps_only_the_three_most_important_controls(in_trip, sched, sent):
+    in_trip.handle(FaceOk(ok=True))
+    in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
     assert labels(sent) == TOP  # the three top levels are all important now
     assert in_trip.settings().trip_layout == "split"
@@ -287,12 +290,73 @@ def test_the_split_layout_keeps_only_the_three_most_important_controls(in_trip, 
     tap_label(in_trip, sched, sent, "Back")
     assert labels(sent) == TOP
     sched.advance(3 * SCAN_S)
-    assert last_screen(sent).highlight == 0  # the scan wraps after three tiles
+    assert last_screen(sent).highlight == 0  # tracked gaze does not cycle the highlight
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="car"))
     assert labels(sent) == TOP
 
 
 def test_pull_over_from_the_split_layout_still_confirms(in_trip, sched, sent):
+    in_trip.handle(FaceOk(ok=True))
+    in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
     in_trip.handle(Settings(pointing_mode="auto", scan_ms=int(SCAN_S * 1000), trip_layout="split"))
     go(in_trip, sched, sent, "Trip changes", "Pull over")
     assert sent[-1] == Confirm(text="Please pull over here.", action="pull_over")
+
+
+def test_tracking_loss_keeps_the_split_preference_and_the_highlight(in_trip, sched, sent):
+    # With three top levels, Split keeps all of them (SPLIT_TOP); losing the eyes must still keep the
+    # rider's layout preference and the highlighted control.
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, trip_layout="split"))
+    assert labels(sent) == TOP
+    in_trip.handle(FaceOk(ok=True))
+    in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
+    assert labels(sent) == TOP
+    in_trip.handle(Point(source="gaze", tile=1, seq=in_trip.seq, t=0.0))
+    in_trip.handle(FaceOk(ok=False))
+    sched.advance(3.1)
+    assert labels(sent) == TOP
+    assert last_screen(sent).tiles[in_trip.highlight].label == "Comfort"
+    assert in_trip.settings().trip_layout == "split"
+    in_trip.handle(FaceOk(ok=True))
+    in_trip.handle(Point(source="gaze", tile=2, seq=in_trip.seq, t=0.0))
+    assert labels(sent) == TOP and in_trip.highlight == 2
+
+
+def test_tracking_recovery_keeps_the_current_submenu(in_trip, sched, sent):
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, trip_layout="split"))
+    tap_label(in_trip, sched, sent, "Comfort")
+    before = labels(sent)
+    in_trip.handle(FaceOk(ok=True))
+    in_trip.handle(Point(source="gaze", tile=0, seq=in_trip.seq, t=0.0))
+    assert labels(sent) == before == COMFORT
+    assert last_screen(sent).path == ["Comfort"]
+
+
+def test_setup_input_never_operates_hidden_tiles_but_help_still_works(in_trip, sched, sent):
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=True))
+    before = labels(sent)
+    in_trip.handle(Clench(t=0, strength=1))
+    in_trip.handle(Tap(tile=0, seq=in_trip.seq, t=0))
+    in_trip.handle(DoubleBlink(t=0))
+    assert labels(sent) == before
+    assert in_trip.state is SessionState.SCANNING
+    assert not car_actions(sent)
+    in_trip.handle(LongClench(t=0, duration=2.5))
+    assert in_trip.state is SessionState.HELP_COUNTDOWN
+    in_trip.handle(DoubleBlink(t=0))
+    assert in_trip.state is SessionState.SCANNING
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=False))
+    tap_label(in_trip, sched, sent, "Comfort")
+    assert labels(sent) == COMFORT
+
+
+def test_setup_timeout_cannot_confirm_an_existing_outward_action(in_trip, sched, sent):
+    go(in_trip, sched, sent, "Trip changes", "Contact Support")
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=True))
+    in_trip.handle(Clench(t=0, strength=1))
+    in_trip.handle(Tap(tile=None, seq=None, t=0))
+    sched.advance(120)
+    assert in_trip.state is SessionState.CONFIRMING
+    assert not any(isinstance(m, (ActionResult, CarResult)) for m in sent)
+    in_trip.handle(Settings(pointing_mode="auto", scan_ms=1000, onboarding=False))
+    assert in_trip.state is SessionState.CONFIRMING

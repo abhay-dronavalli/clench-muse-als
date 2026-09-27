@@ -1,6 +1,6 @@
 # Trip planning from public map data (core/geo). Loaded by core/geo/config.py; a bad file fails loudly.
 #
-# Data sources (docs/decisions.md #22): everything that is scored, stored, or could be spoken comes
+# Data sources (docs/decisions.md #25): everything that is scored, stored, or could be spoken comes
 # from open data (OpenStreetMap via Nominatim, Overpass and OSRM; USGS elevation). Google Places and
 # Street View are only fetched live, shown on /trip/live, never stored and never scored.
 
@@ -11,7 +11,7 @@ demo_trip:
   pickup_query: "11200 SW 8th St, Miami, FL 33199"
   destination_query: "Miami Dade College Kendall Campus"
   # The destination building's OSM way: its centre is the drop-off search centre (more exact than
-  # the campus point Nominatim gives). Chosen for its entrance tagging (docs/decisions.md #22).
+  # the campus point Nominatim gives). Chosen for its entrance tagging (docs/decisions.md #25).
   destination_osm_way: 106965112
 
 # The rider (RideProfile.uses_wheelchair / needs_extra_boarding_time). Rider settings, not map data.

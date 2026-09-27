@@ -177,6 +177,8 @@ export interface Settings {
   tile_switch_margin?: number
   /** Session-only permission for the separate Muse input; defaults to paused. */
   muse_enabled?: boolean
+  /** Setup owns ordinary input; help remains available. Omit to keep it. */
+  onboarding?: boolean | null
   /** trip mode: the trip screen (car controls) instead of the menus; omit to keep it */
   trip?: boolean | null
   /** the trip screen's layout; omit to keep it */

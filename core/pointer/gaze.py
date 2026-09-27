@@ -1,15 +1,16 @@
-"""Gaze mode: the highlight follows an eye tracker's POINT messages (source "gaze"). No timer.
-
-An eye tracker plugs into the board's pointing code (web/src/facetrack/gaze.ts, see
-docs/eye-tracking.md) and feeds it a gaze point on the screen; the board turns it into POINT
-exactly as it does for the head. Same rules as Webcam mode: no fallback to scanning (Auto does
-that), and a clench picks the tile highlighted `clench_lookback_ms` before it.
-"""
+"""Gaze follows only eye POINTs and scans before detection or after three seconds without eyes."""
 
 from __future__ import annotations
 
-from core.pointer.webcam import WebcamPointer
+from core.clock import Scheduler
+from core.pointer.auto import AutoPointer
+from core.pointer.base import OnHighlight, OnSource
+from core.pointer.scan import DEFAULT_SCAN_MS
 
 
-class GazePointer(WebcamPointer):
-    source = "gaze"
+class GazePointer(AutoPointer):
+    """Gaze-only pointing; scan before detection and after a three-second loss."""
+
+    def __init__(self, scheduler: Scheduler, on_highlight: OnHighlight,
+                 scan_ms: int = DEFAULT_SCAN_MS, on_source: OnSource | None = None) -> None:
+        super().__init__(scheduler, on_highlight, scan_ms, on_source, accepts=("gaze",))

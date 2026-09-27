@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Confirm, Lang, Screen, Tile } from '../contracts'
 import { STRINGS } from './strings'
+import { LAUNCH_MS, SetupCountdown } from './onboardingFlow'
 
 export function Breadcrumb({ screen }: { screen: Screen }) {
   const parts = [STRINGS[screen.lang].home, ...screen.path]
@@ -185,16 +186,37 @@ export function HelpCountdownView({ countdown, lang }: { countdown: number; lang
   )
 }
 
-export function StartOverlay({ onStart }: { onStart: () => void }) {
+export function StartOverlay({ onStart, lang }: { onStart: (gesture?: boolean) => void; lang: Lang }) {
+  const t = STRINGS[lang].start
+  const [left, setLeft] = useState(LAUNCH_MS / 1000)
+  const startRef = useRef(onStart)
+  useLayoutEffect(() => { startRef.current = onStart })
+  useEffect(() => {
+    const countdown = new SetupCountdown(LAUNCH_MS, performance.now())
+    const timer = window.setInterval(() => {
+      const remaining = countdown.tick(performance.now(), document.hidden)
+      setLeft(Math.max(0, Math.ceil(remaining / 1000)))
+      if (remaining <= 0) { window.clearInterval(timer); startRef.current(false) }
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [])
   return (
-    <button
-      type="button"
-      onClick={onStart}
-      className="fixed inset-0 z-40 flex cursor-pointer flex-col items-center justify-center gap-8 bg-black text-white"
-    >
-      <span className="text-8xl font-bold tracking-tight">Clench</span>
-      <span className="rounded-3xl px-12 py-6 text-5xl font-semibold ring-8 ring-yellow-300">Click to start</span>
-      <span className="text-2xl text-zinc-400">Turns on speech. Haga clic para empezar.</span>
-    </button>
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-[linear-gradient(160deg,#eaf6f4_0%,#f6f8f8_45%,#e3eef7_100%)] p-6 text-zinc-900">
+      <div className="flex w-full max-w-3xl flex-col items-center gap-8 rounded-[2.5rem] bg-white px-8 py-12 text-center shadow-2xl shadow-black/10 sm:px-16 sm:py-16">
+        <h1 className="text-6xl font-bold tracking-tight text-[#007a72] sm:text-8xl">Clench</h1>
+        <button
+          type="button"
+          onClick={() => onStart(true)}
+          className="w-full rounded-3xl bg-[#007a72] px-8 py-6 text-3xl font-bold text-white shadow-lg shadow-[#00a99d]/30 transition-colors hover:bg-[#00665f] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#007a72] active:bg-[#00564f] sm:text-5xl"
+        >
+          {t.button}
+        </button>
+        <p className="text-2xl text-zinc-600">{t.auto(left)}</p>
+        <div role="progressbar" aria-label={t.auto(left)} aria-valuemin={0} aria-valuemax={LAUNCH_MS / 1000} aria-valuenow={LAUNCH_MS / 1000 - left} className="h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className="h-full bg-[#007a72] transition-[width]" style={{ width: `${(1 - left / (LAUNCH_MS / 1000)) * 100}%` }} />
+        </div>
+        <p className="text-lg text-zinc-500">{t.hint}</p>
+      </div>
+    </div>
   )
 }

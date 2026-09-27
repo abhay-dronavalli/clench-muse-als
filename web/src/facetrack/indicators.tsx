@@ -26,7 +26,7 @@ export function CameraLight({ lang }: { lang: Lang }) {
  * Scan mode (scanning is what was asked for) or while the head drives the highlight.
  */
 export function PointerBadge({ screen, mode }: { screen: Screen; mode: PointingMode | null }) {
-  if (screen.pointer !== 'scan' || (mode !== 'auto' && mode !== 'headtilt')) return null
+  if (screen.pointer !== 'scan' || (mode !== 'auto' && mode !== 'gaze' && mode !== 'headtilt')) return null
   const s = STRINGS[screen.lang].pointing
   return (
     <span className="rounded-full bg-zinc-800/95 px-4 py-1 text-xl font-semibold text-sky-200 ring-2 ring-sky-400/60">

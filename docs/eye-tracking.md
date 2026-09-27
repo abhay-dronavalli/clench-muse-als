@@ -50,7 +50,7 @@ Rules:
 
 | Pointing mode | Highlight follows | POINT `source` |
 |---|---|---|
-| Gaze | the gaze only. No fresh gaze = not seen (FACE_OK false), the highlight stays put and the board says "No eye tracker connected" | `"gaze"` |
+| Gaze | follows gaze only; scans before detection and after 3 s without eyes, returning to gaze on FACE_OK plus a fresh POINT | `"gaze"` |
 | Auto | the gaze while it is available, else the head, else the Core scans (after 3 s without either) | `"gaze"` or `"webcam"` |
 | Webcam | the head only (gaze ignored) | `"webcam"` |
 | Scan, Head tilt | nothing from the board | none |
@@ -120,7 +120,9 @@ The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns 
   with `x`, `y` already fractions of the WebView (the shell subtracts the WebView's position on the
   screen and divides by its size). `state` is Eyedid's tracking state (`SUCCESS`, `GAZE_MISSING`,
   `FACE_MISSING`), shown on `/gaze-test`. And `window.clenchNativeEvent({ type: 'blink' | 'tracker' |
-  'calibration', ... })`. Blinks are only counted on `/gaze-test`; nothing is picked with them.
+  'calibration', ... })`. Onboarding pairs bilateral blinks (100-750 ms apart) to choose its own
+  highlighted option; they never become a Core pick or confirm. Elsewhere blinks are still only
+  counted on `/gaze-test`.
 - One camera owner: while `ClenchNative.gazeActive()` is true the page never opens the camera. Auto
   and Webcam then follow the gaze (there is no head); Auto still scans after 3 s of lost eyes. The
   shell also denies any camera request from the page while its tracker runs or starts. If the tracker
@@ -128,7 +130,21 @@ The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns 
   state `error` tells the page, and the page may use the camera for head pointing.
 - Calibration is native: five points, saved per person on the tablet, reloaded at start and checked
   with one target (a miss offers to recalibrate). While calibrating or checking, the shell feeds
-  `found: false` with state `CALIBRATING`, so the board holds still.
+  `found: false` with state `CALIBRATING`, so the board holds still. During onboarding only, live
+  gaze still reaches the setup options; board pointing and dwell are paused and the Core's
+  `onboarding` input guard is active.
+
+### Timed onboarding bridge
+
+- `gazeReady()` reports SDK readiness to calibrate; `gazeActive()` also includes initialization.
+- `carPreview(on)` shows a parked car at the centre, with fixed camera height and radius. Gaze x
+  controls horizontal orbit speed (centre stops, edges up to 30 degrees/s). No gaze y, vehicle
+  pitch, or roll is applied; missing/stale gaze eases the orbit to a stop.
+- `cancelCalibration()` stops collection and removes targets/failure prompts when a step is skipped,
+  times out, or closes. Older shells without this method do not auto-start timed calibration.
+- Native `calibration_progress` events carry `progress` in 0..1 for the setup progress bar. Only
+  `calibration` / `finished` means calibration succeeded. During setup the native targets are
+  transparent over the car, with the page's instruction and countdown panels still visible.
 - Build, install and run: `kushagra/tablet/README.md`, "Board shell with Eyedid gaze".
 
 ## Gaze test (`/gaze-test`)

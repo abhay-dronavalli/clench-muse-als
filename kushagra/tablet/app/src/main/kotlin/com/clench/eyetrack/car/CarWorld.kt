@@ -24,6 +24,7 @@ class CarWorld(private val view: SceneView, private val ground: Float, seed: Lon
     private class Placed(val piece: WorldPlan.Piece, val node: Node, var lap: Int)
     private val placed = mutableListOf<Placed>()
     private val dashes = mutableListOf<Node>()
+    private val all = mutableListOf<Node>() // every top-level node, to show or hide the whole world
 
     init {
         val g = ground
@@ -134,7 +135,18 @@ class CarWorld(private val view: SceneView, private val ground: Float, seed: Lon
         return n
     }
 
-    private fun add(node: Node) = view.addChildNode(node)
+    private fun add(node: Node) {
+        view.addChildNode(node)
+        all += node
+    }
+
+    /** Show or hide the whole world (the onboarding's preview shows the car alone). */
+    fun setVisible(on: Boolean) = all.forEach { it.showAll(on) }
+
+    private fun Node.showAll(on: Boolean) {
+        isVisible = on
+        childNodes.forEach { it.showAll(on) }
+    }
 
     private fun paint() = color("paint", 242, 242, 236)
     private fun bark() = color("bark", 110, 78, 52)

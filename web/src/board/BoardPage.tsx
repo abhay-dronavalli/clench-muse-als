@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, TripLayout } from '../contracts'
+import type { ActivePointer, CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, TripLayout } from '../contracts'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -16,6 +16,7 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import {
+  nativeBridge,
   nativeCarAvailable,
   nativeGazeActive,
   playNativeCarEffect,
@@ -34,6 +35,8 @@ import { click, say, unlockSpeech, type Utterance, type VoiceSource } from './sp
 import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
+import { Onboarding } from './Onboarding'
+import { effectiveTripLayout } from './onboardingFlow'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
 import { ToastStack } from './ToastStack'
 import { BackPromptView, Breadcrumb, ConfirmView, HelpCountdownView, SpeakingView, StartOverlay, TileGrid } from './views'
@@ -61,6 +64,9 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
+  const [onboarding, setOnboarding] = useState(false)
+  const onboardingRef = useRef(false)
+  const [tripPointer, setTripPointer] = useState<ActivePointer | null>(null)
   const [view, setViewState] = useState<View>({ kind: 'waiting' })
   // What is on screen as of the last Core message, updated synchronously (not after a render), so
   // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
@@ -97,6 +103,7 @@ export default function BoardPage() {
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
       case 'SCREEN':
+        if (msg.screen === 'trip') setTripPointer(msg.pointer ?? null)
         setLang(msg.lang)
         if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
         else setView({ kind: 'menu', screen: msg })
@@ -148,6 +155,9 @@ export default function BoardPage() {
         push({ tone: msg.status === 'REJECTED' ? 'error' : msg.status === 'DELAYED' ? 'demo' : 'ok', text: msg.message })
         break
       case 'SETTINGS':
+        if (onboardingRef.current && (msg.onboarding !== true || msg.pointing_mode !== 'auto')) {
+          send({ ...msg, onboarding: true, muse_enabled: false, pointing_mode: 'auto' })
+        }
         // The language and the pointing mode (camera on or off); the dev panel shows the rest.
         if (msg.lang) setLang(msg.lang)
         // The tablet shell first: in a camera mode it claims the camera before this render decides
@@ -168,6 +178,7 @@ export default function BoardPage() {
   const { status, send } = useSocket('/ws/board', {
     enabled: started,
     onOpen: (send) => {
+      if (onboardingRef.current) send({ type: 'SETTINGS', pointing_mode: 'auto', scan_ms: lastSettings.current?.scan_ms ?? 1000, onboarding: true, muse_enabled: false })
       if (resetPending.current && send({ type: 'RESET' })) resetPending.current = false
       send({ type: 'READY' })
     },
@@ -205,39 +216,51 @@ export default function BoardPage() {
     const cur = lastSettings.current
     if (cur) send({ type: 'SETTINGS', pointing_mode: cur.pointing_mode, scan_ms: cur.scan_ms, trip_layout: next })
   }
-  const tripShared = { car: carState, nativeCar, layout, onLayout: changeLayout }
+  const displayLayout = effectiveTripLayout(layout, tripPointer)
+  const tripShared = { car: carState, nativeCar, layout: displayLayout, onLayout: changeLayout }
   // A Support question (core/car) is drawn on the trip screen too: its answers are big tiles.
   const tripScreen = screen?.screen === 'trip' || screen?.screen === 'support_question' ? screen : null
   // The trip layout is on while trip mode is (the tablet's car shows behind it, the page see-through).
   const tripShown = started && connected && (tripScreen !== null || (trip && view.kind !== 'help'))
-  const seeThrough = tripShown && nativeCar
+  const seeThrough = (tripShown && nativeCar) || (onboarding && typeof nativeBridge()?.carPreview === 'function')
 
   // Dwell select (off by default): a long look at a menu tile sends CLENCH on /ws/input, the same
   // event the headband sends. usePointing only calls pick() on a menu screen, never on the confirm
   // screen or the help countdown.
   const dwellOn = useSyncExternalStore(gazeTuning.subscribe, gazeTuning.get).dwell
-  const input = useSocket('/ws/input', { enabled: started && dwellOn })
+  const input = useSocket('/ws/input', { enabled: started && dwellOn && !onboarding })
   const pick = (seq: number) => {
     const v = shown.current
-    if (v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
+    if (onboardingRef.current || v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
-  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating || onboarding, margin, pick })
 
-  const start = () => {
-    unlockSpeech()
+  // Onboarding (eyes, headband, a test clench) opens right after "Click to start"; the Dev panel's
+  // Run setup opens it again. The shell holds its own calibration prompt back meanwhile.
+  const openSetup = (on: boolean, muse = false) => {
+    onboardingRef.current = on
+    nativeBridge()?.setOnboarding?.(on)
+    setOnboarding(on)
+    const current = lastSettings.current
+    // Finishing setup starts the ride: the trip screen (3D car, map, car controls), not the menus.
+    if (current) send({ ...current, pointing_mode: 'auto', onboarding: on, muse_enabled: muse, ...(on ? {} : { trip: true }) })
+  }
+  const start = (gesture = true) => {
+    if (gesture) unlockSpeech()
     resetPending.current = true
+    openSetup(true)
     setStarted(true)
   }
 
   // The tablet shell draws the car behind the page while the trip screen shows, framed for the
   // layout (car / split / map).
   useEffect(() => {
-    showNativeCar(tripShown)
-  }, [tripShown])
+    if (!onboarding) showNativeCar(tripShown)
+  }, [tripShown, onboarding])
   useEffect(() => {
-    setNativeCarLayout(layout)
-  }, [layout])
+    setNativeCarLayout(displayLayout)
+  }, [displayLayout])
   useEffect(() => () => showNativeCar(false), [])
 
   // See-through only where the shell draws behind (index.css paints the page black otherwise).
@@ -249,7 +272,10 @@ export default function BoardPage() {
 
   return (
     <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
-      {!started && <StartOverlay onStart={start} />}
+      {!started && <StartOverlay onStart={start} lang={lang} />}
+      {started && onboarding && <Onboarding lang={lang} paused={!connected || view.kind === 'help'} onDone={(muse) => openSetup(false, muse)} />}
+      {started && onboarding && !connected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#eaf6f4] p-8 text-center text-3xl text-[#007a72]">{STRINGS[lang].connecting}</div>}
+      <div className={onboarding && view.kind !== 'help' ? 'hidden' : 'contents'}>
       <div className="fixed right-4 top-4 z-30 flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
           {pointing && <EyesNotice lang={lang} />}
@@ -307,8 +333,10 @@ export default function BoardPage() {
         voiceSource={voiceSource}
         headRange={range}
         cameraWanted={camera}
-        onCalibrate={() => setCalibrating(true)}
+        onSetup={() => openSetup(true)}
+          onCalibrate={() => setCalibrating(true)}
       />
+      </div>
     </div>
   )
 }

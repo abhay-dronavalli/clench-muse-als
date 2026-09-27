@@ -106,9 +106,11 @@ interface Props {
   cameraWanted: boolean
   /** open the head-range calibration overlay on the board */
   onCalibrate: () => void
+  /** open the onboarding again (eyes, headband, a test clench) */
+  onSetup: () => void
 }
 
-export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate }: Props) {
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onSetup }: Props) {
   const [open, setOpen] = useState(false)
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
@@ -356,6 +358,15 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
           {trip ? 'End trip' : 'Start trip'}
         </button>
       </div>
+      <button
+        type="button"
+        className={`${btn} mb-3 w-full text-xs`}
+        onMouseDown={noFocus}
+        onClick={onSetup}
+        title="Onboarding: eye calibration, headband connection, a test clench"
+      >
+        Run setup
+      </button>
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs text-zinc-400">Pointing</span>
