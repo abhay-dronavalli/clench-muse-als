@@ -923,3 +923,30 @@ choices below are Taher's.
   English; it now follows the board's language like the rest), and short lines instead of full
   sentences of instructions ("Follow the dots when they appear.", "Next: Headband in 3s", "Tap or double
   blink to choose"). The start screen starts setup by itself after 4 s instead of 8.
+
+## 27. One branch for the ride and the onboarding; the ride starts parked (branch integration-ui-combined)
+
+- `integration-ui-combined` merges android-ui-enhancement (#24-#26: onboarding, blink selection, scan
+  fallback) into integration/waymo (#22, #23: open-data trip, car link, one ride flow). The three
+  conflicts kept both sides: the split layout's top level still follows #26 (full board while scanning)
+  and #23's ride level and music tile; this log keeps both sets of entries, the onboarding ones
+  renumbered #24-#26. Four onboarding tests named the old trip menu (Windows / Pull over / Support at
+  the top); they now use #23's menu (Trip / Comfort / Trip changes). Since SPLIT_TOP is all three top
+  levels now, losing the gaze in the split layout changes the scanning, not the tiles.
+- The flow: the start screen starts setup after 5 s (a tap starts it at once, with sound); a 10 s
+  preview of what to do (look, clench, double blink to go back, hold a clench for help; Begin skips
+  it); the eye calibration dots; the headband with the saved profile, its live signal and a test
+  clench; then Car mode opens on planning the trip.
+- **The ride starts parked.** A new ride phase `BOARDING` (proto `PHASE_BOARDING`): speed 0, arrival
+  not counting down. While boarding, Car mode's home is the Trip level (the route tiles and the
+  drop-off), with Back to the top. A confirmed route that the car accepts makes it leave (`EN_ROUTE`,
+  city speed), and from then on home is the top of the trip menu. A drop-off or a cancelled confirm
+  leaves it parked; Pull over before leaving is refused ("We haven't left yet"); help works as always.
+  /car-sim gains a Boarding button (En route there also makes it leave). Only the app's car
+  (`core/main.py`) boards; `MockCar(boarding=False)`, the default, starts under way as before, so the
+  tests of the controls during a ride are unchanged.
+- The parked car in the background: the onboarding preview (the car alone) now shows behind every
+  setup step, not only the eyes step, with the camera closer (1.55 instead of 1.9) and a slow lap of
+  its own (90 s) added to where the eyes steer it. In the app, while the car is parked (boarding or
+  pulled over) the camera eases in (orbit radius 1.8 instead of 2.3) and its lap takes 90 s instead of
+  45 s; the look point moves up with the radius so the car keeps its place on screen, only bigger.

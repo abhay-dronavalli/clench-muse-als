@@ -26,7 +26,8 @@ import kotlin.math.max
  * through ClenchNative.carScene(on) and carEffect(action, ms) (CAR_ACTION); the maths is CarMotion.
  *
  * The scenery moves at the telemetry's speed (carSpeed, CAR_STATE): Slow down slows it, and after Pull
- * over (speed 0) the road stands still. Pull over also stills the camera for a moment.
+ * over (speed 0) the road stands still. Pull over also stills the camera for a moment. Parked (speed 0:
+ * boarding while the trip is planned, or pulled over) the camera comes closer and circles twice as slowly.
  *
  * Main thread only (Filament's rule). The GLB (app/src/main/assets/jaguar_i-pace.glb, not in git) is
  * read off the main thread the first time the car is shown; without it the scene shows the road alone.
@@ -70,6 +71,8 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     private var lastNanos = 0L
     private var travel = 0f // how far the world has moved past the car
     private var orbitDeg = CarMotion.ORBIT_START_DEG
+    private var parked = 0f // 1 = the car is parked (speed 0): the camera closer and its lap slower, eased
+    private var previewDrift = 0.0 // the preview's own slow lap, added to where the eyes steer it
     private val materials = HashMap<String, MaterialInstance>()
 
     init {
@@ -146,6 +149,10 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     /** The car's speed (CAR_STATE): the road and trees move at it; 0 = stopped. */
     fun setSpeed(mph: Int) {
         speedTarget = (mph / CRUISE_MPH).coerceIn(0f, 2f)
+        if (!shown) { // not on screen yet: start there, rather than drive off and ease to a stop
+            speed = speedTarget
+            parked = if (speedTarget <= 0f) 1f else 0f
+        }
     }
 
     /** Play a control's effect for `ms` (CAR_ACTION); `window` for the window controls. */
@@ -226,19 +233,22 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         val dt = if (lastNanos == 0L) 0f else ((nanos - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = nanos
         if (preview) {
-            val angle = lookOrbit.update(lookX, nanos - lookSeenAt < 500_000_000L, dt)
-            val (x, y, z) = CarMotion.orbit(angle, 1.9f, 0.45f)
+            previewDrift = (previewDrift + 360.0 / PARKED_ORBIT_PERIOD_S * dt) % 360.0
+            val angle = (lookOrbit.update(lookX, nanos - lookSeenAt < 500_000_000L, dt) + previewDrift) % 360.0
+            val (x, y, z) = CarMotion.orbit(angle, PREVIEW_RADIUS, PREVIEW_HEIGHT)
             view.cameraNode.setShift(0.0, 0.0)
             view.cameraNode.position = Float3(x, y, z)
             view.cameraNode.lookAt(Float3(0f, CAR_LIFT, 0f))
-            return // parked world, upright model; only camera yaw changes during setup
+            return // parked, upright model; only the camera turns (slowly, and where the eyes steer it)
         }
         // Cruising, or stopped for Pull over; always eased, never a jolt.
         val target = if (nanos < stillUntilNanos) 0f else 1f
         drive += (target - drive) * (1f - exp(-dt / DRIVE_EASE_S))
         speed += (speedTarget - speed) * (1f - exp(-dt / SPEED_EASE_S))
         travel += CarMotion.DRIVE_SPEED * speed * drive * dt
-        orbitDeg += 360.0 / CarMotion.ORBIT_PERIOD_S * drive * dt
+        parked += ((if (speedTarget <= 0f) 1f else 0f) - parked) * (1f - exp(-dt / PARK_EASE_S))
+        val period = CarMotion.ORBIT_PERIOD_S + (PARKED_ORBIT_PERIOD_S - CarMotion.ORBIT_PERIOD_S) * parked
+        orbitDeg += 360.0 / period * drive * dt
         seconds += dt
         world?.update(travel, seconds)
         shift += (shiftTarget - shift) * (1f - exp(-dt / LAYOUT_EASE_S))
@@ -262,11 +272,13 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
     }
 
     /** The camera on its circle, pushed `push` toward the car, always looking just below it (which
-     *  places the car in the upper-middle of the screen, above the tiles, with room to spare). */
+     *  places the car in the upper-middle of the screen, above the tiles, with room to spare). Parked,
+     *  the circle is smaller; the look point moves up with it, so the car keeps its place, only bigger. */
     private fun placeCamera(push: Float) {
-        val (x, y, z) = CarMotion.orbit(orbitDeg, ORBIT_RADIUS * (1f - PUSH_SCALE * push), ORBIT_HEIGHT)
+        val radius = ORBIT_RADIUS + (PARKED_RADIUS - ORBIT_RADIUS) * parked
+        val (x, y, z) = CarMotion.orbit(orbitDeg, radius * (1f - PUSH_SCALE * push), ORBIT_HEIGHT)
         view.cameraNode.position = Float3(x, y, z)
-        view.cameraNode.lookAt(Float3(0f, LOOK_Y, 0f))
+        view.cameraNode.lookAt(Float3(0f, ORBIT_HEIGHT - (ORBIT_HEIGHT - LOOK_Y) * radius / ORBIT_RADIUS, 0f))
     }
 
     // --- effects and materials --------------------------------------------------------------
@@ -314,6 +326,11 @@ class CarScene(activity: ComponentActivity, private val asset: String = ASSET) {
         // sky at the top, the horizon near 15% down, and the car at about 17-35% down the screen, above
         // the tiles (which start near 40%) and never cut off.
         private const val ORBIT_RADIUS = 2.3f
+        private const val PARKED_RADIUS = 1.8f // parked (boarding, pulled over): closer to the car
+        private const val PARKED_ORBIT_PERIOD_S = 90.0 // parked: a lap twice as slow as while driving
+        private const val PARK_EASE_S = 1.5f // how gently the camera moves in when the car stops
+        private const val PREVIEW_RADIUS = 1.55f // the onboarding preview: closer than before (1.9)
+        private const val PREVIEW_HEIGHT = 0.4f
         private const val ORBIT_HEIGHT = 0.2f
         private const val LOOK_Y = -0.52f
         private const val PUSH_SCALE = 0.9f // CarMotion's push, as a share of the orbit radius
