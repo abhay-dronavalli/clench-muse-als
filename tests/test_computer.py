@@ -228,6 +228,9 @@ def test_text_cancel_echo_toggle_settings_and_frequent_dom_updates():
         c.pick()
         assert len([m for m in sent if isinstance(m, Speak)]) == before
         assert c.scan.scan_ms == 500 and c.long_clench_ms == 1000
+        clock.advance(1)
+        assert c.selection.index == 0 and not c.scan.running  # webcam now waits for a real point
+        s.handle(Settings(pointing_mode="scan", scan_ms=500))
         for _ in range(6):
             clock.advance(.1)
             c._refresh()

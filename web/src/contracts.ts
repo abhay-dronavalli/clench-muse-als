@@ -106,6 +106,35 @@ export interface FaceOk {
   ok: boolean
 }
 
+export interface ComputerTile {
+  id: string
+  label: string
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+export interface ComputerState {
+  type: 'COMPUTER_STATE'
+  active: boolean
+  seq: number
+  tiles: ComputerTile[]
+  highlight: number | null
+  paused: boolean
+  pointer: ActivePointer
+}
+
+export interface ComputerPoint {
+  type: 'COMPUTER_POINT'
+  seq: number
+  tile: number | null
+  source: 'webcam' | 'gaze'
+  found: boolean
+  status: 'tracking' | 'no_tracker' | 'lost' | 'camera_error' | 'starting' | 'off'
+  t: number
+}
+
 // --- Board -> Core ---
 
 /** The board connected and is ready to draw. The Core replies with the current view. */
@@ -346,6 +375,8 @@ export type Message =
   | Signal
   | Point
   | FaceOk
+  | ComputerState
+  | ComputerPoint
   | Ready
   | Reset
   | AudioDone

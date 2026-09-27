@@ -773,3 +773,36 @@ redesign now; the immediate request is to retain this feedback for work after Pa
 - No Part 2 core/board event format changed. No shared patient database, .env or protected demo
   process was modified. Foreground Dev panel, webcam/gaze input and general UI redesign remain
   explicitly deferred until after this part.
+
+## Foreground Chromium controls and pointing (2026-09-27)
+
+- Continued from completed Part 2 on `feat-computer-controls`. The user requested the deferred
+  Chromium Dev panel and gaze/head input; the wider grouping and visual redesign remains deferred.
+- Backtick and the top-right Dev pill open a caregiver panel in a Chromium isolated world.
+  Trusted keyboard/buttons use the existing core input path; settings use the existing SETTINGS
+  model. The panel pauses selection, Back closes it, and help remains available. Camera preview
+  and calibration remain in the board's existing Dev panel.
+- The started board remains the camera, external eye-tracker and audio owner. It maps calibrated
+  head/gaze samples to Chromium's normalized viewport rectangles with the existing filtering,
+  sticky edges and gaze hold. Keep both windows on the same display. No video goes to sites or
+  the core. This does not introduce a webcam eye tracker or a new hardware driver.
+- Computer mode uses the existing Scan/Webcam/Gaze/Auto pointers. A one-second heartbeat timeout
+  marks tracking lost; Auto then applies its existing three-second scan fallback. Webcam clench
+  lookback uses only the current source/layout's history. Gaze highlights; clench still selects.
+  Head tracking uses a 40 ms timer while Chromium is foreground because an occluded board's
+  animation frames can stop. Loss of samples suppresses tracking picks safely.
+- COMPUTER_STATE and COMPUTER_POINT were added to both contract implementations and docs. Layout
+  sequences are independent of board SCREEN sequences, reject stale points, and reset when the
+  browser choices or rectangles change. Help, busy actions and Dev controls pause pointing.
+- Review found changing highlight font widths, a moving More dock, stale scan history at an Auto
+  switch, and forgeable page-binding layout payloads. Highlight geometry is now stable while
+  pointing; source switches reset lookback; the driver obtains fresh native DOM measurements
+  directly from a frozen bridge function and ignores page-submitted layout events. Tests cover
+  these regressions. The old test requiring scan in Webcam was updated for the requested behavior.
+- Local integration uses two temporary headless browsers, simulated gaze through the real board
+  slot, and an in-memory core on 8001. It checks real trusted clicks and backtick/settings in
+  Chromium without network, service keys or the shared patient database. Real tracker accuracy
+  and the person's head-range calibration still need a hands-on check.
+- Validation: 517 Python tests passed (one real-network test skipped), 95 web tests passed, and
+  build, lint and contract import passed. The Chromium Dev screenshot was inspected. The
+  different-model re-review found no remaining blocker in pointing, layout or lookback.

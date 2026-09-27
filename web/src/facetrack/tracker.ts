@@ -47,6 +47,22 @@ class Tracker {
   private landmarker: FaceLandmarker | null = null
   private delegate: Delegate = 'GPU'
   private raf = 0
+  private timer = 0
+  private background = false
+
+  /** Computer mode needs frames even when Chromium covers the board and RAF is suspended. */
+  setBackground(enabled: boolean): void {
+    if (this.background === enabled) return
+    this.background = enabled
+    cancelAnimationFrame(this.raf)
+    window.clearTimeout(this.timer)
+    if (this.status.kind === 'on') this.schedule()
+  }
+
+  private schedule() {
+    if (this.background) this.timer = window.setTimeout(() => this.loop(performance.now()), FRAME_MS)
+    else this.raf = requestAnimationFrame(this.loop)
+  }
   private lastFrame = 0
   private lastVideoTime = -1
   private run = 0 // bumps on every start/stop so a slow start that was cancelled cleans up
@@ -117,13 +133,14 @@ class Tracker {
     }
     if (run !== this.run) return
     this.setStatus({ kind: 'on', delegate: this.delegate })
-    this.raf = requestAnimationFrame(this.loop)
+    this.schedule()
   }
 
   /** Camera off: the light goes out and no more frames are read. */
   stop(): void {
     this.run++
     cancelAnimationFrame(this.raf)
+    window.clearTimeout(this.timer)
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
     if (this.video) this.video.srcObject = null
@@ -163,7 +180,7 @@ class Tracker {
   }
 
   private loop = (now: number) => {
-    this.raf = requestAnimationFrame(this.loop)
+    this.schedule()
     const video = this.video
     const lm = this.landmarker
     if (!video || !lm || now - this.lastFrame < FRAME_MS || video.readyState < 2) return
@@ -189,6 +206,7 @@ class Tracker {
       console.warn('face tracking: GPU frame failed, switching to the CPU', e)
       const run = this.run
       cancelAnimationFrame(this.raf)
+      window.clearTimeout(this.timer)
       this.landmarker?.close()
       this.landmarker = null
       this.createLandmarker('CPU').then(
@@ -196,7 +214,7 @@ class Tracker {
           if (run !== this.run) return lm.close()
           this.landmarker = lm
           this.setStatus({ kind: 'on', delegate: 'CPU' })
-          this.raf = requestAnimationFrame(this.loop)
+          this.schedule()
         },
         (err) => run === this.run && this.fail('model', String(err)),
       )

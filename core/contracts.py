@@ -107,6 +107,41 @@ class FaceOk(_Msg):
     ok: bool
 
 
+class ComputerTile(_Msg):
+    id: str = Field(max_length=100)
+    label: str = Field(max_length=100)
+    left: float = Field(ge=0, le=1, allow_inf_nan=False)
+    top: float = Field(ge=0, le=1, allow_inf_nan=False)
+    right: float = Field(ge=0, le=1, allow_inf_nan=False)
+    bottom: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def valid_rect(self):
+        if self.right <= self.left or self.bottom <= self.top:
+            raise ValueError("empty computer target")
+        return self
+
+
+class ComputerState(_Msg):
+    type: Literal["COMPUTER_STATE"] = "COMPUTER_STATE"
+    active: bool
+    seq: int = Field(ge=0)
+    tiles: list[ComputerTile] = Field(max_length=9)
+    highlight: int | None = Field(default=None, ge=0)
+    paused: bool
+    pointer: ActivePointer
+
+
+class ComputerPoint(_Msg):
+    type: Literal["COMPUTER_POINT"] = "COMPUTER_POINT"
+    seq: int = Field(ge=0)
+    tile: int | None = Field(default=None, ge=0, le=8)
+    source: Literal["webcam", "gaze"]
+    found: bool
+    status: Literal["tracking", "no_tracker", "lost", "camera_error", "starting", "off"] = "tracking"
+    t: float = Field(allow_inf_nan=False)
+
+
 # --- Board -> Core ------------------------------------------------------------
 
 
@@ -332,6 +367,8 @@ Message = Annotated[
         Signal,
         Point,
         FaceOk,
+        ComputerState,
+        ComputerPoint,
         Ready,
         Reset,
         AudioDone,

@@ -59,7 +59,7 @@ log = logging.getLogger("clench.core")
 
 # Which message types each route accepts. Anything else is logged and ignored.
 ACCEPTS: dict[Role, frozenset[str]] = {
-    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK"}),
+    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK", "COMPUTER_POINT"}),
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
@@ -284,6 +284,8 @@ def create_app(
                         view = session.current_view()
                         if view is not None:
                             hub.send_to(client, view)
+                        if session.computer.active:
+                            hub.send_to(client, session.computer.view())
                     else:
                         session.handle(msg)
                 except Exception:

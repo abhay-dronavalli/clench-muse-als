@@ -85,6 +85,7 @@ from core.contracts import (
     BackPrompt,
     DoubleBlink,
     FaceOk,
+    ComputerPoint,
     Lang,
     LongClench,
     Message,
@@ -340,7 +341,8 @@ class Session:
         self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
         self.computer = (computer_factory or Computer)(scheduler, self._computer_closed, self._echo, self.handle,
-                                                      suggester=self.suggester, history=db, ranker=self.ranker)
+                                                      suggester=self.suggester, history=db, ranker=self.ranker,
+                                                      emit=self._emit, lookback_ms=profile.clench_lookback_ms)
 
     # --- public ---------------------------------------------------------------
 
@@ -431,6 +433,8 @@ class Session:
                     log.debug("POINT for screen %d ignored: the board shows screen %d now", msg.seq, self._seq)
                 elif self.state is SessionState.SCANNING:
                     self.pointer.on_point(msg)
+            case ComputerPoint():
+                self.computer.on_point(msg)
             case FaceOk():
                 if msg.ok != self.face_ok:
                     log.info("webcam %s", "sees a face" if msg.ok else "lost the face")

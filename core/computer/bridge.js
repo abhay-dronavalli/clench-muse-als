@@ -3,6 +3,8 @@
   const ids = new WeakMap();
   let nextId = 0, elements = new Map(), root, host, timer, last = '', state = {};
   let ui, frame;
+  const nativeRect = Element.prototype.getBoundingClientRect;
+  const rectOf = el => nativeRect.call(el);
   // Policy is installed by the browser adapter before any page scripts run.
   // Replaying an empty overlay during navigation must not clear it.
   const blockedWords=Object.freeze([...(state.blockedWords||[])]);
@@ -38,7 +40,7 @@
     if (!el.isConnected || el.disabled || el.closest('[inert]') || hidden ||
         el.getAttribute('aria-disabled') === 'true') return null;
     if (el.checkVisibility && !el.checkVisibility({checkOpacity:true, checkVisibilityCSS:true})) return null;
-    const style = getComputedStyle(el), r = el.getBoundingClientRect();
+    const style = getComputedStyle(el), r = rectOf(el);
     if (style.visibility !== 'visible' || Number(style.opacity) === 0 || style.display === 'none' ||
         r.width < 8 || r.height < 8 || r.bottom <= 0 || r.right <= 0 || r.top >= pageBottom() || r.left >= innerWidth) return null;
     const x = Math.max(0, r.left), y = Math.max(0, r.top);
@@ -49,7 +51,8 @@
     const label = labelOf(el);
     if (!label || blocked(actionLabel(el))) return null;
     if (!ids.has(el)) ids.set(el, documentId + ':' + (++nextId));
-    const card=cardOf(el)?.querySelector('a#thumbnail')?.getBoundingClientRect();
+    const thumbnailElement=cardOf(el)?.querySelector('a#thumbnail');
+    const card=thumbnailElement && rectOf(thumbnailElement);
     const band_y=card && card.height>=8 ? (Math.max(0,card.top)+Math.min(innerHeight,card.bottom))/2 : null;
     return {id:ids.get(el), label:label.slice(0,60), x,y,width,height,
       band_y,
@@ -109,14 +112,14 @@
       .title { font-size:23px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; }
       .step { color:#bdd0d8; flex:none; font-size:15px; }
       .choices { display:flex; gap:8px; flex:1; min-width:0; }
-      .choice { padding:5px 12px; border:1px solid #6c8792; border-radius:7px; white-space:nowrap; }
+      .choice { padding:5px 12px; border:1px solid #6c8792; border-radius:7px; white-space:nowrap; font-weight:700; }
       .chosen { color:#142b38; background:#ffda60; border-color:#ffda60; font-weight:700; }
       .hint { margin-top:5px; color:#c2d4db; font-size:15px; }
       .panel { position:fixed; width:min(520px,calc(100% - 32px)); left:50%; top:40%; transform:translate(-50%,-50%);
         background:#142b38; color:#f5fafb; border:2px solid #6c8792; border-radius:18px; padding:24px;
         box-shadow:0 12px 60px #0008; font:22px/1.4 'Segoe UI',sans-serif; }
       .panel-title { font-size:28px; font-weight:650; margin-bottom:16px; }
-      .option { padding:10px 16px; margin:6px 0; border:2px solid transparent; border-radius:8px; }
+      .option { padding:10px 16px; margin:6px 0; border:2px solid transparent; border-radius:8px; font-weight:700; }
       .panel.search { top:45%; max-height:calc(100vh - 150px); overflow:auto; width:min(760px,calc(100% - 32px)); }
       .search .option { padding:7px 12px; margin:2px 0; font-size:20px; }
       .draft { padding:10px 14px; margin-bottom:10px; background:#081e2b; border:1px solid #6c8792;
@@ -162,7 +165,9 @@
     const active=inTargets?rect&&bounds([rect]):s.level==='bands'?region:null;
     // Move the dock away from bottom controls, including fixed video controls that
     // scrolling cannot reveal. Target discovery always includes the whole viewport.
-    const dockTop=active && active.y > dockHeight()+8 && active.y+active.height > innerHeight-dockHeight();
+    // While pointing, the dock must not move away as the eyes reach its menu/More button.
+    const dockAnchor=s.pointer && s.pointer!=='scan'?(s.level==='targets'?region:null):active;
+    const dockTop=s.level!=='bands' && dockAnchor && dockAnchor.y > dockHeight()+8 && dockAnchor.y+dockAnchor.height > innerHeight-dockHeight();
     ui.dock.style.top=dockTop?'0':'auto';ui.dock.style.bottom=dockTop?'auto':'0';
     ui.message.style.top=dockTop?(dockHeight()+12)+'px':'auto';
     ui.message.style.bottom=dockTop?'auto':(dockHeight()+12)+'px';
@@ -178,7 +183,7 @@
     });
     ui.title.textContent=s.busy?'Opening selection...':s.level==='bands'?`Choose a group: ${picked}`:picked;
     ui.step.textContent=s.level==='bands'?'Step 1 of 2':s.level==='targets'?`Choice ${index+1} of ${items.length}${s.page?' / Page '+(s.page+1):''}`:'';
-    const bandItems=s.level==='bands'?items:[];
+    const bandItems=s.level==='bands'?items:s.level==='targets'?items.filter(i=>i[0]==='more'):[];
     ui.row.style.display=bandItems.length?'flex':'none';
     ui.chips.forEach((el,i)=>{const item=bandItems[i];el.style.display=item?'block':'none';
       el.textContent=item?.[1]||'';el.className='choice'+(item?.[0]===s.selected?' chosen':'');});
@@ -197,11 +202,30 @@
     if(searching) ui.options[index]?.scrollIntoView({block:'nearest'});
     ui.help.style.display=s.help!=null?'block':'none';ui.help.textContent=`Help / Ayuda: ${s.help}     Double blink to cancel`;
     ui.message.style.display=s.message?'block':'none';ui.message.textContent=s.message||'';
+    if (s.seq != null && !s.busy && s.help == null && !s.devOpen) {
+      const normalize=(id,label,r)=>r && ({id,label,left:Math.max(0,Math.round(r.x)/innerWidth),top:Math.max(0,Math.round(r.y)/innerHeight),
+        right:Math.min(1,Math.round(r.x+r.width)/innerWidth),bottom:Math.min(1,Math.round(r.y+r.height)/innerHeight)});
+      const tiles=items.map(([id,label],i)=>{
+        let r;
+        if(s.level==='bands' && id.startsWith('band:')) {
+          r=bounds((s.groups?.[Number(id.split(':')[1])]||[]).map(k=>elements.get(k)).filter(Boolean).map(info).filter(Boolean));
+          if(r) r.height=Math.max(1,Math.min(r.y+r.height,rectOf(ui.dock).top)-r.y);
+        } else if (s.level==='bands' || id==='more') {
+          const chip=ui.chips[bandItems.findIndex(item=>item[0]===id)];r=chip && rectOf(chip);
+        } else if (['menu','search','keyboard','text'].includes(s.level)) {
+          r=ui.options[i] && rectOf(ui.options[i]);
+        } else {r=elements.has(id) && info(elements.get(id));}
+        return normalize(id,label,r);
+      });
+      return tiles.every(Boolean) ? tiles : null;
+    }
   };
   const paintSoon=()=>{if(!frame)frame=requestAnimationFrame(paint);};
   const render=s=>{state=s;paintSoon();};
   Object.defineProperty(window,'__clench',{configurable:false,writable:false,value:Object.freeze({
     render,discover,
+    // Only the driver consumes this return value; page binding payloads never set geometry.
+    renderAndMeasure:s=>{state=s;return paint();},
     field:id=>{const el=elements.get(id);return el && info(el)?.text ? el : null;},
     prepare:id=>{
       const el=elements.get(id);if(!el)return null;

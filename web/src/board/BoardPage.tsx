@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen } from '../contracts'
+import type { Confirm, HeadRange, Lang, Message, PointingMode, Screen, ComputerState } from '../contracts'
+import { useComputerPointing } from '../facetrack/useComputerPointing'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
@@ -51,6 +52,7 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
+  const [computer, setComputer] = useState<ComputerState | null>(null)
   const [view, setViewState] = useState<View>({ kind: 'waiting' })
   // What is on screen as of the last Core message, updated synchronously (not after a render), so
   // dwell select can never act on a menu the Core has already left (e.g. for the confirm screen).
@@ -79,6 +81,9 @@ export default function BoardPage() {
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
+      case 'COMPUTER_STATE':
+        setComputer(msg)
+        break
       case 'SCREEN':
         setLang(msg.lang)
         if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
@@ -173,6 +178,7 @@ export default function BoardPage() {
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
   usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin, pick })
+  useComputerPointing({ state: computer, mode, connected, send, range: range ?? DEFAULT_RANGE, paused: calibrating, margin })
 
   const start = () => {
     unlockSpeech()

@@ -374,8 +374,15 @@ Day 1 ignores history for ranking and AI; confirmed searches are still saved for
 The demo seed now includes simulated evening YouTube searches in both languages. `--reset` also
 clears search history; never run it on the shared database without authorization.
 
-Foreground Chromium still uses scanning. Backtick/Dev panel access, head/webcam and gaze pointing,
-and the broader grouping/UI redesign are deferred follow-ups recorded in `docs/decisions.md`.
+Foreground Chromium supports Scan, Webcam/head, Gaze and Auto with the same clench inputs.
+Press backtick (or click the top-right Dev pill) for pointing mode, scan speed, language,
+speak-picks, learning, Muse input, hold duration, sticky edges and gesture buttons. The panel
+pauses selection; Back closes it, and Help remains available. Head tilt still falls back to scan.
+Keep the started board open on the same display: it owns the camera/eye-tracker connection and
+audio. Webcam uses the board's calibrated head range; Gaze requires an eye tracker feeding the
+existing gaze slot (see `docs/eye-tracking.md`). Calibrate and inspect the camera in the board's
+Dev panel. Chromium receives only normalized target selections, never camera video. Auto returns
+to scanning when tracking stops. The broader grouping/UI redesign remains deferred.
 See [computer search checks](docs/computer-search.md) for the manual flow and isolated demo seed.
 
 Space, hold Space and B work in both the board dev panel and the foreground managed browser.

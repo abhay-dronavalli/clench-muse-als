@@ -106,11 +106,16 @@ class Browser:
         if event.get("name") != "clenchTrustedInput" or event.get("executionContextId") not in self.input_contexts:
             return
         try:
-            name = json.loads(event["payload"])["event"]
+            payload = json.loads(event["payload"])
+            name = payload["event"]
         except (ValueError, KeyError, TypeError):
             return
-        if name in ("CLENCH", "DOUBLE_BLINK", "LONG_CLENCH"):
+        if name in ("CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "DEV_TOGGLE", "RESET"):
             self.on_event({"kind": "input", "event": name})
+        elif name == "SETTINGS" and isinstance(payload.get("patch"), dict):
+            allowed = {"pointing_mode", "scan_ms", "lang", "speak_picks", "learning", "long_clench_ms", "tile_switch_margin", "muse_enabled"}
+            if set(payload["patch"]) <= allowed:
+                self.on_event({"kind": "settings", "patch": payload["patch"]})
 
     async def _loaded(self):
         try:
@@ -129,12 +134,15 @@ class Browser:
             for context in list(self.input_contexts):
                 try:
                     await self.cdp.send("Runtime.evaluate", {"contextId": context,
-                        "expression": f"globalThis.clenchInputSettings?.({int(state.get('longClenchMs', 2500))})"})
+                        "expression": "globalThis.clenchInputSettings?.(" + json.dumps({k:state.get(k) for k in
+                            ("longClenchMs", "settings", "devOpen", "pointer", "trackingStatus", "faceOk", "help")}) + ")"})
                 except Exception:
                     pass  # destroyed document; the next context gets current settings
         if self.page and not self.page.is_closed():
             try:
-                await self.page.evaluate("s => window.__clench?.render(s)", state)
+                tiles = await self.page.evaluate("s => window.__clench?.renderAndMeasure(s)", state)
+                if tiles is not None:
+                    self.on_event({"kind": "layout", "seq": state.get("seq"), "tiles": tiles})
             except Exception:
                 pass  # a navigation installs a fresh bridge and replays the latest overlay
 

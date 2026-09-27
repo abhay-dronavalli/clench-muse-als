@@ -321,8 +321,8 @@ picks the tile that was highlighted about 250 ms before the CLENCH arrived (`cle
 
 Computer mode uses SCREEN with `screen="computer"`, empty `tiles` and `path`, null
 `highlight` and `pointer`. The board remains connected and keeps its existing audio queue and
-dev input panel. READY returns this screen while Chromium is open. No COMPUTER_STATE message is
-needed: browser targets and overlay state stay inside the core's Playwright connection.
+dev input panel. READY returns this screen and COMPUTER_STATE while Chromium is open. The latter
+relays viewport rectangles so the board's existing head/eye tracker can point at browser choices.
 
 ```json
 {"type":"SCREEN","screen":"computer","seq":20,"tiles":[],"highlight":null,"lang":"en","path":[],"countdown":null,"loading":false,"pointer":null}
@@ -582,3 +582,27 @@ at the configured duration and suppresses its short-clench release.
 
 B remains the keyboard/caregiver Back/Cancel stand-in while deliberate eye input
 is redesigned. No real blink triggers app navigation in this integration.
+
+## Computer pointing
+
+`COMPUTER_STATE` (Core -> board/console) carries `active`, independent monotonic `seq`, `tiles`
+(at most nine `{id,label,left,top,right,bottom}` rectangles normalized to Chromium's viewport),
+`highlight` (index or null), `paused`, and `pointer` (the existing active-pointer enum). It is
+sent for rendered browser layouts, selection/settings changes and exit, and replayed on READY.
+Its sequence changes when choices or geometry change. It does not change the board SCREEN seq.
+
+```json
+{"type":"COMPUTER_STATE","active":true,"seq":7,"tiles":[{"id":"menu","label":"Browser menu","left":0.75,"top":0.8,"right":0.98,"bottom":0.95}],"highlight":0,"paused":false,"pointer":"gaze"}
+```
+
+`COMPUTER_POINT` (board -> Core, `/ws/board` only) carries that `seq`, `tile` (0..8 or null),
+`source` (`webcam` or `gaze`), `found`, `status` (`tracking`, `no_tracker`, `lost`, `camera_error`,
+`starting`, `off`) and finite Unix-second `t`. The board sends a heartbeat at least every 250 ms
+while samples arrive; only locally filtered target indices and status leave it, never video.
+Stale sequences, invalid indices and points during help/busy/dev-panel states cannot select.
+One second without samples marks tracking lost; Auto then uses its existing 3-second fallback.
+The same clench/back/help events perform actions; gaze does not auto-click in computer mode.
+
+```json
+{"type":"COMPUTER_POINT","seq":7,"tile":0,"source":"gaze","found":true,"status":"tracking","t":1790474400.25}
+```
