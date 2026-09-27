@@ -922,3 +922,28 @@ choices below are Taher's.
 - Contracts (all three files): ScreenName `support_question`, TileKind `answer`, ActionName `dropoff` /
   `route` / `support_answer`, SCREEN `prompt`, CAR_STATE `phase` / `music_playing` / `on_highway`, and new
   CAR_RESULT, CAR_LOG, CAR_SIM. All additive: older clients keep working.
+
+## 27. Flow order, the Car mode corner button, one onboarding, and planning any trip (branch integration/waymo)
+
+- Order: onboarding first (eye calibration, headband, signal check, test clench), then the normal Home
+  board. Finishing onboarding no longer opens the trip screen.
+- **Corner button** (SCREEN `corner`, kind `corner`): a tile outside the six-tile grid, index
+  `len(tiles)`, so gaze, head, taps and the scan reach it (the scan last). On Home it is "Car mode":
+  picking it opens the confirm screen ("Start Car mode?", action `car_mode`), then the car screen. In
+  Car mode it is "Home" (large, top-left, apart from the car controls): it leaves the car screen
+  without a confirm (leaving is harmless) and **does not end the ride**: the ride keeps running
+  (`ride_active`), and Car mode on Home returns to it. Help (long clench) works on every screen as
+  before. Contracts: SCREEN `corner`, TileKind `corner`, ActionName `car_mode`.
+- One onboarding, the light theme: the car preview during the eye step is gone (the calibration dots
+  are the tablet's native overlay, above the page). Car visuals only in Car mode. After calibration a
+  gaze check: two big targets light up in turn; 0.6 s of gaze on each passes; otherwise "Redo
+  calibration" or "Continue anyway". The test clench's meter shows the threshold as a black line.
+- **Plan a trip** (Car mode > Trip > Plan a trip, or CAR_SIM `plan` with any address from /car-sim):
+  layers 1 and 2 are computed live with the same core/geo pipeline, in a worker thread, from the
+  configured pickup. The Trip level says "Planning your trip to ..." meanwhile. After 20 s or a
+  failure the rider is told why and the demo trip stays; a plan that finishes later is still used and
+  announced ("Your trip to Hospital is ready now"), and its data stays cached, so a retry is quick.
+  Saved places are in data/geo.yaml (`places`); "Home" is a public stand-in the caregiver replaces.
+  MDC Kendall uses the committed demo trip directly. /api/geo/trip now serves the Core's current trip
+  (a planned one, else the committed one), so the board's map follows it. A first live plan usually
+  takes more than 20 s (USGS EPQS answers one point a second for the walk slopes).
