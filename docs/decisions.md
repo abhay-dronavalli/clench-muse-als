@@ -705,4 +705,17 @@ choices below are Taher's.
   re-rolled when it wraps around. Everything taller than a flower stands beyond the camera's circle
   (tested over many seeds), and there is no traffic, so nothing ever sweeps between the camera and the
   car. The panel behind the tiles is now dark smoked glass instead of white.
+- Trip layouts are a Core setting now (SETTINGS `trip_layout`, sent by the board's Car / Split / Map
+  switch on `/ws/board`), because Split changes which tiles exist: the route map takes the left half
+  of the screen and the right half shows the car above only the three most important top-level
+  controls (Windows, Pull over, Support; `SPLIT_TOP` in `core/trip.py`). The levels below stay whole.
+  Scan, gaze and clench count the Core's tiles, so this had to live in the Core, not the page.
+- The telemetry moved from a top strip to a column on the left (with the layout switch at its foot),
+  so the 3D scene gets the full height. The car's lens shift centres it in the space right of the
+  column (and in the right half for Split).
+- Google Maps (optional): with `VITE_GOOGLE_MAPS_API_KEY` in the repository's `.env` (Vite now reads
+  that one `.env`; only `VITE_` values reach the page) the map is a real Google map: the driving route
+  from `VITE_TRIP_ORIGIN` to `VITE_TRIP_DESTINATION` (Directions), the driven part in grey and the car as
+  an arrow moving along it with the ride's progress. No dragging or zooming. If the script, the key or
+  the route fails, the drawn map takes over. Not yet run with a real key.
 
