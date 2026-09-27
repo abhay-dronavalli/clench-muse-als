@@ -674,3 +674,22 @@ choices below are Taher's.
   copper tint, and the sequence is shorter (0.6 s).
 - The model (`kushagra/tablet/app/src/main/assets/jaguar_i-pace.glb`, 8.9 MB) is git-ignored like the
   face model; without it the car area stays dark and the screen works the same.
+- Follow-up: the trip menu is a small tree instead of six flat controls (`core/trip.py`): Windows >
+  Up / Down > Front left, Front right, Rear left, Rear right, All windows; Temperature > Warmer /
+  Cooler; Music > Louder / Softer; Pull over (confirm); Slow down; Support (confirm, then a mock
+  `support` call: an outward action, so it confirms like messages and calls). Every level below the
+  top ends with a Back tile (touch riders have no double blink; a double blink still works). After a
+  routine control the level stays, so a control can be repeated.
+- The Core keeps a mock car (`Car` in `core/trip.py`) and sends its telemetry as CAR_STATE: speed,
+  arrival, battery, cabin temperature, each window's % open, music volume. Windows move 25% a step,
+  temperature 1°F, volume 1, Slow down takes 5 mph off (never below 10); Pull over stops the car (and
+  Slow down cannot restart it). Arrival and battery move once a minute. The tablet's scenery moves at
+  the telemetry's speed.
+- A translucent white panel rises from the bottom of the trip screen to just below the car; the tiles
+  sit on it. The car is lifted a hair so its tyres sit on the road, and the ground is placed from the
+  car's measured size.
+- Fix in `EyedidGaze` (not trip code): releasing the tracker removed its callbacks while the SDK's
+  gaze thread could still deliver a queued frame, which crashed the app (NullPointerException in
+  GazeTrackerCore) when the pointing mode switched to Scan mid-tracking. Released trackers now get
+  callbacks that ignore everything instead.
+
