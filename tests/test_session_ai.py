@@ -165,7 +165,7 @@ def test_home_has_six_tiles_with_other_last(plain, sent):
         ("need", "branch"),
         ("people", "branch"),
         ("feel", "branch"),
-        ("room", "branch"),
+        ("computer", "branch"),
         ("other", "other"),
     ]
     assert screen.tiles[-1].label == "Other..."
@@ -202,7 +202,7 @@ def test_no_key_mode_end_to_end(plain, sched, sent):
     assert last_screen(sent).path == ["Other"]
     # Second "Other..." in a row: nothing new without AI, so it loops back to home's own options.
     pick(plain, sched, sent, "Other...")
-    assert labels(sent) == ["Suggested", "I need", "People", "How I feel", "Room", "Other..."]
+    assert labels(sent) == ["Suggested", "I need", "People", "How I feel", "Computer", "Other..."]
     assert last_screen(sent).path == []
     assert plain.highlight == 0
     assert said(sent, "system") == []  # no "Spelling is coming soon"
@@ -532,6 +532,14 @@ def test_the_ai_cannot_change_action_or_contact(menu, profile, sched, sent, loop
 
 
 def test_room_options_inherit_room_control(session, sched, sent, loop):
+    # Preserve coverage for room_control in a custom menu; it is no longer on default Home.
+    from pathlib import Path
+    import yaml
+    from core.menu import MenuNode
+    room = MenuNode.model_validate(yaml.safe_load((Path(__file__).parent / "room_fixture.yaml").read_text(encoding="utf-8")))
+    session._menu = session._menu.model_copy(deep=True)
+    session._menu.root.children[-1] = room
+    session.start()
     loop.run()
     pick(session, sched, sent, "Room")
     loop.run()

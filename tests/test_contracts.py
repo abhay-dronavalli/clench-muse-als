@@ -11,6 +11,15 @@ from core.contracts import Message, parse_message
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+def test_computer_screen_contract_matches_typescript():
+    msg = parse_message({"type": "SCREEN", "screen": "computer", "seq": 2, "tiles": [],
+                         "highlight": None, "lang": "en", "path": []})
+    assert msg.screen == "computer"
+    ts = (ROOT / "web/src/contracts.ts").read_text(encoding="utf-8")
+    match = re.search(r"export type ScreenName = (.+)", ts)
+    assert set(re.findall(r"'([^']+)'", match[1])) == set(get_args(contracts.ScreenName))
+
 # One example of each message, matching docs/contracts.md.
 EXAMPLES: dict[str, tuple[type, dict]] = {
     "CLENCH": (contracts.Clench, {"type": "CLENCH", "t": 1727300000.12, "strength": 0.83}),

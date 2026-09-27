@@ -26,7 +26,7 @@ SCAN_S = 1.0
 MARIA = "Honey, I'm okay, call me at six."
 WATER = "I'd like some water, please."
 DAYS = [NOW - d * DAY_S for d in range(7)]
-YAML_HOME = ["suggested", "need", "people", "feel", "room", "other"]
+YAML_HOME = ["suggested", "need", "people", "feel", "computer", "other"]
 
 
 @pytest.fixture(scope="module")
@@ -243,7 +243,7 @@ def middling_history(db):
     """María's text is the top phrase at this hour with a share of 0.5: between 0.4 and 0.6."""
     maria_every_evening(db, per_day=3)
     confirm_many(db, "need.water", WATER, DAYS * 2)
-    confirm_many(db, "room.tv.on", "Please turn on the TV.", DAYS, action="room_control")
+    confirm_many(db, "feel.tired", "I feel tired.", DAYS)
 
 
 def test_middling_history_alone_is_not_enough(menu, profile, db, loop):

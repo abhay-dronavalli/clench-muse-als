@@ -20,7 +20,7 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'computer'
 export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label

@@ -21,6 +21,7 @@ type View =
   | { kind: 'confirm'; confirm: Confirm }
   | { kind: 'speaking'; text: string }
   | { kind: 'help'; countdown: number }
+  | { kind: 'computer' }
 
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
@@ -54,6 +55,7 @@ export default function BoardPage() {
       case 'SCREEN':
         setLang(msg.lang)
         if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
+        else if (msg.screen === 'computer') setView({ kind: 'computer' })
         else setView({ kind: 'menu', screen: msg })
         break
       case 'CONFIRM':
@@ -159,6 +161,17 @@ export default function BoardPage() {
       {connected && view.kind === 'confirm' && <ConfirmView confirm={view.confirm} lang={lang} />}
       {connected && view.kind === 'speaking' && <SpeakingView text={view.text} lang={lang} />}
       {connected && view.kind === 'help' && <HelpCountdownView countdown={view.countdown} lang={lang} />}
+      {connected && view.kind === 'computer' && (
+        <main className="flex flex-1 flex-col items-center justify-center gap-6 px-12 text-center">
+          <h1 className="text-6xl font-semibold">{lang === 'es' ? 'Modo computadora' : 'Computer mode'}</h1>
+          <p className="max-w-3xl text-3xl text-zinc-300">
+            {lang === 'es' ? 'El navegador está abierto. Mantén la mandíbula apretada para pedir ayuda.' :
+              'The browser is open. Hold a clench to call for help.'}
+          </p>
+          <p className="text-2xl text-zinc-400">{lang === 'es' ? 'Menú del navegador → Salir para volver.' :
+            'Browser menu → Exit to return.'}</p>
+        </main>
+      )}
       <ToastStack toasts={toasts} />
 
       {calibrating && (
