@@ -111,7 +111,14 @@ The tablet app wraps the board in a WebView and runs the Eyedid SDK, which owns 
   `FACE_MISSING`), shown on `/gaze-test`. And `window.clenchNativeEvent({ type: 'blink' | 'tracker' |
   'calibration', ... })`. Blinks are only counted on `/gaze-test`; nothing is picked with them.
 - One camera owner: while `ClenchNative.gazeActive()` is true the page never opens the camera. Auto
-  and Webcam then follow the gaze (there is no head); Auto still scans after 3 s of lost eyes.
+  and Webcam then follow the gaze (there is no head); Auto still scans after 3 s of lost eyes. The
+  shell also denies any camera request from the page while its tracker runs or starts. If the tracker
+  cannot start (no key, no network, an auth error), `gazeActive()` turns false, a `tracker` event with
+  state `error` tells the page, and the page may use the camera for head pointing.
+- Calibration is native: five points, saved per person on the tablet, reloaded at start and checked
+  with one target (a miss offers to recalibrate). While calibrating or checking, the shell feeds
+  `found: false` with state `CALIBRATING`, so the board holds still.
+- Build, install and run: `kushagra/tablet/README.md`, "Board shell with Eyedid gaze".
 
 ## Gaze test (`/gaze-test`)
 

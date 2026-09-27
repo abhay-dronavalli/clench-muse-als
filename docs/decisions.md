@@ -484,3 +484,28 @@ Status: **done** = built, **planned** = agreed, not built yet.
   but the network race needs a Core fix: CLENCH carrying the screen `seq` (contracts change) or the Core
   ignoring a CLENCH for about 500 ms after it shows the confirm screen. Until then keep dwell off
   whenever the headband is in use.
+
+## 17. Eyedid gaze on the tablet, step 2: the native board shell (branch android/eyedid-shell)
+
+- `kushagra/tablet` gains `board/BoardActivity` ("Clench Board" launcher entry): the board in a
+  WebView plus the Eyedid SDK (`camp.visual.eyedid.android.gazetracker:eyedid-gazetracker:1.0.0-beta5`,
+  VisualCamp's Maven repo). The MediaPipe prototype stays as the second launcher entry, the fallback.
+- The board loads from `BOARD_URL` (default `http://localhost:5173/`, reached with `adb reverse`).
+  Plain HTTP is allowed for localhost and 127.0.0.1 only (`network_security_config.xml`).
+- The license key and the tablet's camera position come from the git-ignored `local.properties` into
+  `BuildConfig`. The key is inside the debug APK; do not share the APK outside the team.
+- Camera position: the app uses the SDK's own entry if it has one for the model; otherwise it adds
+  one for the Galaxy Tab S9 Ultra (SM-X910, 2960 x 1848, camera on the long edge) with the screen's
+  top-left at -157.2 mm, -1.0 mm from the camera. Those numbers are estimated from the 14.6-inch 16:10
+  panel, not measured, and the S9 Ultra has two front cameras in the notch; measure if accuracy is off.
+- Gaze is converted to fractions of the WebView in the shell (screen pixels minus the WebView's
+  on-screen position, divided by its size), so the page needs no density or bar offsets.
+- Start-up authentication retries every 5 s for a minute on `AUTH_SERVER_ERROR` or
+  `AUTH_CANNOT_FIND_HOST`; other errors stop the tracker and hand the camera to the page.
+- The SDK's gaze filter is an init option, so switching it (from `/gaze-test`) restarts the tracker
+  (about a second without gaze) and re-applies the person's calibration.
+- Calibration is saved per person (SharedPreferences on the tablet), and the last one is reloaded at
+  start and checked with one target: the median gaze over 1.5 s must fall within half a tile of it
+  (3 x 2 grid, 2 x 3 in portrait). Fewer than 10 tracked samples counts as a miss.
+- The activity's orientation is fixed (landscape by default, `BOARD_ORIENTATION=portrait` for the
+  fallback) instead of following the sensor, so a rotation never changes the gaze coordinates mid-use.

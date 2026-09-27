@@ -7,6 +7,8 @@ lifecycle = "2.8.7"
 cameraX = "1.4.1"
 mediapipe = "0.10.14"
 coroutines = "1.9.0"
+eyedid = "1.0.0-beta5"
+junit = "4.13.2"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -23,6 +25,8 @@ camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", versi
 camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 mediapipe-vision = { group = "com.google.mediapipe", name = "tasks-vision", version.ref = "mediapipe" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+eyedid-gazetracker = { group = "camp.visual.eyedid.android.gazetracker", name = "eyedid-gazetracker", version.ref = "eyedid" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
