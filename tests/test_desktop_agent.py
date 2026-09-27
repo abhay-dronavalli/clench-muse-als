@@ -301,7 +301,7 @@ def test_losing_the_desktop_target_drops_an_armed_click(ctl):
 
 def test_palette_tiles_fit_the_screen_and_do_not_overlap(ctl):
     tiles = ctl.palette_tiles()
-    assert len(tiles) == 9
+    assert len(tiles) == 10
     for i, a in enumerate(tiles):
         assert SCREEN.encloses(a.rect)
         assert not any(a.rect.intersects(b.rect) for b in tiles[i + 1:])
@@ -479,3 +479,73 @@ def test_a_quick_clench_on_a_new_highlight_picks_it_not_the_old_one(ctl):
     ctl.tick(1.1, (720, 310), True)
     ctl.tick(1.31, (720, 310), True)  # "far" shows now
     assert ctl.on_gesture("CLENCH", 1.4, 1.4) == [Click(730, 315)]  # 1.4 - 0.25 = 1.15 was still "ok"
+
+
+# --- the gaze keyboard ------------------------------------------------------------------------------
+
+from desktop.agent.interaction import TypeChars  # noqa: E402
+
+
+def open_keyboard(ctl, now=1.0):
+    open_palette(ctl, now)
+    assert use_tile(ctl, "keyboard", now + 1) == [] and ctl.mode == "keyboard"
+
+
+def press_key(ctl, key, now):
+    k = next(c for c in ctl.keyboard_keys() if c.kind == f"key:{key}")
+    look(ctl, *k.rect.center, now)
+    return ctl.on_gesture("CLENCH", now, now)
+
+
+def test_the_keyboard_types_into_the_focused_app(ctl):
+    open_keyboard(ctl)
+    assert press_key(ctl, "h", 3.0) == [TypeChars("h")]
+    assert press_key(ctl, "i", 4.0) == [TypeChars("i")]
+    assert press_key(ctl, "space", 5.0) == [TypeChars(" ")]
+    assert press_key(ctl, "back", 6.0) == [Keys("backspace")]
+    assert ctl.kb_typed == "hi"
+    assert press_key(ctl, "enter", 7.0) == [Keys("enter")]
+    assert press_key(ctl, "done", 8.0) == [] and ctl.mode == "pointing"
+
+
+def test_shift_makes_one_capital_and_123_has_symbols(ctl):
+    open_keyboard(ctl)
+    assert press_key(ctl, "shift", 3.0) == [] and ctl.kb_shift
+    assert press_key(ctl, "l", 4.0) == [TypeChars("L")]
+    assert press_key(ctl, "l", 5.0) == [TypeChars("l")]  # back to small letters
+    press_key(ctl, "page", 6.0)
+    assert ctl.kb_page == "123" and press_key(ctl, "@", 7.0) == [TypeChars("@")]
+
+
+def test_eyes_off_the_keyboard_type_nothing(ctl):
+    open_keyboard(ctl)
+    area = ctl.keyboard_area()
+    look(ctl, area.center[0], area.top - 100, 3.0)  # looking at the text box above
+    assert ctl.on_gesture("CLENCH", 3.0, 3.0) == [] and ctl.toast[0] == "Look at a key"
+    assert ctl.on_gesture("DOUBLE_BLINK", 4.0, 4.0) == [] and ctl.mode == "pointing"
+
+
+def test_the_keyboard_keeps_clear_of_the_last_click(ctl):
+    look(ctl, 320, 310, 1.0)
+    ctl.on_gesture("CLENCH", 1.0, 1.0)  # a click high on the screen: keyboard at the bottom
+    open_keyboard(ctl, 2.0)
+    assert ctl.keyboard_area().top == SCREEN.height / 2
+    ctl.on_gesture("DOUBLE_BLINK", 4.0, 4.0)  # close it
+    ctl.set_candidates([button(300, 900, name="low")])
+    look(ctl, 320, 910, 5.0)
+    ctl.on_gesture("CLENCH", 5.0, 5.0)  # a click low on the screen: keyboard at the top
+    open_keyboard(ctl, 6.0)
+    assert ctl.keyboard_area().bottom == SCREEN.height / 2
+
+
+def test_keyboard_keys_fit_their_band_and_do_not_overlap(ctl):
+    open_keyboard(ctl)
+    for page in ("abc", "123"):
+        ctl.kb_page = page
+        keys = ctl.keyboard_keys()
+        area = ctl.keyboard_area()
+        assert len(keys) == 35
+        for i, a in enumerate(keys):
+            assert a.rect.left >= area.left and a.rect.right <= area.right + 0.01 and a.rect.bottom <= area.bottom + 0.01
+            assert not any(a.rect.intersects(b.rect) for b in keys[i + 1:])
+        assert min(k.rect.width for k in keys) > 10 * PX_MM  # every key at least 1 cm wide

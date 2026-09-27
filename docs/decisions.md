@@ -758,3 +758,11 @@ for Spanish explicitly instead of relying on the profile.
   (gazeCheck.ts). A miss only says "press F7"; it never forces a recalibration. A double blink skips it.
 - **Launcher:** `scripts/start_desktop.ps1` checks the SDK, the key's name in `.env`, the Core's
   health and whether real sends are on, then starts the agent. Arguments after `--` go to the agent.
+- **Gaze keyboard** (palette > Keyboard, now 5 x 2 tiles): 4 rows of big keys (at least 1 cm wide,
+  35 per page) in the half of the screen away from the last click, with a strip showing what this
+  keyboard typed (the text box may be covered). Keys go straight to the focused app: the overlay
+  never takes the focus, so no board round trip is needed for single characters. Shift gives one
+  capital (as on a phone); 123 has digits and the symbols of web addresses. Looking off the keyboard
+  types nothing ("Look at a key"). The Clench tab hides under it and the status line moves to the
+  top. Checked live: "Hi there" typed into a text box in another process through Core, agent and
+  SendInput.

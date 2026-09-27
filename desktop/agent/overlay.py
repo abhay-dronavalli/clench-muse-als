@@ -16,10 +16,11 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, Q
 from PySide6.QtWidgets import QWidget
 
 from desktop.agent import winput
-from desktop.agent.snap import Rect
+from desktop.agent.snap import Candidate, Rect
 
 if TYPE_CHECKING:
     from desktop.agent.app import Agent
+    from desktop.agent.interaction import Controller
 
 YELLOW = QColor("#fde047")
 SKY = QColor("#38bdf8")
@@ -187,9 +188,16 @@ class Overlay(QWidget):
                 self.paint_back(p, lang, mm)
             if ctl.mode == "scroll" and ctl.scroll is not None:
                 self.paint_scroll(p, mm)
+            if ctl.mode == "keyboard":
+                self.paint_keyboard(p, mm)
             if ctl.mode == "drag" and ctl.drag_from is not None:
                 self.paint_drag(p, mm)
-        # the tab to the palette, always on the right edge
+        # the tab to the palette, on the right edge (hidden under the keyboard, where it does nothing)
+        if ctl.mode != "keyboard":
+            self.paint_tab(p, tab, tab_on, mm)
+        self.paint_notes(p, lang, mm, a, ctl, s)
+
+    def paint_tab(self, p: QPainter, tab: "Candidate", tab_on: bool, mm: float) -> None:
         self.card(p, tab.rect, YELLOW if tab_on else None, mm, radius=2.5 * mm)
         p.save()
         c = tab.rect.center
@@ -200,6 +208,8 @@ class Overlay(QWidget):
         p.drawText(QRectF(-tab.rect.height / 2, -tab.rect.width / 2, tab.rect.height, tab.rect.width),
                    Qt.AlignmentFlag.AlignCenter, "Clench")
         p.restore()
+
+    def paint_notes(self, p: QPainter, lang: str, mm: float, a: "Agent", ctl: "Controller", s: Rect) -> None:
         # a small gaze dot, so the person sees where the tracker thinks they look
         if a.gaze_point is not None and ctl.eyes and ctl.mode != "palette":
             x, y = a.gaze_point
@@ -219,6 +229,25 @@ class Overlay(QWidget):
         for text, color in notes:
             self.pill(p, text, None, top, color, size=4 * mm)
             top += 11 * mm
+
+    def paint_keyboard(self, p: QPainter, mm: float) -> None:
+        ctl = self.agent.ctl
+        area = ctl.keyboard_area()
+        p.fillRect(qrect(area), QColor(3, 7, 18, 225))
+        p.setPen(QColor(249, 250, 251, 220))
+        p.setFont(self._font(5 * mm))
+        typed = ctl.kb_typed + "\u2502"
+        p.drawText(QRectF(area.left + 4 * mm, area.top + 1.5 * mm, area.width - 8 * mm, 10 * mm),
+                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, typed)
+        target = ctl.target
+        on_kind = target.candidate.kind if target and target.candidate else None
+        for key in ctl.keyboard_keys():
+            on = key.kind == on_kind
+            lit = key.kind == "key:shift" and ctl.kb_shift
+            self.card(p, key.rect, YELLOW if on else SKY if lit else None, mm, radius=2 * mm)
+            p.setPen(QColor("#111827") if on or lit else WHITE)
+            p.setFont(self._font(6.5 * mm if len(key.name) == 1 else 4.5 * mm, bold=True))
+            p.drawText(qrect(key.rect), Qt.AlignmentFlag.AlignCenter, key.name)
 
     def paint_scroll(self, p: QPainter, mm: float) -> None:
         ctl = self.agent.ctl
@@ -269,7 +298,9 @@ class Overlay(QWidget):
         s = a.ctl.screen
         parts = [("Core", GREEN if a.core.connected else RED),
                  ("Eyes" if a.source_kind == "eyedid" else "Mouse", GREEN if a.ctl.eyes else GRAY)]
-        x, y = s.left + 3 * mm, s.bottom - 14 * mm
+        ctl = a.ctl
+        low = ctl.active and ctl.mode == "keyboard" and not ctl.kb_top
+        x, y = s.left + 3 * mm, s.top + 3 * mm if low else s.bottom - 14 * mm  # off a bottom keyboard
         p.setFont(self._font(2.6 * mm))
         hint = "F8 clench (hold: help) · F9 double blink · F7 calibrate · F10 pause · Ctrl+F8 board/desktop"
         width = sum(p.fontMetrics().horizontalAdvance(label) + 5 * mm for label, _ in parts)

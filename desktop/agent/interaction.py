@@ -12,6 +12,10 @@ come in as arguments, effects go out as values, and the running agent carries th
             window under it, faster past the zone. A clench or a double blink ends it.
   drag      the button is held from the spot the clench picked; the pointer follows the eyes; a clench
             drops there, a double blink cancels (Esc, then release where it started).
+  keyboard  big keys across half the screen (away from the last click, so the text box shows): the
+            key under the gaze is highlighted and a clench types it into the focused app (the overlay
+            never takes the focus). Letters with Shift, a 123 page, Space, Backspace, Enter, Done.
+            Eyes off the keyboard type nothing. Done or a double blink closes it.
   back      "Go back?" for BACK_CONFIRM_S: a clench sends Alt+Left, doing nothing does nothing and
             then clenches are ignored for LATE_CLENCH_S (the Core's rule, decisions.md 17).
   calibrating  gestures do nothing but a double blink, which stops the calibration.
@@ -43,7 +47,7 @@ WHEEL_NOTCH = 120  # Windows' WHEEL_DELTA: one notch, usually three lines
 DRAG_MOVE_PX = 3  # move the held pointer only when the gaze moved at least this much
 HOLD_S = 0.2  # a new highlight must stay the candidate this long before it shows
 
-Mode = Literal["pointing", "zoom", "palette", "back", "calibrating", "scroll", "drag"]
+Mode = Literal["pointing", "zoom", "palette", "back", "calibrating", "scroll", "drag", "keyboard"]
 Armed = Literal["left", "right", "double", "scroll", "drag"]
 
 
@@ -121,8 +125,33 @@ class Release:
     y: float
 
 
+@dataclass(frozen=True)
+class TypeChars:
+    """Type these characters into the focused window (the gaze keyboard)."""
+
+    text: str
+
+
 Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCalibration, Compose, Scroll, Press,
-               MoveTo, Release]
+               MoveTo, Release, TypeChars]
+
+# The gaze keyboard: rows of (key, width in key units); 10 units a row. A key is a character to type,
+# or one of the named keys below.
+KEYBOARD_PAGES: dict[str, list[list[tuple[str, float]]]] = {
+    "abc": [
+        [(c, 1) for c in "qwertyuiop"],
+        [(c, 1) for c in "asdfghjkl'"],
+        [("shift", 1.5)] + [(c, 1) for c in "zxcvbnm"] + [(",", 0.75), (".", 0.75)],
+        [("page", 1.5), ("space", 4), ("back", 1.5), ("enter", 1.5), ("done", 1.5)],
+    ],
+    "123": [
+        [(c, 1) for c in "1234567890"],
+        [(c, 1) for c in "@#$%&*-+=/"],
+        [(c, 1) for c in '():;!?_".,'],
+        [("page", 1.5), ("space", 4), ("back", 1.5), ("enter", 1.5), ("done", 1.5)],
+    ],
+}
+NAMED_KEYS = {"shift", "page", "space", "back", "enter", "done"}
 
 
 def _key(t: Target) -> tuple[object, ...]:
@@ -162,6 +191,8 @@ TEXT = {
         "right": "Right click", "double": "Double click", "scroll": "Scroll", "drag": "Drag", "type": "Type",
         "board": "Clench board", "calibrate": "Calibrate eyes",
         "armed_scroll": "Clench where you want to scroll", "armed_drag": "Clench what you want to drag",
+        "keyboard": "Keyboard", "look_at_key": "Look at a key", "k_space": "space", "k_back": "\u232b",
+        "k_enter": "Enter", "k_done": "Done", "k_shift": "\u21e7", "k_page_abc": "123", "k_page_123": "ABC",
         "scrolling": "Look up or down to scroll. Clench or double blink to stop.",
         "dragging": "Look where it goes, then clench to drop. Double blink cancels.",
         "pause": "Pause clicks", "resume": "Resume clicks", "close": "Close", "menu": "Clench",
@@ -173,6 +204,8 @@ TEXT = {
         "right": "Clic derecho", "double": "Doble clic", "scroll": "Desplazar", "drag": "Arrastrar",
         "type": "Escribir", "board": "Tablero Clench", "calibrate": "Calibrar ojos",
         "armed_scroll": "Aprieta donde quieras desplazar", "armed_drag": "Aprieta lo que quieras arrastrar",
+        "keyboard": "Teclado", "look_at_key": "Mira una tecla", "k_space": "espacio", "k_back": "\u232b",
+        "k_enter": "Intro", "k_done": "Listo", "k_shift": "\u21e7", "k_page_abc": "123", "k_page_123": "ABC",
         "scrolling": "Mira arriba o abajo para desplazar. Aprieta o parpadea dos veces para parar.",
         "dragging": "Mira adónde va y aprieta para soltar. Parpadea dos veces para cancelar.",
         "pause": "Pausar clics", "resume": "Reanudar clics", "close": "Cerrar", "menu": "Clench",
@@ -213,6 +246,11 @@ class Controller:
         self._changes: Trail[float] = Trail(2.0)  # when the shown highlight last changed
         self.scroll: ScrollControl | None = None
         self._scroll_at = float("-inf")
+        self.kb_page = "abc"
+        self.kb_shift = False
+        self.kb_top = False  # the keyboard sits in the top half (the last click was low on the screen)
+        self.kb_typed = ""  # what this keyboard typed so far, shown on it (the text box may be hidden)
+        self._last_click_y: float | None = None
         self.drag_from: tuple[float, float] | None = None
         self._drag_at: tuple[float, float] | None = None  # where the held pointer was last put
         w, h = 9 * px_per_mm, 34 * px_per_mm
@@ -229,13 +267,13 @@ class Controller:
         return self.input_target == "desktop"
 
     def palette_tiles(self) -> list[Candidate]:
-        """Nine big tiles, 3 x 3, in the middle of the screen."""
-        keys = ["right", "double", "scroll", "drag", "type", "board", "calibrate",
+        """Ten big tiles, 5 x 2, in the middle of the screen."""
+        keys = ["right", "double", "scroll", "drag", "keyboard", "type", "board", "calibrate",
                 "resume" if self.paused else "pause", "close"]
         s = self.screen
         gap = 3 * self.px_per_mm
-        cols, rows = 3, 3
-        tw, th = s.width * 0.25, s.height * 0.25
+        cols, rows = 5, 2
+        tw, th = s.width * 0.18, s.height * 0.3
         left0 = s.left + (s.width - cols * tw - (cols - 1) * gap) / 2
         top0 = s.top + (s.height - rows * th - (rows - 1) * gap) / 2
         tiles = []
@@ -244,6 +282,39 @@ class Controller:
             left, top = left0 + col * (tw + gap), top0 + row * (th + gap)
             tiles.append(Candidate(Rect(left, top, left + tw, top + th), self.t(key), f"agent:{key}"))
         return tiles
+
+    def keyboard_area(self) -> Rect:
+        """The keyboard's band: the bottom half of the screen, or the top half when the last click was
+        in the bottom half (so the text box it went to stays in view)."""
+        s = self.screen
+        half = s.height * 0.5
+        return Rect(s.left, s.top, s.right, s.top + half) if self.kb_top else Rect(s.left, s.bottom - half, s.right, s.bottom)
+
+    def keyboard_keys(self) -> list[Candidate]:
+        """The keys of the current page, laid out in the keyboard's band (a strip on top shows the
+        text typed so far). Kind "key:<key>"; the name is what the key shows."""
+        area = self.keyboard_area()
+        gap = 1.5 * self.px_per_mm
+        strip = 12 * self.px_per_mm
+        rows = KEYBOARD_PAGES[self.kb_page]
+        row_h = (area.height - strip - gap * (len(rows) + 1)) / len(rows)
+        unit = (area.width - gap * 11) / 10
+        keys = []
+        for r, row in enumerate(rows):
+            top = area.top + strip + gap + r * (row_h + gap)
+            left = area.left + gap
+            for key, width in row:
+                w = unit * width + gap * (width - 1)
+                keys.append(Candidate(Rect(left, top, left + w, top + row_h), self._key_label(key), f"key:{key}"))
+                left += w + gap
+        return keys
+
+    def _key_label(self, key: str) -> str:
+        if key == "page":
+            return self.t(f"k_page_{self.kb_page}")
+        if key in NAMED_KEYS:
+            return self.t(f"k_{key}")
+        return key.upper() if self.kb_shift else key
 
     # --- inputs ---------------------------------------------------------------------------------
 
@@ -312,6 +383,8 @@ class Controller:
                 target = nearest(self.palette_tiles(), *point)
             elif self.mode == "drag":
                 target = Target(point)  # drop exactly where the eyes are: no snapping
+            elif self.mode == "keyboard" and self.keyboard_area().contains(*point):
+                target = nearest(self.keyboard_keys(), *point)  # eyes off the keyboard: no key
         elif self.mode == "palette":
             target = self.target  # the palette keeps its tile while the eyes blink or wander
         target = self._hold(target, now)
@@ -381,6 +454,8 @@ class Controller:
             target = self.target
         if self.mode == "palette":
             return self._palette(target)
+        if self.mode == "keyboard":
+            return self._key(target, now)
         if self.mode == "scroll":
             self._to("pointing")  # done scrolling
             return []
@@ -411,7 +486,7 @@ class Controller:
     def _double_blink(self, now: float) -> list[Effect]:
         if self.mode == "back":
             return []  # already asking
-        if self.mode in ("zoom", "palette", "scroll"):
+        if self.mode in ("zoom", "palette", "scroll", "keyboard"):
             self._to("pointing")  # our own screens: straight back, nothing is lost
             return []
         if self.mode == "drag":
@@ -437,6 +512,10 @@ class Controller:
             return [SetTarget("board"), FocusBoard()]
         elif action == "type":
             return [Compose()]
+        elif action == "keyboard":
+            self._to("keyboard")
+            self.kb_page, self.kb_shift, self.kb_typed = "abc", False, ""
+            self.kb_top = self._last_click_y is not None and self._last_click_y > (self.screen.top + self.screen.bottom) / 2
         elif action == "calibrate":
             return self.start_calibration()
         elif action in ("pause", "resume"):
@@ -444,8 +523,37 @@ class Controller:
             self._say("now_paused" if self.paused else "now_resumed", now_toast)
         return []
 
+    def _key(self, target: Target | None, now: float) -> list[Effect]:
+        """A clench on the gaze keyboard."""
+        kind = target.candidate.kind if target and target.candidate else ""
+        if not kind.startswith("key:"):
+            self._say("look_at_key", now)
+            return []
+        key = kind[len("key:"):]
+        if key == "done":
+            self._to("pointing")
+            return []
+        if key == "shift":
+            self.kb_shift = not self.kb_shift
+            return []
+        if key == "page":
+            self.kb_page = "123" if self.kb_page == "abc" else "abc"
+            self.kb_shift = False
+            return []
+        if key == "back":
+            self.kb_typed = self.kb_typed[:-1]
+            return [Keys("backspace")]
+        if key == "enter":
+            self.kb_typed = ""
+            return [Keys("enter")]
+        text = " " if key == "space" else key.upper() if self.kb_shift else key
+        self.kb_shift = False  # one capital, as on a phone
+        self.kb_typed = (self.kb_typed + text)[-60:]
+        return [TypeChars(text)]
+
     def _act(self, x: float, y: float, now: float) -> list[Effect]:
         """What a clench on (x, y) does: the armed action once, then left click again."""
+        self._last_click_y = y
         armed, self.armed = self.armed, "left"
         if armed == "scroll":
             self._to("scroll")

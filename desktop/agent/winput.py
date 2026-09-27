@@ -23,7 +23,7 @@ INPUT_MOUSE, INPUT_KEYBOARD = 0, 1
 MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
 MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
 MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL = 0x0001, 0x0800
-VK_ESCAPE = 0x1B
+VK_ESCAPE, VK_BACK = 0x1B, 0x08
 KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE = 0x0001, 0x0002, 0x0004
 VK_RETURN = 0x0D
 VK_MENU, VK_LEFT = 0x12, 0x25
@@ -130,6 +130,15 @@ def release(x: float, y: float) -> None:
 
 def escape() -> None:
     _send(_key(VK_ESCAPE), _key(VK_ESCAPE, up=True))
+
+
+def tap(combo: str) -> None:
+    """One named key: "escape", "backspace", "enter", or "alt+left"."""
+    if combo == "alt+left":
+        alt_left()
+        return
+    vk = {"escape": VK_ESCAPE, "backspace": VK_BACK, "enter": VK_RETURN}[combo]
+    _send(_key(vk), _key(vk, up=True))
 
 
 def alt_left() -> None:

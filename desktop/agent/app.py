@@ -25,7 +25,7 @@ from desktop.agent.bridge import GazeBridge, gaze_message
 from desktop.agent.gaze import Gaze, SavitzkyGolay
 from desktop.agent.hotkeys import Key, KeyboardHook, StandIn
 from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Compose, Controller, Effect, FocusBoard,
-                                       Keys, MoveTo, Press, Release, Scroll, SetTarget, ZoomShot)
+                                       Keys, MoveTo, Press, Release, Scroll, SetTarget, TypeChars, ZoomShot)
 from desktop.agent.links import CoreLink, EyedidSource, MouseSource
 from desktop.agent.snap import Rect
 from desktop.agent.uia import UiaFinder
@@ -223,7 +223,9 @@ class Agent:
                     winput.click(e.x, e.y, e.button, e.double)
                     self._uia_at = (float("-inf"), (0.0, 0.0))  # the screen changed: look again
                 elif isinstance(e, Keys):
-                    winput.escape() if e.combo == "escape" else winput.alt_left()
+                    winput.tap(e.combo)
+                elif isinstance(e, TypeChars):
+                    winput.type_text(e.text)
                 elif isinstance(e, Scroll):
                     winput.scroll(e.x, e.y, e.delta)
                 elif isinstance(e, Press):

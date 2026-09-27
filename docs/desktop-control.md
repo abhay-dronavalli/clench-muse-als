@@ -1,6 +1,6 @@
 # Desktop control: eyes and jaw for all of Windows
 
-Status: chunks 1 to 6 built (branch `desktop-control`); a gaze keyboard and packaging are next.
+Status: chunks 1 to 7 built (branch `desktop-control`); packaging is next.
 Decision log: `docs/decisions.md` sections 20, 22 and 23 (21: English by default).
 
 The Eyedid gaze and the Muse gestures used to work only inside the board tab. Now they also drive
@@ -96,7 +96,7 @@ The calibration dots sit at the centre and 14 mm in from each corner (the SDK pu
 corners of the area it is given, so the agent insets that area).
 
 The **Clench tab** sits on the right edge. Looking at it and clenching opens the **palette**: nine
-big tiles in the middle of the screen, the nearest one highlighted as on the board. A palette in the
+big tiles in the middle of the screen (5 x 2), the nearest one highlighted as on the board. A palette in the
 middle replaced the planned dock column: a column on the edge would cover scrollbars of maximized
 windows, and big centered tiles are easier to hit.
 
@@ -105,6 +105,7 @@ windows, and big centered tiles are easier to hit.
 | Right click, Double click | the next clench clicks that way, once |
 | Scroll | the next clench puts an Up / Down control on that spot; looking into a zone scrolls the window under it (faster past the zone); a clench or double blink ends it |
 | Drag | the next clench presses there; the pointer follows the eyes; a clench drops, a double blink cancels (Esc, release where it started). Help, a switch to the board or quitting always let go |
+| Keyboard | big keys across half the screen, away from the last click so the text box stays in view. The key under the gaze is yellow; a clench types it into the focused app (the overlay never takes the focus). Letters with Shift (one capital), a 123 page, Space, Backspace, Enter; eyes off the keyboard type nothing. Done or a double blink closes it |
 | Type | click into a text box first. The board comes forward to compose a sentence (menus, AI, as usual); its confirm screen asks "Type this?", and the confirming clench types it into that box and hands the gestures back. Nothing is typed without that clench |
 | Clench board | the gestures go to the board, and its window comes forward |
 | Calibrate eyes, Pause / Resume clicks, Close | as named |
@@ -154,8 +155,9 @@ is the input target.
    check, English by default.
 6. **Scroll, drag, launcher** (done). Scroll and drag from the palette, the 200 ms highlight hold,
    `scripts/start_desktop.ps1`.
-7. **Next.** A large-key gaze keyboard for text the board's phrases cannot make (a web address, a
-   name), and a packaged build (PyInstaller) so the laptop needs no uv.
+7. **Gaze keyboard** (done), for text the board's phrases cannot make (a web address, a name).
+8. **Next.** A packaged build (PyInstaller) so the laptop needs no uv; word prediction on the
+   keyboard; more than one screen.
 
 ## The Eyedid SDK
 
