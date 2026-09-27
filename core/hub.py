@@ -13,7 +13,8 @@ from typing import Literal
 
 from fastapi import WebSocket
 
-from core.contracts import ActionResult, DesktopInput, InputEvent, Message, Metrics, Screen, Settings, ShortcutDebug
+from core.contracts import (ActionResult, DesktopInput, InputEvent, Message, Metrics, Screen, Settings, ShortcutDebug,
+                            TypeText)
 
 log = logging.getLogger("clench.hub")
 
@@ -55,9 +56,10 @@ class Hub:
         SHORTCUT_DEBUG go to consoles and input clients (the dev panel) only: the patient's board has
         no use for them. INPUT_EVENT goes the same way; the board's own input log opens a console
         socket for it, exactly as the board's Muse panel already does. The desktop agent gets
-        DESKTOP_INPUT (it alone), SETTINGS, SCREEN (to draw the help countdown) and ACTION_RESULT."""
+        DESKTOP_INPUT and TYPE_TEXT (it alone), SETTINGS, SCREEN (to draw the help countdown) and
+        ACTION_RESULT."""
         for c in self._clients:
-            if isinstance(msg, DesktopInput):
+            if isinstance(msg, (DesktopInput, TypeText)):
                 wanted = c.role == "desktop"
             elif isinstance(msg, (Metrics, ShortcutDebug, InputEvent)):
                 wanted = c.role in ("console", "input")

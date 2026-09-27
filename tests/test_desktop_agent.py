@@ -259,6 +259,13 @@ def test_pause_stops_clicks_and_the_palette_still_resumes(ctl):
     assert ctl.on_gesture("CLENCH", 6.0, 6.0) == [Click(330, 315)]
 
 
+def test_the_type_tile_asks_to_compose(ctl):
+    from desktop.agent.interaction import Compose
+
+    open_palette(ctl, 1.0)
+    assert use_tile(ctl, "type", 2.0) == [Compose()] and ctl.mode == "pointing"
+
+
 def test_the_board_tile_hands_input_to_the_board(ctl):
     open_palette(ctl, 1.0)
     assert use_tile(ctl, "board", 2.0) == [SetTarget("board"), FocusBoard()]
@@ -294,7 +301,7 @@ def test_losing_the_desktop_target_drops_an_armed_click(ctl):
 
 def test_palette_tiles_fit_the_screen_and_do_not_overlap(ctl):
     tiles = ctl.palette_tiles()
-    assert len(tiles) == 6
+    assert len(tiles) == 7
     for i, a in enumerate(tiles):
         assert SCREEN.encloses(a.rect)
         assert not any(a.rect.intersects(b.rect) for b in tiles[i + 1:])
@@ -363,3 +370,12 @@ def test_gaze_smooths_with_savitzky_golay_then_one_euro():
     for i in range(20):
         g.feed(Sample(i / 30, 500 + (30 if i % 2 else -30), 500))
     assert abs(g.point[0] - 500) < 15  # +/- 30 px alternating jitter mostly gone
+
+
+def test_typed_text_is_unicode_key_presses_with_enter_for_newlines():
+    from desktop.agent.winput import KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, VK_RETURN, text_keys
+
+    down, up = KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+    assert text_keys("é\r\n") == [(0, 0xE9, down), (0, 0xE9, up), (VK_RETURN, 0, 0), (VK_RETURN, 0, KEYEVENTF_KEYUP)]
+    # an emoji is two UTF-16 units, each pressed and released
+    assert [scan for _, scan, _ in text_keys("\U0001F600")] == [0xD83D, 0xD83D, 0xDE00, 0xDE00]

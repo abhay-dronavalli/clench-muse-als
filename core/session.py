@@ -59,6 +59,9 @@ stays home with its scanning stopped, and CLENCH and DOUBLE_BLINK go to the desk
 DESKTOP_INPUT; the agent decides what they do in Windows. The help alert does not change: LONG_CLENCH
 starts the countdown, and during it a DOUBLE_BLINK cancels help and a CLENCH does nothing, so neither
 reaches the agent. Switching the target while scanning or confirming goes home without a word.
+COMPOSE (the agent's palette, "Type") hands the gestures to the board to write something for the
+desktop: every confirm screen then asks "Type this?" (action type_text), and the confirming clench
+sends TYPE_TEXT to the agent instead of speaking or sending, then hands the gestures back.
 
 Help alert (PRD D3): LONG_CLENCH while SCANNING, LOADING or CONFIRMING --> HELP_COUNTDOWN, 5 s, one
 SCREEN per second, and the board says "Calling for help. Double blink to cancel.". DOUBLE_BLINK
@@ -86,6 +89,7 @@ from core.contracts import (
     AudioDone,
     BodyStateLevel,
     Clench,
+    Compose,
     Confirm,
     BackPrompt,
     DesktopInput,
@@ -106,6 +110,7 @@ from core.contracts import (
     State,
     Tile,
     TileKind,
+    TypeText,
 )
 from core.contracts import ActionResult as ActionResultMsg
 from core.db import Db
@@ -317,6 +322,8 @@ class Session:
         # A desktop agent is connected (the app sets it). Without one the Computer tile says so and
         # stays on the board: gestures sent to nobody would leave the person stranded.
         self.desktop_available = False
+        # Writing for the desktop (COMPOSE): the next confirmed sentence is typed, not said or sent.
+        self.composing = False
         self.tile_switch_margin = profile.tile_switch_margin
         self.ranker = ranker or Ranker(db, weights=profile.ranking.weights, hysteresis=profile.ranking.hysteresis)
         self.jev = jev  # None = no Jev: the AI prior is 0
@@ -449,6 +456,8 @@ class Session:
                 self.pointer.on_face(msg.ok)
             case State():
                 self.state_level = msg.level  # used from the next screen on; never takes action
+            case Compose():
+                self._compose()
             case _:
                 log.debug("ignored %s in %s", msg.type, self.state.value)
 
@@ -627,6 +636,43 @@ class Session:
             return
         self._apply_settings(self.settings().model_copy(update={"input_target": "desktop"}))
 
+    def set_desktop_available(self, available: bool) -> None:
+        """The app reports whether a desktop agent is connected. Without one nothing can be typed, so
+        composing ends, and a "Type this?" screen already showing turns back into its own action."""
+        self.desktop_available = available
+        if not available and self.composing:
+            log.info("desktop agent gone: no longer writing for the computer")
+            self.composing = False
+            if self.state is SessionState.CONFIRMING:
+                self._emit(self._confirm_msg())
+
+    def _compose(self) -> None:
+        """The agent's "Type": write a sentence on the board for the desktop to type."""
+        if not self.desktop_available:
+            log.warning("COMPOSE ignored: no desktop agent is connected")
+            return
+        if self.state is SessionState.HELP_COUNTDOWN:
+            log.info("COMPOSE ignored during the help countdown")
+            return
+        log.info("writing for the computer: the next confirmed sentence is typed there")
+        self.composing = True
+        if self.input_target != "board":
+            self._apply_settings(self.settings().model_copy(update={"input_target": "board"}))
+
+    def _type_pending(self, item: Item) -> None:
+        """The confirming clench on "Type this?": hand the sentence to the agent, and the gestures too."""
+        text = item.phrase(self.lang)
+        self._record(item, confirmed=True, text=text)
+        self._use_phrase(text)
+        self._effort.select()
+        self._emit(self._metrics(item, text))
+        log.info("typing on the computer: %r", text)
+        self._emit(TypeText(text=text, lang=self.lang))
+        self._emit(ActionResultMsg(action="type_text", ok=True, detail="sent to the computer", contact=None))
+        self.composing = False
+        self._pending = None
+        self._apply_settings(self.settings().model_copy(update={"input_target": "desktop"}))
+
     def _pick_other(self, frame: Frame) -> None:
         self._log_event(node_id=_join(frame.prefix, "other"), path=self._crumbs() + [OTHER_WORD[self.lang]], action=None)
         if self.speak_picks:
@@ -649,6 +695,9 @@ class Session:
         item = self._pending
         assert item is not None and item.action is not None
         self._shortcut_from = None
+        if self.composing:
+            self._type_pending(item)
+            return
         text = item.phrase(self.lang)
         ctx = self._context(text, item.contact)
         self._record(item, confirmed=True, text=text)
@@ -1316,6 +1365,8 @@ class Session:
         its cancel or its end applies the new target."""
         log.info("input target %s", "desktop: gestures go to the desktop agent" if self.input_target == "desktop"
                  else "board: gestures pick tiles again")
+        if self.input_target == "desktop":
+            self.composing = False  # back on the desktop some other way: nothing to type
         if self.state in (SessionState.SCANNING, SessionState.LOADING, SessionState.CONFIRMING):
             self._close_back()
             self._cancel_wait()
@@ -1420,7 +1471,7 @@ class Session:
     def _confirm_msg(self) -> Confirm:
         item = self._pending
         assert item is not None and item.action is not None
-        return Confirm(text=item.phrase(self.lang), action=item.action)
+        return Confirm(text=item.phrase(self.lang), action="type_text" if self.composing else item.action)
 
     def _echo(self, text: str) -> None:
         if self.speak_picks:

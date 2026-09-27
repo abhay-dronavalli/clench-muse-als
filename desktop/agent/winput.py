@@ -22,7 +22,8 @@ gdi32 = ctypes.WinDLL("gdi32")
 INPUT_MOUSE, INPUT_KEYBOARD = 0, 1
 MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
 MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
-KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP = 0x0001, 0x0002
+KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE = 0x0001, 0x0002, 0x0004
+VK_RETURN = 0x0D
 VK_MENU, VK_LEFT = 0x12, 0x25
 ULONG_PTR = ctypes.c_size_t
 
@@ -105,6 +106,34 @@ def click(x: float, y: float, button: str = "left", double: bool = False) -> Non
 def alt_left() -> None:
     """Back in browsers, File Explorer and Settings (Taher's choice, decisions.md 20)."""
     _send(_key(VK_MENU), _key(VK_LEFT, extended=True), _key(VK_LEFT, up=True, extended=True), _key(VK_MENU, up=True))
+
+
+def text_keys(text: str) -> list[tuple[int, int, int]]:
+    """`text` as (virtual key, UTF-16 unit, flags) key events: each character as a Unicode key press
+    and release (any language, accents included; one outside the BMP is two units), Enter for a
+    newline."""
+    keys: list[tuple[int, int, int]] = []
+    for ch in text.replace("\r\n", "\n"):
+        if ch == "\n":
+            keys += [(VK_RETURN, 0, 0), (VK_RETURN, 0, KEYEVENTF_KEYUP)]
+            continue
+        data = ch.encode("utf-16-le")
+        for i in range(0, len(data), 2):
+            unit = int.from_bytes(data[i:i + 2], "little")
+            keys += [(0, unit, KEYEVENTF_UNICODE), (0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)]
+    return keys
+
+
+def type_text(text: str) -> None:
+    """Type `text` into the focused window. One SendInput call, so nothing the person does can land
+    in the middle of it."""
+    keys = text_keys(text)
+    if keys:
+        _send(*(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(vk, scan, flags, 0, 0)) for vk, scan, flags in keys))
+
+
+def foreground() -> int:
+    return int(user32.GetForegroundWindow() or 0)
 
 
 def cursor() -> tuple[int, int]:

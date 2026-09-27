@@ -718,3 +718,14 @@ for Spanish explicitly instead of relying on the profile.
   otherwise read where the person looks.
 - The board shows "Using the computer" (how to come back) while `input_target` is desktop; the dev
   panel has an Input Board / Computer switch and says whether the agent is connected.
+- **Type** (the agent's palette) = COMPOSE: the agent remembers the focused window, the Core hands the
+  gestures to the board and marks the session as composing, every confirm screen asks "Type this?"
+  (action `type_text`), and the confirming clench sends TYPE_TEXT to the agent instead of speaking
+  or sending; the gestures then go back to the desktop. Nothing is typed without that clench (hard
+  rule 1). Composing ends on the typed sentence, on Room > Computer, or when the agent leaves (a
+  "Type this?" already showing turns back into its own action). The agent types with Unicode key
+  presses in one SendInput call (Enter for newlines). The palette is now 4 x 2 (Type added).
+- A live typing test (2026-09-27) must never touch a Notepad the person uses: Windows 11 Notepad
+  reopens the last session's tabs, and a test that cleared "its" text box cleared a real unsaved
+  note (recovered from the test's own output). Live typing tests use a window the test creates and
+  owns, or none.

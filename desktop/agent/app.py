@@ -23,8 +23,8 @@ from desktop.agent import calibration, winput
 from desktop.agent.bridge import GazeBridge, gaze_message
 from desktop.agent.gaze import Gaze, SavitzkyGolay
 from desktop.agent.hotkeys import Key, KeyboardHook, StandIn
-from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Controller, Effect, FocusBoard, Keys,
-                                       SetTarget, ZoomShot)
+from desktop.agent.interaction import (Calibrate, CancelCalibration, Click, Compose, Controller, Effect, FocusBoard,
+                                       Keys, SetTarget, ZoomShot)
 from desktop.agent.links import CoreLink, EyedidSource, MouseSource
 from desktop.agent.snap import Rect
 from desktop.agent.uia import UiaFinder
@@ -59,6 +59,7 @@ class Agent:
         self.settings: dict[str, Any] | None = None
         self.settings_fresh = False  # the first SETTINGS after a (re)connect
         self.help_countdown: int | None = None
+        self.type_into: int | None = None  # the window that had focus when the person asked to type
         self.stand_in = StandIn(self._send_gesture)
         self.source_kind = args.gaze
         if args.gaze == "eyedid":
@@ -163,6 +164,8 @@ class Agent:
                 self.settings_fresh = False
                 if msg.get("input_target") != self.desired:
                     self._send_target(self.desired)
+            elif msg.get("input_target"):
+                self.desired = msg["input_target"]  # switched from anywhere: keep it over reconnects
         elif kind == "SCREEN":
             on = msg.get("screen") == "help_countdown"
             self.help_countdown = int(msg.get("countdown") or 0) if on else None
@@ -174,6 +177,8 @@ class Agent:
             self.ctl.toast = (f"{what}{who}{ok} ({msg.get('detail')})", now + 4)
         elif kind == "DESKTOP_INPUT":
             self._run(self.ctl.on_gesture(msg["kind"], float(msg["t"]), now))
+        elif kind == "TYPE_TEXT":
+            self._type(str(msg.get("text", "")))
 
     def _eyedid(self, msg: dict[str, Any], now: float) -> None:
         if msg["type"] == "status":
@@ -222,6 +227,8 @@ class Agent:
                     self._start_calibration()
                 elif isinstance(e, CancelCalibration):
                     self.calib.cancel()
+                elif isinstance(e, Compose):
+                    self._compose()
             except OSError as err:
                 self.ctl.toast = (f"Windows refused that: {err}", time.time() + 5)
                 log.warning("%s failed: %s", type(e).__name__, err)
@@ -243,6 +250,42 @@ class Agent:
             self.uia.inside(src)
 
         QTimer.singleShot(90, grab)  # let the compositor drop our drawing first
+
+    def _compose(self) -> None:
+        """Remember where the focus is, then write on the board (the Core switches the gestures)."""
+        hwnd = winput.foreground()
+        board = winput.board_window()
+        if not hwnd or hwnd == board:
+            self.ctl.toast = ("Click into a text box first, then Type", time.time() + 4)
+            return
+        if board is None:
+            self.ctl.toast = ("Open the board in the browser (localhost:5173)", time.time() + 5)
+            return
+        self.type_into = hwnd
+        if not self.core.send({"type": "COMPOSE"}):
+            self.ctl.toast = ("The Core is not connected", time.time() + 3)
+            return
+        winput.focus(board)
+
+    def _type(self, text: str) -> None:
+        """TYPE_TEXT: the person confirmed it on the board. Back to their window, then type it."""
+        from PySide6.QtCore import QTimer
+
+        hwnd = self.type_into
+        self.type_into = None
+        if not text or hwnd is None or not winput.user32.IsWindow(hwnd):
+            self.ctl.toast = ("The window to type into is gone", time.time() + 4)
+            return
+        winput.focus(hwnd)
+
+        def type_now() -> None:
+            try:
+                winput.type_text(text)
+                self.ctl.toast = ("Typed", time.time() + 2.5)
+            except OSError as err:
+                self.ctl.toast = (f"Windows refused the typing: {err}", time.time() + 5)
+
+        QTimer.singleShot(200, type_now)  # let the window take the focus back first
 
     def _start_calibration(self) -> None:
         if self.source_kind != "eyedid" or not self.eyedid_ready:

@@ -21,7 +21,8 @@ ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating"]
-ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
+# type_text = a sentence composed on the board for the desktop agent to type (docs/desktop-control.md).
+ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert", "type_text"]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
@@ -259,6 +260,25 @@ class DesktopInput(_Msg):
     t: float  # when the gesture happened (the sender's clock); the agent looks back from it
 
 
+class TypeText(_Msg):
+    """Type this confirmed sentence into the window that had focus when the person asked for it
+    (COMPOSE). Only ever sent after the confirming clench on the board's "Type this?" screen."""
+
+    type: Literal["TYPE_TEXT"] = "TYPE_TEXT"
+    text: str = Field(min_length=1)
+    lang: Lang
+
+
+# --- Desktop agent -> Core ------------------------------------------------------
+
+
+class Compose(_Msg):
+    """The person wants to write something on the desktop: the Core hands the gestures to the board,
+    whose next confirmed sentence is typed (TYPE_TEXT) instead of said or sent."""
+
+    type: Literal["COMPOSE"] = "COMPOSE"
+
+
 # --- Core -> Console and web dev panel ------------------------------------------
 
 
@@ -364,6 +384,8 @@ Message = Annotated[
         ShortcutDebug,
         InputEvent,
         DesktopInput,
+        TypeText,
+        Compose,
     ],
     Field(discriminator="type"),
 ]

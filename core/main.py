@@ -63,7 +63,7 @@ ACCEPTS: dict[Role, frozenset[str]] = {
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
-    "desktop": frozenset({"SETTINGS", "CLENCH", "DOUBLE_BLINK", "LONG_CLENCH"}),
+    "desktop": frozenset({"SETTINGS", "COMPOSE", "CLENCH", "DOUBLE_BLINK", "LONG_CLENCH"}),
 }
 
 # How long the headband may be missing before Muse input is paused. A Bluetooth reconnect takes a
@@ -236,7 +236,7 @@ def create_app(
         client = Client(ws, role)
         hub.add(client)
         if role == "desktop":
-            app.state.session.desktop_available = True
+            app.state.session.set_desktop_available(True)
         writer = asyncio.create_task(client.pump())
         session: Session = app.state.session
         hub.send_to(client, session.settings())
@@ -300,7 +300,7 @@ def create_app(
             hub.remove(client)
             writer.cancel()
             if role == "desktop":
-                session.desktop_available = hub.count("desktop") > 0
+                session.set_desktop_available(hub.count("desktop") > 0)
             if role == 'sensor':
                 app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False,
                     profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')

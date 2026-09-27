@@ -69,22 +69,29 @@ class Calibrate:
 
 
 @dataclass(frozen=True)
+class Compose:
+    """Write something where the desktop's focus is: the board composes it, the agent types it."""
+
+
+@dataclass(frozen=True)
 class CancelCalibration:
     pass
 
 
-Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCalibration]
+Effect = Union[Click, Keys, ZoomShot, SetTarget, FocusBoard, Calibrate, CancelCalibration, Compose]
 
 TEXT = {
     "en": {
-        "right": "Right click", "double": "Double click", "board": "Clench board", "calibrate": "Calibrate eyes",
+        "right": "Right click", "double": "Double click", "type": "Type", "board": "Clench board",
+        "calibrate": "Calibrate eyes",
         "pause": "Pause clicks", "resume": "Resume clicks", "close": "Close", "menu": "Clench",
         "no_eyes": "Eyes not detected", "look_inside": "Look inside the zoom", "paused": "Clicks are paused",
         "armed_right": "Next clench right-clicks", "armed_double": "Next clench double-clicks",
         "disarmed": "Back to left click", "now_paused": "Clicks paused", "now_resumed": "Clicks back on",
     },
     "es": {
-        "right": "Clic derecho", "double": "Doble clic", "board": "Tablero Clench", "calibrate": "Calibrar ojos",
+        "right": "Clic derecho", "double": "Doble clic", "type": "Escribir", "board": "Tablero Clench",
+        "calibrate": "Calibrar ojos",
         "pause": "Pausar clics", "resume": "Reanudar clics", "close": "Cerrar", "menu": "Clench",
         "no_eyes": "No se detectan los ojos", "look_inside": "Mira dentro del zoom", "paused": "Clics en pausa",
         "armed_right": "El próximo apretón hace clic derecho", "armed_double": "El próximo apretón hace doble clic",
@@ -131,16 +138,17 @@ class Controller:
         return self.input_target == "desktop"
 
     def palette_tiles(self) -> list[Candidate]:
-        """Six big tiles, 3 x 2, in the middle of the screen."""
-        keys = ["right", "double", "board", "calibrate", "resume" if self.paused else "pause", "close"]
+        """Big tiles, 4 x 2, in the middle of the screen."""
+        keys = ["right", "double", "type", "board", "calibrate", "resume" if self.paused else "pause", "close"]
         s = self.screen
         gap = 3 * self.px_per_mm
-        tw, th = s.width * 0.22, s.height * 0.24
-        left0 = s.left + (s.width - 3 * tw - 2 * gap) / 2
+        cols = 4
+        tw, th = s.width * 0.2, s.height * 0.26
+        left0 = s.left + (s.width - cols * tw - (cols - 1) * gap) / 2
         top0 = s.top + (s.height - 2 * th - gap) / 2
         tiles = []
         for i, key in enumerate(keys):
-            col, row = i % 3, i // 3
+            col, row = i % cols, i // cols
             left, top = left0 + col * (tw + gap), top0 + row * (th + gap)
             tiles.append(Candidate(Rect(left, top, left + tw, top + th), self.t(key), f"agent:{key}"))
         return tiles
@@ -280,6 +288,8 @@ class Controller:
             self._say(f"armed_{action}", now_toast)
         elif action == "board":
             return [SetTarget("board"), FocusBoard()]
+        elif action == "type":
+            return [Compose()]
         elif action == "calibrate":
             return self.start_calibration()
         elif action in ("pause", "resume"):

@@ -48,6 +48,7 @@ export const STRINGS = {
       place_call: 'Place this call?',
       room_control: 'Do this?',
       help_alert: 'Call for help?',
+      type_text: 'Type this?',
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Calling for help',
@@ -66,6 +67,7 @@ export const STRINGS = {
         place_call: (who) => `Calling ${who}`,
         room_control: () => 'Done',
         help_alert: (who) => `Calling ${who}`,
+        type_text: () => 'Typing it on the computer',
       } satisfies ToastText,
       demo: {
         speak: () => '(demo mode) would say it',
@@ -73,6 +75,7 @@ export const STRINGS = {
         place_call: (who) => `(demo mode) would call ${who}`,
         room_control: () => '(demo mode) would do it',
         help_alert: (who) => `(demo mode) would call ${who}`,
+        type_text: () => 'Typing it on the computer',
       } satisfies ToastText,
       failed: "Couldn't send",
     },
@@ -120,6 +123,7 @@ export const STRINGS = {
       place_call: '¿Hacer esta llamada?',
       room_control: '¿Hacer esto?',
       help_alert: '¿Pedir ayuda?',
+      type_text: '¿Escribir esto?',
     } satisfies Record<ActionName, string>,
     help: {
       title: 'Pidiendo ayuda',
@@ -138,6 +142,7 @@ export const STRINGS = {
         place_call: (who) => `Llamando a ${who}`,
         room_control: () => 'Hecho',
         help_alert: (who) => `Llamando a ${who}`,
+        type_text: () => 'Escribiéndolo en la computadora',
       } satisfies ToastText,
       demo: {
         speak: () => '(modo demo) lo diría',
@@ -145,6 +150,7 @@ export const STRINGS = {
         place_call: (who) => `(modo demo) llamaría a ${who}`,
         room_control: () => '(modo demo) lo haría',
         help_alert: (who) => `(modo demo) llamaría a ${who}`,
+        type_text: () => 'Escribiéndolo en la computadora',
       } satisfies ToastText,
       failed: 'No se pudo enviar',
     },

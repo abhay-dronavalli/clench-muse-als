@@ -109,6 +109,8 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         contracts.DesktopInput,
         {"type": "DESKTOP_INPUT", "kind": "DOUBLE_BLINK", "t": 1727300020.5},
     ),
+    "TYPE_TEXT": (contracts.TypeText, {"type": "TYPE_TEXT", "text": "I'll call you at six.", "lang": "en"}),
+    "COMPOSE": (contracts.Compose, {"type": "COMPOSE"}),
     "INPUT_EVENT": (
         contracts.InputEvent,
         {
@@ -191,6 +193,8 @@ def test_round_trip(name):
         {"type": "SETTINGS", "pointing_mode": "scan", "scan_ms": 1000, "input_target": "tv"},
         {"type": "DESKTOP_INPUT", "kind": "LONG_CLENCH", "t": 1.0},  # help never goes to the desktop
         {"type": "DESKTOP_INPUT", "kind": "CLENCH"},  # t is required
+        {"type": "TYPE_TEXT", "text": "", "lang": "en"},  # nothing to type
+        {"type": "COMPOSE", "for": "notepad"},
         {"type": "METRICS", "text": "x", "selections": 0, "scan_steps": 0, "day1_selections": 1, "day1_scan_steps": 0},
         {"type": "METRICS", "text": "x", "selections": 2, "scan_steps": 0, "day1_selections": 5},
         {

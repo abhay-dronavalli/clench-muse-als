@@ -285,3 +285,89 @@ def test_without_an_agent_the_computer_tile_says_so_and_stays(session, sched, se
     assert session.input_target == "board"
     assert any(isinstance(m, Speak) and m.text == "The computer is not connected." for m in sent)
     assert screens(sent)[-1].path == ["Room"]  # still there, still scanning
+
+
+# --- writing for the desktop: COMPOSE, "Type this?", TYPE_TEXT --------------------------------------
+
+from core.contracts import Compose, TypeText  # noqa: E402
+from core.hub import Client, Hub  # noqa: E402
+from core.session import CLENCH_DEBOUNCE_S as DEBOUNCE  # noqa: E402
+
+
+def compose_from_desktop(session):
+    session.set_desktop_available(True)
+    target(session, "desktop")
+    session.handle(Compose())
+
+
+def confirm_water(session, sched, sent):
+    for tile in ("need", "water"):
+        pick(session, sched, sent, tile)
+    assert session.state is SessionState.CONFIRMING
+
+
+def test_compose_hands_the_gestures_to_the_board_and_asks_type_this(session, sched, sent):
+    compose_from_desktop(session)
+    assert session.input_target == "board" and session.composing
+    confirm_water(session, sched, sent)
+    confirm = [m for m in sent if isinstance(m, Confirm)][-1]
+    assert (confirm.action, confirm.text) == ("type_text", "I'd like some water, please.")
+
+
+def test_the_confirming_clench_types_it_and_goes_back_to_the_desktop(session, sched, sent):
+    compose_from_desktop(session)
+    confirm_water(session, sched, sent)
+    sched.advance(DEBOUNCE + 0.05)
+    session.handle(Clench(t=1.0, strength=1.0))
+    assert [m for m in sent if isinstance(m, TypeText)] == [TypeText(text="I'd like some water, please.", lang="en")]
+    assert [(r.action, r.ok) for r in sent if isinstance(r, ActionResult)] == [("type_text", True)]
+    assert not any(isinstance(m, Speak) and m.kind == "phrase" for m in sent)  # typed, never said
+    assert session.input_target == "desktop" and not session.composing
+    sched.advance(5 * SCAN_S)
+    assert session.highlight == 0  # the board is still again
+
+
+def test_nothing_is_typed_without_the_confirm(session, sched, sent):
+    compose_from_desktop(session)
+    confirm_water(session, sched, sent)
+    session.handle(DoubleBlink(t=1.0))  # "Cancel this message?"
+    sched.advance(DEBOUNCE + 0.05)
+    session.handle(Clench(t=1.5, strength=1.0))  # yes, cancel
+    assert not any(isinstance(m, TypeText) for m in sent)
+    assert session.composing  # still writing: pick another sentence
+
+
+def test_compose_needs_an_agent(session):
+    session.handle(Compose())
+    assert not session.composing and session.input_target == "board"
+
+
+def test_going_back_to_the_desktop_another_way_ends_composing(session, sched, sent):
+    compose_from_desktop(session)
+    for tile in ("room", "computer"):
+        pick(session, sched, sent, tile)
+    assert session.input_target == "desktop" and not session.composing
+
+
+def test_the_agent_leaving_turns_type_this_back_into_its_own_action(session, sched, sent):
+    compose_from_desktop(session)
+    confirm_water(session, sched, sent)
+    session.set_desktop_available(False)
+    assert not session.composing
+    assert [m for m in sent if isinstance(m, Confirm)][-1].action == "speak"
+
+
+def test_type_text_goes_to_the_agent_only():
+    hub = Hub()
+    clients = {role: Client(None, role) for role in ("board", "console", "input", "desktop")}  # type: ignore[arg-type]
+    for c in clients.values():
+        hub.add(c)
+    hub.broadcast(TypeText(text="hi", lang="en"))
+    assert {role: c.queue.qsize() for role, c in clients.items()} == {"board": 0, "console": 0, "input": 0, "desktop": 1}
+
+
+def test_compose_over_the_socket_switches_to_the_board(client):
+    with client.websocket_connect("/ws/desktop") as desktop:
+        set_settings(desktop, input_target="desktop")
+        desktop.send_json({"type": "COMPOSE"})
+        assert drain(desktop, "SETTINGS")["input_target"] == "board"

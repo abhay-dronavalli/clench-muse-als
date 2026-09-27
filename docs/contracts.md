@@ -25,7 +25,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 | `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
-| `/ws/desktop` | Desktop agent (`docs/desktop-control.md`) | SETTINGS; CLENCH, DOUBLE_BLINK, LONG_CLENCH from its keyboard stand-in | SETTINGS, SCREEN, ACTION_RESULT, DESKTOP_INPUT |
+| `/ws/desktop` | Desktop agent (`docs/desktop-control.md`) | SETTINGS, COMPOSE; CLENCH, DOUBLE_BLINK, LONG_CLENCH from its keyboard stand-in | SETTINGS, SCREEN, ACTION_RESULT, DESKTOP_INPUT, TYPE_TEXT |
 
 Every client gets the current SETTINGS the moment it connects, and again after every change.
 
@@ -59,6 +59,8 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 | SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
 | DESKTOP_INPUT | Core | Desktop agent | A CLENCH or DOUBLE_BLINK for the desktop, while `input_target` is `desktop` |
+| COMPOSE | Desktop agent | Core | Write something for the desktop: hand the gestures to the board; its next confirmed sentence is typed |
+| TYPE_TEXT | Core | Desktop agent | Type this confirmed sentence into the window that had focus |
 
 ## Sensor Service -> Core
 
@@ -326,8 +328,8 @@ DOUBLE_BLINK cancels (PRD D5).
 
 | Field | Type | Notes |
 |---|---|---|
-| `text` | string | the exact sentence that will be spoken or sent |
-| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` | from the action registry |
+| `text` | string | the exact sentence that will be spoken, sent or typed |
+| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` \| `"type_text"` | from the action registry; `type_text` while the person is writing for the desktop (COMPOSE): the board asks "Type this?" |
 
 ```json
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
@@ -447,7 +449,8 @@ For example `{"center_yaw": 0.5, "center_pitch": -2.0, "left_yaw": -18.0, "right
 ### ACTION_RESULT
 
 Sent when a confirmed action that leaves the laptop finishes: `send_message` (Telegram),
-`place_call` (Twilio voice) or `room_control`. Speaking aloud has no ACTION_RESULT; the board
+`place_call` (Twilio voice), `room_control`, or `type_text` (handed to the desktop agent, detail
+`"sent to the computer"`). Speaking aloud has no ACTION_RESULT; the board
 already knows from AUDIO_DONE. The help alert sends one for its call and one for its message. The
 board shows it as a toast for 4 s.
 
@@ -551,6 +554,38 @@ decides what it does in Windows: click the element under the gaze, open or use t
 
 ```json
 {"type": "DESKTOP_INPUT", "kind": "CLENCH", "t": 1727300020.5}
+```
+
+### TYPE_TEXT
+
+Sent to `/ws/desktop` only, right after the confirming clench on a "Type this?" screen (CONFIRM with
+`action: "type_text"`). The agent brings back the window that had focus when the person asked
+(COMPOSE) and types the text there. Nothing else is said or sent for it; the board gets an
+ACTION_RESULT (`type_text`) as its toast, and the gestures go back to the desktop.
+
+| Field | Type | Notes |
+|---|---|---|
+| `text` | string | the exact confirmed sentence, not empty |
+| `lang` | `"en"` \| `"es"` | its language |
+
+```json
+{"type": "TYPE_TEXT", "text": "I'll call you at six.", "lang": "en"}
+```
+
+## Desktop agent -> Core
+
+### COMPOSE
+
+From the agent's palette ("Type"): the person wants to write something where the desktop's focus
+is. The Core switches `input_target` to `board` and marks the session as composing: every CONFIRM
+then has `action: "type_text"`, and the confirming clench sends TYPE_TEXT to the agent instead of
+speaking or sending. Composing ends there, or when the gestures go back to the desktop some other
+way (Room > Computer, the agent leaving). Ignored while no agent is connected.
+
+No fields besides `type`.
+
+```json
+{"type": "COMPOSE"}
 ```
 
 ## Muse integration: clench and double blink

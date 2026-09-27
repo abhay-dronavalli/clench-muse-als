@@ -21,7 +21,8 @@ export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
 export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating'
-export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert'
+/** type_text = a sentence composed on the board for the desktop agent to type (docs/desktop-control.md). */
+export type ActionName = 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'type_text'
 /**
  * phrase = a confirmed sentence (the Core waits for its AUDIO_DONE); echo = a picked tile's label
  * said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
@@ -333,6 +334,26 @@ export interface DesktopInput {
   t: number
 }
 
+/**
+ * Type this confirmed sentence into the window that had focus when the person asked for it
+ * (COMPOSE). Only ever sent after the confirming clench on the board's "Type this?" screen.
+ */
+export interface TypeText {
+  type: 'TYPE_TEXT'
+  text: string
+  lang: Lang
+}
+
+// --- Desktop agent -> Core ---
+
+/**
+ * The person wants to write something on the desktop: the Core hands the gestures to the board,
+ * whose next confirmed sentence is typed (TYPE_TEXT) instead of said or sent.
+ */
+export interface Compose {
+  type: 'COMPOSE'
+}
+
 export type JevStatus = 'off' | 'waiting' | 'answered'
 
 /**
@@ -382,5 +403,7 @@ export type Message =
   | ShortcutDebug
   | InputEvent
   | DesktopInput
+  | TypeText
+  | Compose
 
 export type MessageType = Message['type']
