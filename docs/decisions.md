@@ -987,3 +987,25 @@ choices below are Taher's.
   stop." rather than inventing one.
 - Shorter, larger text in Car mode: drop-off names without OSM codes like "(I)(9)", the reason cut to
   its first three points plus its unknowns, one line each, no " · " lines.
+
+## 30. Gaze on confirm screens, touch fallbacks for blinks, two onboardings, Split by default
+
+- Gaze on confirm screens: the board only pointed on menu screens (`screen` is null on a confirm,
+  BoardPage) and drew the gaze dot only with the tiles, so gaze looked dead on every confirm. The dot
+  now shows on confirm screens and the gaze lights the **Confirm** target (display only). Cancel is
+  never lit by gaze: on a confirm screen any clench confirms, so lighting Cancel would mislead.
+- No DOUBLE_BLINK on the tablet: the laptop's double blinks come from the headband through the
+  Python sensor service (MNE, sensor/detect/mne_blinks.py); the tablet reads the Muse natively
+  (MuseSensor.kt) and sends clenches only, as MNE has no Android port (#20). Not ported, Eyedid blinks
+  not mapped. Instead nothing depends on blinks: the help countdown has a large touch **Cancel** and the
+  "Go back?" prompt a large **Stay here** (TAP `cancel`); a stray tile touch still cannot cancel help.
+- App onboarding (first launch): black and gold; no blink input (gaze highlights, a touch or the
+  step's timer acts); intro 5 s (what comes next), eye instructions 5 s then Eyedid calibration and the
+  gaze check, headband up to 30 s, a test clench only with a headband, then Home.
+- Car mode onboarding (each time Car mode opens): white theme with the tablet's 3D car revolving
+  behind (the shell's existing car preview); intro 5 s, a one-target gaze check (a miss offers a
+  recalibration by touch), headband (connected: shown and on at once; else up to 30 s), a test clench
+  with a headband, then Car mode. The Core ignores ordinary input meanwhile (SETTINGS onboarding);
+  help works.
+- Car mode always opens in **Split**; the Car button switches until Car mode is left.
+- The ride controls (Comfort, Trip changes) share the full width.
