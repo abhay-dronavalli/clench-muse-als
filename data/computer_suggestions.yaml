@@ -1,0 +1,10 @@
+# Local choices stay available without an account, API key or network.
+youtube:
+  es: [Celia Cruz, boleros, noticias Univision, Miami Heat highlights, recetas cubanas, Buena Vista Social Club, Benny Moré, Gloria Estefan, música salsa, paisajes de Cuba, béisbol cubano, jazz latino, música relajante, documentales de naturaleza, el clima Miami]
+  en: [Celia Cruz, classic boleros, Miami Heat highlights, Miami news, Cuban cooking, Buena Vista Social Club, Benny Moré, Gloria Estefan, salsa music, Cuba travel videos, baseball highlights, Latin jazz, relaxing music, nature documentaries, Miami weather]
+spotify:
+  es: [Celia Cruz, boleros clásicos, Buena Vista Social Club, Benny Moré, Gloria Estefan, salsa cubana, son cubano, Tito Puente, Omara Portuondo, Ibrahim Ferrer, jazz latino, música de los años 60, música instrumental, danzón cubano, música relajante]
+  en: [Celia Cruz, classic boleros, Buena Vista Social Club, Benny Moré, Gloria Estefan, Cuban salsa, Cuban son, Tito Puente, Omara Portuondo, Ibrahim Ferrer, Latin jazz, sixties music, instrumental music, Cuban danzón, relaxing music]
+google:
+  es: [el clima Miami, noticias Univision, Miami Heat resultados, recetas cubanas, Celia Cruz canciones, béisbol resultados, noticias de Cuba, parques de Miami, historia de La Habana, boleros clásicos, cómo cuidar orquídeas, arte cubano, museos en Miami, receta de flan cubano, música de Benny Moré]
+  en: [Miami weather, Miami news, Miami Heat scores, Cuban recipes, Celia Cruz songs, baseball scores, Cuba news, Miami parks, Havana history, classic boleros, orchid care tips, Cuban art, Miami museums, Cuban flan recipe, Benny Moré music]

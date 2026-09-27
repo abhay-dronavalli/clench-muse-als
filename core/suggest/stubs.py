@@ -8,11 +8,15 @@ Sentences / Options / Bundle (see gemini.py), with the prompts from prompts.py, 
 from __future__ import annotations
 
 from core.suggest.provider import Bundle, LevelContext, Options, Sentences, SuggestContext
+from core.suggest.provider import SearchContext, SearchSuggestions
 
 
 class _NotBuilt:
     name = "not built"
     model = ""
+
+    async def search_suggestions(self, ctx: SearchContext) -> SearchSuggestions:
+        raise NotImplementedError(f"{self.name} provider is not built yet")
 
     async def compose(self, ctx: SuggestContext) -> Sentences:
         raise NotImplementedError(f"{self.name} provider is not built yet")

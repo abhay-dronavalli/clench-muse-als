@@ -4,6 +4,12 @@ import pytest
 
 from core.computer.search import SearchPanel, clean_query
 from tests.test_computer import FakeBrowser, make, settle
+from core.computer.search import fallback_queries, unique_queries
+from core.computer.policy import Policy
+from core.suggest.fake import FakeProvider
+from core.suggest.provider import SearchSuggestions
+from core.suggest.service import Suggester
+from core.suggest.errors import ProviderError
 
 
 def test_panel_order_and_three_page_loop():
@@ -82,4 +88,93 @@ def test_help_interrupts_pending_search_and_preserves_panel():
         assert computer.scan.running
         await computer.aclose()
         session.stop()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("site", ["youtube", "spotify", "google"])
+@pytest.mark.parametrize("lang", ["es", "en"])
+def test_fallbacks_are_safe_and_fill_three_pages(site, lang):
+    values = fallback_queries(site, lang)
+    assert len(unique_queries(values, Policy.load("http://localhost/computer/start"))) == len(values) >= 15
+
+
+def test_provider_validation_and_cache_exclusions_privacy():
+    assert SearchSuggestions(queries=["https://youtube.com", "Celia Cruz", "celia cruz", "", 42]).queries == ["Celia Cruz"]
+    async def run():
+        provider = FakeProvider()
+        service = Suggester(provider, patient_name="Luis", local_hour=lambda: 19)
+        first = service.search_suggestions("youtube", "es", recent_searches=("boleros",))
+        assert service.search_suggestions("youtube", "es", recent_searches=("boleros",)) is first
+        await settle()
+        assert first.done and len(first.result) == 5
+        cached = service.search_suggestions("youtube", "es", recent_searches=("boleros",))
+        assert cached.done and len(provider.calls) == 1
+        other = service.search_suggestions("youtube", "es", shown=tuple(first.result))
+        await settle()
+        assert not set(other.result) & set(first.result)
+        ctx = provider.calls[0][1]
+        assert set(vars(ctx)) == {"site", "lang", "hour", "patient_name", "recent_searches", "top_phrases", "shown"}
+        assert ctx.recent_searches == ("boleros",) and ctx.hour == 19
+        service.use_history = False
+        service.search_suggestions("youtube", "es", recent_searches=("private query",))
+        await settle()
+        assert provider.calls[-1][1].recent_searches == ()
+        await service.aclose()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", ["timeout", "key", "offline"])
+def test_search_failure_resolves_to_fallback_and_is_cached(failure):
+    class Broken(FakeProvider):
+        async def search_suggestions(self, ctx):
+            self.calls.append(("search_suggestions", ctx))
+            if failure == "timeout":
+                await asyncio.sleep(60)
+            raise ProviderError("unavailable", pause_s=300 if failure == "key" else None)
+    async def run():
+        provider = Broken()
+        service = Suggester(provider, patient_name="Luis", timeout=.01)
+        pending = service.search_suggestions("google", "es")
+        await asyncio.sleep(.03)
+        assert pending.done and pending.result is None
+        assert service.search_suggestions("google", "es").done
+        assert len(provider.calls) == 1
+        await service.aclose()
+    asyncio.run(run())
+
+
+def test_late_ai_does_not_replace_visible_choices():
+    async def run():
+        session, _, _ = await open_panel()
+        computer = session.computer
+        provider = FakeProvider()
+        service = Suggester(provider, patient_name="Luis")
+        computer.suggester = service
+        before = computer.items()
+        computer._prefetch()
+        await settle()
+        assert computer.items() == before
+        await computer.aclose()
+        await service.aclose()
+        session.stop()
+    asyncio.run(run())
+
+
+def test_gemini_search_uses_structured_output_without_tools():
+    import json
+    from types import SimpleNamespace
+    from core.suggest.gemini import GeminiProvider
+    from core.suggest.provider import SearchContext
+    calls = []
+    async def generate(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(text='{"queries":["Celia Cruz","https://evil.test"]}')
+    async def run():
+        client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate)))
+        provider = GeminiProvider("test", client=client)
+        result = await provider.search_suggestions(SearchContext("youtube", "es", 20, "Luis"))
+        assert result.queries == ["Celia Cruz"]
+        assert json.loads(calls[0]["contents"])["site"] == "youtube"
+        assert calls[0]["config"].automatic_function_calling.disable is True
+        assert calls[0]["config"].response_schema.model_fields.keys() == {"queries"}
     asyncio.run(run())

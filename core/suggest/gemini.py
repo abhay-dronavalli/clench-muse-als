@@ -28,6 +28,7 @@ from core.suggest.provider import (
     Sentences,
     SentencesSchema,
     SuggestContext,
+    SearchContext, SearchSuggestions, SearchSuggestionsSchema,
 )
 
 log = logging.getLogger("clench.suggest")
@@ -75,6 +76,9 @@ class GeminiProvider:
 
     async def compose(self, ctx: SuggestContext) -> Sentences:
         return await self._generate(prompts.compose(ctx), SentencesSchema, Sentences)
+
+    async def search_suggestions(self, ctx: SearchContext) -> SearchSuggestions:
+        return await self._generate(prompts.search_suggestions(ctx), SearchSuggestionsSchema, SearchSuggestions)
 
     async def more_options(self, ctx: SuggestContext) -> Options:
         return await self._generate(prompts.more_options(ctx), OptionsSchema, Options)

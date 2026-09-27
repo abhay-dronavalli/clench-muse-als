@@ -339,7 +339,8 @@ class Session:
         self._lookback_s = profile.clench_lookback_ms / 1000
         self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
-        self.computer = (computer_factory or Computer)(scheduler, self._computer_closed, self._echo, self.handle)
+        self.computer = (computer_factory or Computer)(scheduler, self._computer_closed, self._echo, self.handle,
+                                                      suggester=self.suggester)
 
     # --- public ---------------------------------------------------------------
 

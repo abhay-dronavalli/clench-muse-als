@@ -7,7 +7,7 @@ import logging
 from core.computer.browser import BrowserWorker
 from core.computer.model import MENU, Selection, Target
 from core.computer.policy import Policy
-from core.computer.search import DEFAULT_QUERIES, SearchPanel, unique_queries
+from core.computer.search import SearchPanel, unique_queries, fallback_queries, site_for
 from core.contracts import Clench, DoubleBlink, LongClench
 from core.pointer.scan import ScanPointer
 
@@ -16,7 +16,7 @@ log = logging.getLogger("clench.computer")
 
 class Computer:
     def __init__(self, scheduler, on_exit, echo, on_input, *, start_url="http://127.0.0.1:8000/computer/start",
-                 browser_factory=BrowserWorker):
+                 browser_factory=BrowserWorker, suggester=None):
         self.policy = Policy.load(start_url)
         self.on_exit, self.echo, self.on_input = on_exit, echo, on_input
         self.browser_factory = browser_factory
@@ -34,7 +34,7 @@ class Computer:
         self.close_task = None
         self.search = None
         self.lang = "es"
-        self.search_pool = DEFAULT_QUERIES
+        self.suggester = suggester
         self.submit_task = None
 
     def _spawn(self, coro):
@@ -109,6 +109,7 @@ class Computer:
                 previous_level = self.selection.level
                 if navigation:
                     self.search = None
+                    self._prefetch()
                 if not self.search:
                     self.selection.update(targets, max(1, float(event["height"])), navigation=navigation)
                 self._refresh(restart=navigation or previous_level != self.selection.level)
@@ -179,7 +180,8 @@ class Computer:
                     self.selection.back_to_bands()
                 elif result and result.get("text") and (document, url) == (self.document, self.url):
                     self.selection.level, self.selection.index = "text", 0
-                    self.search = SearchPanel(unique_queries(self.search_pool, self.policy), self.lang)
+                    self.search = SearchPanel(self._queries(), self.lang)
+                    self._prefetch(self.search.shown)
         except Exception:
             log.exception("computer action failed")
             self.message = "Page did not respond. Use Browser menu to try again or exit."
@@ -208,7 +210,10 @@ class Computer:
         if key == "cancel":
             self.back()
         elif key == "other":
-            self.search.more(unique_queries(self.search_pool, self.policy))
+            new_page = self.search.page == len(self.search.pages) - 1 and len(self.search.pages) < 3
+            self.search.more(self._queries(self.search.shown) if new_page else [])
+            if len(self.search.pages) < 3:
+                self._prefetch(self.search.shown)
             self.selection.index = 0
             self._refresh(restart=True)
         elif key == "keyboard":
@@ -242,6 +247,16 @@ class Computer:
             if generation == self.generation and self.active:
                 self.busy = False
                 self._refresh(restart=True)
+
+    def _prefetch(self, shown=()):
+        if self.suggester:
+            return self.suggester.search_suggestions(site_for(self.url or ""), self.lang, shown=shown)
+        return None
+
+    def _queries(self, shown=()):
+        pending = self._prefetch(shown)
+        values = pending.result if pending and pending.done and pending.result else []
+        return unique_queries(values + fallback_queries(site_for(self.url or ""), self.lang), self.policy)
 
     def set_help(self, seconds):
         self.help = seconds

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from core.contracts import Lang
 from core.suggest.provider import Bundle, LevelContext, Options, Sentences, SuggestContext, drop_known
+from core.suggest.provider import SearchContext, SearchSuggestions
+from core.computer.search import fallback_queries
 
 # {topic} is the last label of the path, lower case.
 LEAF: dict[Lang, list[str]] = {
@@ -88,7 +90,11 @@ class FakeProvider:
 
     def __init__(self) -> None:
         # What was asked, for tests: ("compose" | "more_options", SuggestContext) or ("level_bundle", LevelContext).
-        self.calls: list[tuple[str, SuggestContext | LevelContext]] = []
+        self.calls: list[tuple[str, SuggestContext | LevelContext | SearchContext]] = []
+
+    async def search_suggestions(self, ctx: SearchContext) -> SearchSuggestions:
+        self.calls.append(("search_suggestions", ctx))
+        return SearchSuggestions(queries=drop_known(fallback_queries(ctx.site, ctx.lang), ctx.shown))
 
     async def compose(self, ctx: SuggestContext) -> Sentences:
         self.calls.append(("compose", ctx))

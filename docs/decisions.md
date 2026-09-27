@@ -715,3 +715,16 @@ redesign now; the immediate request is to retain this feedback for work after Pa
   or computer mode exits; cancelling help resumes the panel. Suggestions are echoed through the
   existing session queue and respect speak-picks. No board contract changed.
 - Keyboard entry is exposed here as a reserved panel and completed in the keyboard chunk below.
+
+## Search suggestions and fallback (2026-09-27)
+
+- Added search_suggestions to the existing provider layer. It shares the 4-second timeout,
+  10-minute cache and provider pause behavior. Failed search requests are cached too, to avoid
+  retrying on every navigation. Gemini receives only site, language, local hour, first name,
+  up to five recent searches, top 20 phrases and up to 15 already-shown queries for exclusion.
+- Local bilingual lists contain three pages for YouTube, Spotify and Google. Navigation prefetches
+  the first page; opening a panel prefetches its next page. Pending or failed AI uses local choices
+  immediately. A late result never replaces choices already being scanned. Three pages loop.
+- Search text is normalized and limited to 40 characters. URL-like text, including domains, paths
+  and schemes, is rejected conservatively across provider output and final browser submission.
+  Part 1's configured action denylist also filters every displayed query.

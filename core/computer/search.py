@@ -3,12 +3,28 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlsplit
 
+import yaml
+
 MAX_QUERY = 40
-DEFAULT_QUERIES = ["Celia Cruz", "boleros", "noticias Univision", "Miami Heat highlights", "el clima Miami",
-                   "recetas cubanas", "Buena Vista Social Club", "Benny Moré", "Gloria Estefan", "música salsa",
-                   "paisajes de Cuba", "béisbol cubano", "jazz latino", "música relajante", "documentales de naturaleza"]
+
+@lru_cache(maxsize=1)
+def _defaults():
+    path = Path(__file__).resolve().parents[2] / "data" / "computer_suggestions.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for site in ("youtube", "spotify", "google"):
+        for lang in ("en", "es"):
+            values = data[site][lang]
+            if not isinstance(values, list) or len(values) < 15 or any(clean_query(q) != q for q in values):
+                raise ValueError(f"Invalid computer search defaults: {site}/{lang}")
+    return data
+
+
+def fallback_queries(site: str, lang: str) -> list[str]:
+    return list(_defaults()[site][lang])
 
 
 def clean_query(value: object) -> str | None:
