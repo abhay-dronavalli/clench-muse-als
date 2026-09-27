@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CarLog, CarResult, CarState, Message, RidePhase } from '../contracts'
 import { useSocket } from '../lib/useSocket'
 
@@ -21,6 +21,18 @@ export default function CarSimPage() {
   const [last, setLast] = useState<CarResult | null>(null)
   const [custom, setCustom] = useState('')
   const [address, setAddress] = useState('')
+  // The car's speakers: a short loop plays while the car reports music on (browsers need one click
+  // on this page before any sound).
+  const [speakers, setSpeakers] = useState(false)
+  const audio = useRef<HTMLAudioElement | null>(null)
+  const musicOn = speakers && state?.music_playing === true && state.phase !== 'ARRIVED'
+  useEffect(() => {
+    const a = (audio.current ??= Object.assign(new Audio('/carsim/music-loop.wav'), { loop: true }))
+    a.volume = Math.min(1, Math.max(0, (state?.volume ?? 4) / 10))
+    if (musicOn) void a.play().catch(() => setSpeakers(false))
+    else a.pause()
+  }, [musicOn, state?.volume])
+  useEffect(() => () => audio.current?.pause(), [])
   const { status, send } = useSocket('/ws/car-sim', {
     onOpen: (s) => s({ type: 'READY' }),
     onMessage: (msg: Message) => {
@@ -53,6 +65,16 @@ export default function CarSimPage() {
           />
           <Stat label="Arrival" value={state ? `${state.eta_min} min` : 'unknown'} />
           <Stat label="Battery" value={state ? `${state.battery_pct}%` : 'unknown'} />
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
+          <h2 className="font-semibold">Ride</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => send({ type: 'CAR_SIM', command: 'start_ride' })}>Start ride (tablet shows Car mode)</Button>
+            <Button onClick={() => send({ type: 'CAR_SIM', command: 'end_ride' })}>End ride (tablet back to Home)</Button>
+            <Button onClick={() => setSpeakers((v) => !v)}>{speakers ? 'Car speakers: on' : 'Enable car speakers'}</Button>
+            <span className="text-sm text-zinc-400">{musicOn ? 'Music playing' : speakers ? 'Music off' : 'Speakers off (click to allow sound)'}</span>
+          </div>
         </section>
 
         <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
