@@ -780,3 +780,48 @@ choices below are Taher's.
   `data/geo.yaml` for the demo; they are not map data.
 - The proto was in the working tree at `proto/clench/rider.proto`; the branch has it at
   `proto/clench/rider/v1/rider.proto`, matching its package and its own header comment.
+
+## 23. One ride flow: Car mode on the board, the car link, and /car-sim (branch integration/waymo)
+
+- Integration of geo/public-data (#22) and android-ui-enhancement (#21). tablet-kushi-ui (the native
+  "Clench Mobility" app) is not merged: it has its own input path (a debug bar; Muse and gaze were
+  to-dos), its own confirm and emergency screens and its own fake car. Its content is reused in the
+  board instead: the trip confirm, the destination and drop-off wording, "help on the way".
+- Car mode is the teammate's trip screen (#21), regrouped into three levels: **Trip** (the route tiles
+  from the committed open-data result, "Fastest and smoothest, 16 min" plus the alternative, and "Drop
+  off at [point]?"; the level's prompt shows each route's trade-off, that times are estimates without
+  traffic, and the drop-off's reason), **Comfort** (Cooler, Warmer, Music off / on, Volume down, Windows
+  > Up / Down > which), **Trip changes** (Pull over, Slow down, Contact Support). "Volume up" and the
+  old Louder / Softer did not fit the six-tile limit next to Back; Music on comes back as the Music tile.
+- Safety follows rider.proto: LOW (temperature, music, volume, windows, slow down) is sent at once
+  with no confirm screen, as #21 decided; HIGH (pull over, contact Support, drop-off, route change)
+  always opens the confirm screen, and only a confirmed HIGH request is ever sent. The mock car also
+  refuses an unconfirmed HIGH request, as a second guard.
+- **The car link** (`core/car/link.py`): `CarLink` takes ActionRequest / DropoffRequest / RideProfile
+  and SupportAnswer, and calls back with ActionResult (CAR_RESULT), RideState (CAR_STATE) and
+  SupportQuestion, with proto field names. A gRPC server can sit in front of it later. The only link
+  today is `MockCar` (`core/car/mock.py`), in process, with a simulated 120 ms round trip. It answers
+  every request with ACCEPTED, COMPLETED, DELAYED or REJECTED and a short sentence: pull over on the
+  highway is DELAYED to the next safe spot (then COMPLETED), a window down at highway speed is REJECTED
+  ("Windows stay up at highway speed"), limits and unknown actions are REJECTED. Demo times are short
+  (pull over completes in 6 s, 12 s from the highway).
+- What is said: every answer to a confirmed request, and a LOW control's answer only when it is
+  DELAYED or REJECTED (the rider must hear why nothing happened). Every answer is also a toast.
+- Route choice: RideProfile can only ask for fastest or smoothest and has no request_id, so a route
+  tile sends an ActionRequest `route:<id>` from the car's catalog (the car lists the routes it offers)
+  and, when the tile has one, the RideProfile behind it. Proto gap: a request_id on RideProfile, or a
+  route id, would make this cleaner.
+- Support questions (CAR_SIM `ask` from /car-sim, proto SupportQuestion): the question takes the board
+  (`support_question` screen, the question in the new SCREEN `prompt`, `answer` tiles) as soon as the
+  rider is scanning; it waits during a confirm, a sentence, or the help countdown. An answer goes
+  through the confirm screen (hard rule 1). No answer before the timeout sends `no_response` with
+  whether a board was connected. Help (long clench) works on it like anywhere else.
+- `/car-sim` (web) on `/ws/car-sim`: the car's state, the car link's log with round-trip times (CAR_LOG),
+  Support questions, and the situation (highway, phase).
+- The board's route map draws our OSRM route to the MDC Kendall drop-off (from /api/geo/trip), on the
+  Google map when a key is set or the drawn map otherwise. No Google Directions on the car screen
+  (Google Maps terms 3.2.3(f), use with in-vehicle systems); VITE_TRIP_ORIGIN / VITE_TRIP_DESTINATION
+  are gone.
+- Contracts (all three files): ScreenName `support_question`, TileKind `answer`, ActionName `dropoff` /
+  `route` / `support_answer`, SCREEN `prompt`, CAR_STATE `phase` / `music_playing` / `on_highway`, and new
+  CAR_RESULT, CAR_LOG, CAR_SIM. All additive: older clients keep working.
