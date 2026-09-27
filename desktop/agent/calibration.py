@@ -19,6 +19,18 @@ from desktop.eyedid.convert import Display
 DIR = Path(__file__).resolve().parents[2] / "data" / "desktop"
 PERSON = re.compile(r"[A-Za-z0-9_-]{1,32}")
 SETTLE_S = 1.0
+# The Windows SDK puts the calibration dots ON the corners of the area it is given (checked: the full
+# screen gave (0, 0) and (1920, 0), dots mostly off the screen). Inset the area so a dot and its 12 mm
+# settle ring always show, while the corners stay near the edges the person will look at.
+INSET_MM = 14.0
+
+
+def area(display: Display) -> tuple[float, float, float, float]:
+    """The calibration area in screen pixels: the screen, INSET_MM in from every edge."""
+    dx = INSET_MM * display.width_px / display.width_mm
+    dy = INSET_MM * display.height_px / display.height_mm
+    return (display.left + dx, display.top + dy,
+            display.left + display.width_px - dx, display.top + display.height_px - dy)
 
 
 def path_for(person: str, directory: Path = DIR) -> Path:

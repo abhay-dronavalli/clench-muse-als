@@ -59,6 +59,15 @@ def test_cancel_stops_the_sdk_and_a_dead_worker_fails_at_once():
     assert not dead.flow.start((0, 0, 1920, 1080)) and dead.ended == ["failed"]
 
 
+def test_the_calibration_area_keeps_every_dot_on_the_screen():
+    left, top, right, bottom = calibration.area(LAPTOP)
+    # 14 mm in from each edge: about 78 px on this 1920 x 1080, 344 x 193 mm laptop
+    assert (left, top) == pytest.approx((78.1, 78.3), abs=0.1)
+    assert (1920 - right, 1080 - bottom) == pytest.approx((left, top))
+    ring = 12 * LAPTOP.px_per_mm  # the biggest thing drawn around a dot (the settle ring)
+    assert left > ring and top > ring
+
+
 def test_calibrations_are_kept_per_person_and_screen(tmp_path):
     calibration.save("taher", LAPTOP, [0.1, 0.2], tmp_path)
     assert calibration.load("taher", LAPTOP, tmp_path) == [0.1, 0.2]

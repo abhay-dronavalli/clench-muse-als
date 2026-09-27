@@ -675,3 +675,7 @@ Muse gestures to control all of Windows, not only the board tab.
     to the board, so a Core restart does not silently leave the gestures on a hidden board.
   - Calibration: five dots, 1 s settle each (as on the tablet), saved per person with the screen's
     size; a calibration for another screen is not loaded. The check dot is left for chunk 5.
+- Calibration area (fix, 2026-09-27): the Windows SDK puts the five dots on the centre and the exact
+  corners of the area it is given, so calibrating over the whole screen drew four dots mostly off
+  the screen. The agent now calibrates over the screen inset 14 mm on every side (78 px on the demo
+  laptop), which keeps each dot and its 12 mm settle ring visible and the corners near the edges.

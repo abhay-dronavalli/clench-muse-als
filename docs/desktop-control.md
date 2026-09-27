@@ -80,6 +80,9 @@ same, tested against its formula.
 | DOUBLE_BLINK | In the zoom or the palette, or with a right / double click armed: straight back (harmless). Otherwise "Go back?" for 3 s: a CLENCH sends **Alt+Left**; doing nothing does nothing, and clenches are then ignored for 1 s (decisions 17). |
 | LONG_CLENCH | Help countdown in the Core, drawn full-screen by the overlay and spoken by the board tab. |
 
+The calibration dots sit at the centre and 14 mm in from each corner (the SDK puts them on the
+corners of the area it is given, so the agent insets that area).
+
 The **Clench tab** sits on the right edge. Looking at it and clenching opens the **palette**: six
 big tiles in the middle of the screen (Right click, Double click, Clench board, Calibrate eyes,
 Pause / Resume clicks, Close), the nearest tile highlighted as on the board. Right click and Double

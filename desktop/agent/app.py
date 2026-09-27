@@ -236,7 +236,7 @@ class Agent:
             self.ctl.calibration_ended()
             self.ctl.toast = ("Calibration needs the eye tracker running", time.time() + 4)
             return
-        self.calib.start((0, 0, self.display.width_px, self.display.height_px))
+        self.calib.start(calibration.area(self.display))
 
     def _calibration_ended(self, how: str) -> None:
         self.ctl.calibration_ended()
