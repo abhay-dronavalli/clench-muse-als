@@ -9,6 +9,7 @@ import {
   type ShortcutDebug,
 } from '../contracts'
 import type { VoiceSource } from '../board/speech'
+import { eyedidWeb } from '../facetrack/eyedidWeb'
 import { gazeConnected, gazeTuning, showCursor } from '../facetrack/stores'
 import { MAX_STICKY_MARGIN } from '../facetrack/tiles'
 import { tracker } from '../facetrack/tracker'
@@ -106,12 +107,25 @@ interface Props {
   cameraWanted: boolean
   /** open the head-range calibration overlay on the board */
   onCalibrate: () => void
-  /** open the onboarding again (eyes, headband, a test clench) */
-  onSetup: () => void
+  /** Managed Chromium supplies its trusted keyboard and shared transport. */
+  controlledOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  keyboard?: boolean
+  /** open the Eyedid web eye calibration on the board (absent in managed Chromium) */
+  onCalibrateEyes?: () => void
+  /** open the onboarding again (eyes, headband, a test clench); absent in managed Chromium */
+  onSetup?: () => void
 }
 
-export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onSetup }: Props) {
-  const [open, setOpen] = useState(false)
+export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalibrate, onCalibrateEyes, onSetup, controlledOpen, onOpenChange, keyboard = true }: Props) {
+  useSyncExternalStore(eyedidWeb.subscribe, eyedidWeb.snapshot)
+  const [localOpen, setLocalOpen] = useState(false)
+  const open = controlledOpen ?? localOpen
+  const setOpen = (next: boolean | ((old: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next
+    setLocalOpen(value)
+    onOpenChange?.(value)
+  }
   // null until the Core's first SETTINGS arrives: nothing is assumed.
   const [pointingMode, setPointingMode] = useState<PointingMode | null>(null)
   const [scanMs, setScanMs] = useState<number | null>(null)
@@ -175,6 +189,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
 
   // Keyboard: Space / B / backtick.
   useEffect(() => {
+    if (!keyboard) return
     let longTimer: number | undefined
     let spaceHeld = false
     let longSent = false
@@ -199,7 +214,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       } else if (e.code === 'KeyB') {
         if (!e.repeat) doubleBlink()
       } else if (e.code === 'Backquote') {
-        if (!e.repeat) setOpen((v) => !v)
+        if (!e.repeat) setLocalOpen((v) => !v)
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
@@ -219,7 +234,7 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
       window.removeEventListener('blur', onBlur)
       window.clearTimeout(longTimer)
     }
-  }, [clench, doubleBlink, longClench, longClenchMs])
+  }, [clench, doubleBlink, longClench, longClenchMs, keyboard])
 
   // Every change keeps the other values as the Core last reported them. The Core answers with
   // SETTINGS, which is what the controls then show.
@@ -358,15 +373,17 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
           {trip ? 'End trip' : 'Start trip'}
         </button>
       </div>
-      <button
-        type="button"
-        className={`${btn} mb-3 w-full text-xs`}
-        onMouseDown={noFocus}
-        onClick={onSetup}
-        title="Onboarding: eye calibration, headband connection, a test clench"
-      >
-        Run setup
-      </button>
+      {onSetup && (
+        <button
+          type="button"
+          className={`${btn} mb-3 w-full text-xs`}
+          onMouseDown={noFocus}
+          onClick={onSetup}
+          title="Onboarding: eye calibration, headband connection, a test clench"
+        >
+          Run setup
+        </button>
+      )}
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs text-zinc-400">Pointing</span>
@@ -412,6 +429,31 @@ export default function DevPanel({ voiceSource, headRange, cameraWanted, onCalib
         </button>
         <span className="text-xs text-zinc-400">{headRange ? 'calibrated' : 'defaults'}</span>
       </div>
+
+      {(pointingMode === 'gaze' || pointingMode === 'auto') && (
+        <div className="mb-3" title="docs/eye-tracking.md, Eyedid web (laptop)">
+          <p className="mb-1 text-xs text-zinc-400">
+            Eyedid web:{' '}
+            <span className={eyedidWeb.state === 'on' ? 'text-emerald-300' : eyedidWeb.state === 'error' ? 'text-rose-300' : 'text-zinc-200'}>
+              {eyedidWeb.state}
+              {eyedidWeb.detail && ` (${eyedidWeb.detail})`}
+            </span>
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className={`${btn} text-xs disabled:opacity-40`}
+              onMouseDown={noFocus}
+              onClick={onCalibrateEyes}
+              disabled={!onCalibrateEyes || eyedidWeb.state !== 'on'}
+              title={eyedidWeb.state === 'on' ? 'Five dots: look at each until its ring fills' : 'Needs Eyedid web running (Auto or Gaze mode, a key)'}
+            >
+              Calibrate eyes
+            </button>
+            <span className="text-xs text-zinc-400">{eyedidWeb.calibrated ? 'calibrated' : 'not calibrated'}</span>
+          </div>
+        </div>
+      )}
 
       <label className="mb-3 block" title="How far the head's point must be inside a new tile before the highlight moves">
         <span className="flex justify-between text-xs text-zinc-400">

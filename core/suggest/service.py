@@ -40,6 +40,7 @@ from core.suggest.provider import (
     LLMProvider,
     Option,
     SuggestContext,
+    SearchContext,
     drop_known,
 )
 
@@ -141,6 +142,44 @@ class Suggester:
         self.use_history = True  # False in Day 1 mode: no top phrases or recent messages for the AI
 
     # --- public ---------------------------------------------------------------
+
+    def search_suggestions(self, site: str, lang: Lang, *, shown=(), recent_searches=()) -> Pending[list[str]]:
+        if site not in ("youtube", "spotify", "google") or not self.available:
+            return Pending.ready(None)
+        top, _ = self._summary(lang)
+        ctx = SearchContext(site, lang, self._local_hour(), self._patient_name,
+                            tuple(recent_searches[:5]) if self.use_history else (), top, tuple(shown[:15]))
+        key = ("search", ctx, self.use_history)
+        hit, value = self._cached(key)
+        if hit:
+            return Pending.ready(value)
+        if key in self._inflight:
+            return self._inflight[key]
+        pending = self._inflight[key] = Pending()
+        try:
+            self._spawn(self._run_search(key, ctx, pending))
+        except RuntimeError:
+            self._inflight.pop(key, None)
+            pending.resolve(None)
+        return pending
+
+    async def _run_search(self, key, ctx, pending):
+        value = None
+        try:
+            self._count_call()
+            response = await asyncio.wait_for(self.provider.search_suggestions(ctx), self._timeout)
+            value = drop_known(response.queries, ctx.shown)
+        except ProviderError as error:
+            if error.pause_s:
+                self._pause(error.pause_s)
+            log.warning("AI search failed: using local search choices")
+        except Exception:
+            log.warning("AI search unavailable or timed out: using local search choices")
+        finally:
+            # Cache failures too: repeated DOM navigations must not retry a failing service.
+            self._cache[key] = (self._clock() + self._ttl, value)
+            self._inflight.pop(key, None)
+            pending.resolve(value)
 
     @property
     def available(self) -> bool:

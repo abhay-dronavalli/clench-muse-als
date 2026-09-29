@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS audio_cache (
     file_path  TEXT NOT NULL,              -- data/audio_cache/<hash>.mp3
     created_at REAL NOT NULL
 );
+
+-- Searches are not spoken messages and must not become communication shortcuts.
+CREATE TABLE IF NOT EXISTS computer_searches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES profile(id),
+    site TEXT NOT NULL,
+    query TEXT NOT NULL,
+    lang TEXT NOT NULL,
+    hour INTEGER NOT NULL CHECK(hour BETWEEN 0 AND 23),
+    t REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS computer_searches_by_site ON computer_searches (profile_id, site, lang, t);
 """
 
 
@@ -283,7 +295,32 @@ class Db:
         with self._conn:
             events = self._conn.execute("DELETE FROM events WHERE profile_id = ?", (PROFILE_ID,)).rowcount
             phrases = self._conn.execute("DELETE FROM phrases WHERE profile_id = ?", (PROFILE_ID,)).rowcount
+            self._conn.execute("DELETE FROM computer_searches WHERE profile_id = ?", (PROFILE_ID,))
         return events, phrases
+
+    def log_search(self, site: str, query: str, lang: Lang, *, hour: int | None = None, t: float | None = None) -> None:
+        from core.computer.search import clean_query
+        query = clean_query(query)
+        if query is None or site not in ("youtube", "spotify", "google") or lang not in ("en", "es"):
+            raise ValueError("invalid computer search")
+        when = self._clock() if t is None else t
+        hour = datetime.fromtimestamp(when).hour if hour is None else hour
+        if not 0 <= hour < 24:
+            raise ValueError("invalid search hour")
+        with self._conn:
+            self._conn.execute("INSERT INTO computer_searches (profile_id,site,query,lang,hour,t) VALUES (?,?,?,?,?,?)",
+                               (PROFILE_ID, site, query, lang, hour, when))
+
+    def recent_searches(self, site: str, lang: Lang, limit: int = 5) -> list[str]:
+        rows = self._conn.execute(
+            """SELECT query, MAX(t) AS latest FROM computer_searches WHERE profile_id=? AND site=? AND lang=?
+               GROUP BY query COLLATE NOCASE ORDER BY latest DESC LIMIT ?""", (PROFILE_ID, site, lang, limit)).fetchall()
+        return [row["query"] for row in rows]
+
+    def searches(self, site: str, lang: Lang, since: float = 0) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            """SELECT site,query,lang,hour,t FROM computer_searches WHERE profile_id=? AND site=? AND lang=? AND t>=?
+               ORDER BY t DESC, id DESC""", (PROFILE_ID, site, lang, since)).fetchall()
 
     # --- reading (tests, console history later) ------------------------------------
 

@@ -48,6 +48,7 @@ class MenuNode(BaseModel):
     more: list[MenuNode] | None = None
     from_contacts: bool = False
     ai_now: bool = False  # the AI's guesses for right now go first (home "Suggested")
+    computer: bool = False  # opens the managed browser, no phrase or external action
     phrase_en: Text | None = None
     phrase_es: Text | None = None
     action: MenuAction | None = None
@@ -60,6 +61,10 @@ class MenuNode(BaseModel):
         if self.id in RESERVED_IDS:
             raise ValueError(f"node id '{self.id}' is reserved for the session's own tiles")
         leaf_fields = (self.phrase_en, self.phrase_es, self.action)
+        if self.computer:
+            if any(f is not None for f in leaf_fields) or self.children is not None or self.more or self.from_contacts or self.ai_now:
+                raise ValueError("computer entry cannot have children, phrases, or actions")
+            return self
         if self.children is not None or self.from_contacts:
             if any(f is not None for f in leaf_fields):
                 raise ValueError(f"node '{self.id}' has children, so it cannot have a phrase or action")
@@ -82,7 +87,7 @@ class MenuNode(BaseModel):
 
     @property
     def is_leaf(self) -> bool:
-        return self.children is None
+        return self.children is None and not self.computer
 
     def label(self, lang: Lang) -> str:
         return self.label_es if lang == "es" else self.label_en

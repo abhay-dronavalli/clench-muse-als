@@ -6,13 +6,24 @@ import { defineConfig } from 'vite'
 //   $env:CORE_URL = 'http://127.0.0.1:8100'; npm --prefix web run dev -- --port 5273
 const core = process.env.CORE_URL ?? 'http://127.0.0.1:8000'
 
+// Cross-origin isolation. Eyedid web (the browser eye tracker, src/facetrack/eyedidWeb.ts) runs a
+// multithreaded WebAssembly engine, and browsers only allow threads (SharedArrayBuffer) on an isolated
+// page. Everything the board loads is same-origin (the proxied Core, /mediapipe), and the engine's CDN
+// sends Cross-Origin-Resource-Policy: cross-origin, so isolation breaks nothing here.
+const isolation = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   // One .env for the whole repository: the page gets only the VITE_-prefixed values (the Google Maps
-  // key and the trip's origin and destination), never the Core's secrets.
+  // key, the trip's origin and destination, VITE_EYEDID_WEB_KEY), never the Core's secrets.
   envDir: '..',
+  preview: { headers: isolation },
   server: {
+    headers: isolation,
     port: 5173,
     strictPort: true,
     proxy: {

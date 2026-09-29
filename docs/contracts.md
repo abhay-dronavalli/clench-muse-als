@@ -36,6 +36,7 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | `PUT /api/head-range` | save a HeadRange from the calibration overlay; answers with it. 422 when the sides are not around the center |
 | `GET /api/time` | `{"t": <epoch seconds>}`, the Core's clock. A sensor on another device (the tablet) stamps gestures on it, since the Core refuses any gesture more than a second off its own clock |
 | `GET /audio/<sha256>.mp3` | cached ElevenLabs audio named in PLAY_AUDIO |
+| `GET /computer/start` | local managed-browser launcher: YouTube, Spotify, Google, Exit |
 
 | Message | Sender | Receiver | Meaning |
 |---|---|---|---|
@@ -298,7 +299,7 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top) |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` \| `"computer"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top); `computer` = managed Chromium is open |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
 | `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
@@ -363,7 +364,32 @@ Picking is always a CLENCH on the highlighted tile. When the highlight follows t
 picks the tile that was highlighted about 250 ms before the CLENCH arrived (`clench_lookback_ms` in
 `data/profile.yaml`), because clenching the jaw can move the head slightly (PRD 3a "freeze on clench").
 
-### CONFIRM
+### Computer mode
+
+Computer mode uses SCREEN with `screen="computer"`, empty `tiles` and `path`, null
+`highlight` and `pointer`. The board remains connected and keeps its existing audio queue and
+dev input panel. READY returns this screen and COMPUTER_STATE while Chromium is open. The latter
+relays viewport rectangles so the board's existing head/eye tracker can point at browser choices.
+
+```json
+{"type":"SCREEN","screen":"computer","seq":20,"tiles":[],"highlight":null,"lang":"en","path":[],"countdown":null,"loading":false,"pointer":null,"prompt":null,"corner":null}
+```
+
+In computer mode CLENCH selects a band, target or browser-menu item. DOUBLE_BLINK goes from
+targets/menu to bands; at bands it does nothing. A text placeholder has one Cancel choice.
+LONG_CLENCH starts the same five-second help countdown, mirrored as a red banner in Chromium.
+After cancel or firing, the session resumes its browser selection. Closing Chromium during the
+countdown does not cancel help; the session returns Home when the countdown ends. RESET closes
+computer mode except during help. SETTINGS.scan_ms applies to the computer scan independently of
+the board's pointing mode. Echoes remain SPEAK/PLAY_AUDIO kind `echo` and respect speak_picks.
+
+The page bridge uses `page.add_init_script` and `page.expose_binding` for target snapshots;
+there is no page WebSocket. It cannot submit gestures. Foreground Space/B/hold input uses a
+Chromium isolated-world binding that accepts only trusted keyboard events and forwards the same
+CLENCH/DOUBLE_BLINK/LONG_CLENCH types to Session.handle. The headband and board dev panel still
+use `/ws/input` unchanged.
+
+### CONFIRM (communication board)
 
 The "Send this?" screen. Nothing is spoken or sent until the person clenches here; a
 DOUBLE_BLINK cancels (PRD D5).
@@ -702,3 +728,50 @@ at the configured duration and suppresses its short-clench release.
 
 B remains the keyboard/caregiver Back/Cancel stand-in while deliberate eye input
 is redesigned. No real blink triggers app navigation in this integration.
+
+## Computer pointing
+
+`COMPUTER_STATE` (Core -> board/console) carries `active`, independent monotonic `seq`, `tiles`
+(at most nine `{id,label,left,top,right,bottom}` rectangles normalized to Chromium's viewport),
+`highlight` (index or null), `paused`, and `pointer` (the existing active-pointer enum). It is
+sent for rendered browser layouts, selection/settings changes and exit, and replayed on READY.
+Its sequence changes when choices or geometry change. It does not change the board SCREEN seq.
+
+```json
+{"type":"COMPUTER_STATE","active":true,"seq":7,"tiles":[{"id":"menu","label":"Browser menu","left":0.75,"top":0.8,"right":0.98,"bottom":0.95}],"highlight":0,"paused":false,"pointer":"gaze"}
+```
+
+`COMPUTER_POINT` (board -> Core, `/ws/board` only) carries that `seq`, `tile` (0..8 or null),
+`source` (`webcam` or `gaze`), `found`, `status` (`tracking`, `no_tracker`, `lost`, `camera_error`,
+`starting`, `off`) and finite Unix-second `t`. The board sends a heartbeat at least every 250 ms
+while samples arrive; only locally filtered target indices and status leave it, never video.
+Stale sequences, invalid indices and points during help/busy/dev-panel states cannot select.
+One second without samples marks tracking lost; Auto then uses its existing 3-second fallback.
+The same clench/back/help events perform actions. The board's optional gaze dwell setting also
+applies to computer choices; help, busy states and the open Dev panel pause dwell.
+For a dwell pick, `pick: true` on COMPUTER_POINT keeps the action tied to that layout sequence;
+the core ignores stale picks and uses the existing clench handler for a valid gaze pick.
+
+```json
+{"type":"COMPUTER_POINT","seq":7,"tile":0,"source":"gaze","found":true,"status":"tracking","t":1790474400.25,"pick":false}
+```
+
+`COMPUTER_TELEMETRY` (board -> Core, `/ws/board` only) mirrors the cursor and local controls at
+10 Hz during computer mode. It carries normalized nullable `x`/`y`, `show_cursor`, `dwell`,
+`progress` (0..1), `camera` (on/off/starting/error), nullable numeric `yaw`/`pitch`,
+`eye_connected`, nullable saved `head_range` and nullable `voice_source`. No video is included.
+The core forwards it to the existing DevPanel component in Chromium's isolated world.
+
+```json
+{"type":"COMPUTER_TELEMETRY","x":0.3,"y":0.5,"show_cursor":true,"dwell":false,"progress":0,"camera":"off","yaw":null,"pitch":null,"eye_connected":true,"head_range":null,"voice_source":"Browser"}
+```
+
+`COMPUTER_CONTROL` (Core -> board, originating only in the trusted Chromium controls) requests
+the board's existing local control: `cursor`, `dwell`, `retry`, `calibrate`, `calibration_done`
+or `head_range`. `value` is the toggle value; `head_range` is required by the save action.
+Calibration pauses board pointing while the existing calibration component runs in Chromium;
+the board saves through its existing API and acknowledges through telemetry.
+
+```json
+{"type":"COMPUTER_CONTROL","action":"cursor","value":true,"head_range":null}
+```

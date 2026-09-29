@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --config vite.computer.config.ts",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview",
@@ -19,7 +19,8 @@
     "leaflet": "1.9.4",
     "lucide-react": "1.48.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "seeso": "0.2.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

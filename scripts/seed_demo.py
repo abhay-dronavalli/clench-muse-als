@@ -166,9 +166,27 @@ def preview(db: Db, menu: Menu, lang: Lang, at: datetime) -> tuple[list[str], st
     return session.suggested_preview()
 
 
+def write_searches(db: Db, langs: tuple[Lang, ...], now: datetime, path: Path = SEED_PATH) -> int:
+    """Seed a separate simulated search history; never emits messages or calls."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    count = 0
+    for pattern in data.get("computer_searches", []):
+        hour, days = pattern["hour"], pattern["days"]
+        if not 0 <= hour < 24 or not 1 <= days <= 7:
+            raise ValueError("invalid search seed hours or days")
+        for day in range(days):
+            when = (now - timedelta(days=day)).replace(hour=hour, minute=15, second=0, microsecond=0)
+            if when >= now:
+                continue
+            for lang in langs:
+                db.log_search(pattern["site"], pattern[f"query_{lang}"], lang, hour=hour, t=when.timestamp())
+                count += 1
+    return count
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Reset or load the simulated demo week in the local database.")
-    parser.add_argument("--reset", action="store_true", help="delete every event and phrase (Day 1)")
+    parser.add_argument("--reset", action="store_true", help="delete every event, phrase and search (Day 1)")
     parser.add_argument("--load", action="store_true", help="write 7 days of use ending now from the seed JSON")
     parser.add_argument("--yes", action="store_true", help="do not ask before --reset")
     parser.add_argument("--focus-hour", type=int, choices=range(24), metavar="H", help="hour (0-23) the María text is tied to (default: now)")
@@ -190,12 +208,12 @@ def main(argv: list[str] | None = None) -> int:
             n_events = len(db.events())
             n_phrases = len(db.phrases())
             if not args.yes:
-                answer = input(f"Delete {n_events} events and {n_phrases} phrases from {args.db}? [y/N] ")
+                answer = input(f"Delete {n_events} events, {n_phrases} phrases and all computer searches from {args.db}? [y/N] ")
                 if answer.strip().lower() not in ("y", "yes"):
                     print("Nothing deleted.")
                     return 1
             events, phrases = db.clear_history()
-            print(f"Reset: deleted {events} events and {phrases} phrases. The board is on Day 1 now.")
+            print(f"Reset: deleted {events} events, {phrases} phrases and all computer searches. The board is on Day 1 now.")
         if args.load:
             profile = load_profile(menu.contacts)
             db.sync_profile(profile.name, profile.lang, menu.contacts.values())
@@ -206,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
             rng = random.Random(args.random_seed)
             week = plan(patterns, days, focus, rng)
             counts = write_week(db, menu, langs, days, week, now, rng)
+            searches = write_searches(db, langs, now, args.seed_file)
+            print(f"Loaded {searches} simulated computer searches.")
             print(f"Loaded a simulated week for {profile.name} ({' and '.join(langs)}), {days} days ending now:")
             for p in week:
                 hours = ", ".join(f"{h:02d}:xx" for h in sorted(set(p.hours)))

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { ActivePointer, CarState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, Tile, TripLayout } from '../contracts'
+import type { ActivePointer, CarState, ComputerState, Confirm, HeadRange, Lang, Message, PointingMode, Screen, Settings, Tile, TripLayout } from '../contracts'
+import { useComputerPointing } from '../facetrack/useComputerPointing'
 import DevPanel from '../dev/DevPanel'
 import { InputLog } from '../sensor/InputLog'
 import { MusePanel } from '../sensor/MusePanel'
 import { CalibrationOverlay } from '../facetrack/CalibrationOverlay'
-import { loadHeadRange } from '../facetrack/headRange'
+import { EyeCalibrationOverlay } from '../facetrack/EyeCalibrationOverlay'
+import { EyeSetupOverlay } from '../facetrack/EyeSetupOverlay'
+import { loadHeadRange, saveHeadRange } from '../facetrack/headRange'
+import { tracker } from '../facetrack/tracker'
 import {
   CameraLight,
   CameraNotice,
@@ -15,18 +19,18 @@ import {
   PointerBadge,
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
+import { gazeOwnsCamera, subscribeGazeOwner } from '../facetrack/cameraOwner'
+import { eyedidWeb } from '../facetrack/eyedidWeb'
 import {
   nativeBridge,
   nativeCarAvailable,
-  nativeGazeActive,
   playNativeCarEffect,
   setNativeCarLayout,
   setNativeCarSpeed,
   reportPointingMode,
   showNativeCar,
-  subscribeNativeGaze,
 } from '../facetrack/native'
-import { gazeTuning } from '../facetrack/stores'
+import { gazeTuning, showCursor } from '../facetrack/stores'
 import { STICKY_MARGIN } from '../facetrack/tiles'
 import { boardPoints, headCamera, usePointing } from '../facetrack/usePointing'
 import { StatusDot } from '../lib/StatusDot'
@@ -48,6 +52,7 @@ type View =
   | { kind: 'confirm'; confirm: Confirm }
   | { kind: 'speaking'; text: string }
   | { kind: 'help'; countdown: number }
+  | { kind: 'computer' }
 
 /**
  * Patient board. It is "dumb" (PRD A3.3): it draws what the Core sends and reports back only
@@ -65,6 +70,8 @@ type View =
  */
 export default function BoardPage() {
   const [started, setStarted] = useState(false)
+  const [computer, setComputer] = useState<ComputerState | null>(null)
+  const computerShown = useRef<ComputerState | null>(null)
   const [onboarding, setOnboarding] = useState(false)
   const onboardingRef = useRef(false)
   const [tripPointer, setTripPointer] = useState<ActivePointer | null>(null)
@@ -82,6 +89,8 @@ export default function BoardPage() {
   const [voiceSource, setVoiceSource] = useState<VoiceSource | null>(null)
   const [range, setRange] = useState<HeadRange | null>(null) // null = not calibrated: defaults
   const [calibrating, setCalibrating] = useState(false)
+  const [computerCalibrating, setComputerCalibrating] = useState(false)
+  const [eyeCalibrating, setEyeCalibrating] = useState(false) // Eyedid web's five dots
   // The "Go back?" prompt after a double blink (BACK_PROMPT). `at` restarts the bar for a new prompt.
   const [backPrompt, setBackPrompt] = useState<{ kind: 'menu' | 'confirm'; ms: number; at: number } | null>(null)
   const { toasts, push } = useToasts()
@@ -106,10 +115,24 @@ export default function BoardPage() {
 
   const onMessage = (msg: Message, send: Send) => {
     switch (msg.type) {
+      case 'COMPUTER_STATE':
+        computerShown.current = msg
+        setComputer(msg)
+        if (!msg.active) setComputerCalibrating(false)
+        break
+      case 'COMPUTER_CONTROL':
+        if (msg.action === 'cursor') showCursor.set(!!msg.value)
+        if (msg.action === 'dwell') gazeTuning.set({ ...gazeTuning.get(), dwell: !!msg.value })
+        if (msg.action === 'retry') void tracker.start()
+        if (msg.action === 'calibrate') setComputerCalibrating(true)
+        if (msg.action === 'calibration_done') setComputerCalibrating(false)
+        if (msg.action === 'head_range' && msg.head_range) void saveHeadRange(msg.head_range).then(setRange).catch(console.error)
+        break
       case 'SCREEN':
         if (msg.screen === 'trip') setTripPointer(msg.pointer ?? null)
         setLang(msg.lang)
         if (msg.screen === 'help_countdown') setView({ kind: 'help', countdown: msg.countdown ?? 0 })
+        else if (msg.screen === 'computer') setView({ kind: 'computer' })
         else setView({ kind: 'menu', screen: msg })
         break
       case 'CONFIRM':
@@ -167,6 +190,8 @@ export default function BoardPage() {
         // The tablet shell first: in a camera mode it claims the camera before this render decides
         // whether the page opens it (native.ts). SETTINGS only arrive after "Click to start".
         reportPointingMode(msg.pointing_mode ?? 'off')
+        // Eyedid web on a laptop, the same way: a gaze mode claims the webcam before this render.
+        eyedidWeb.setMode(msg.pointing_mode ?? 'off')
         setMode(msg.pointing_mode)
         if (msg.tile_switch_margin !== undefined) setMargin(msg.tile_switch_margin)
         if (msg.trip != null) {
@@ -208,8 +233,10 @@ export default function BoardPage() {
     }
   }, [connected])
 
-  // Re-render when the tablet shell's tracker starts or stops: it decides who owns the camera.
-  useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
+  // Re-render when an eye tracker (tablet shell or Eyedid web) starts or stops: it owns the camera.
+  useSyncExternalStore(subscribeGazeOwner, gazeOwnsCamera)
+  // Leaving the board gives the webcam back.
+  useEffect(() => () => eyedidWeb.setMode('off'), [])
   const camera = started && headCamera(mode)
   const pointing = started && boardPoints(mode)
   const screen = connected && view.kind === 'menu' ? view.screen : null
@@ -244,7 +271,13 @@ export default function BoardPage() {
     if (onboardingRef.current || v.kind !== 'menu' || v.screen.seq !== seq || v.screen.loading) return false
     return input.send({ type: 'CLENCH', t: Date.now() / 1000, strength: 1.0 })
   }
-  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating || onboarding, margin, pick })
+  usePointing({ mode, started, connected, screen, send, range: range ?? DEFAULT_RANGE, paused: calibrating || eyeCalibrating || onboarding, margin, pick })
+  useComputerPointing({ state: computer, mode, connected, send, range: range ?? DEFAULT_RANGE,
+    savedRange: range, voiceSource, paused: calibrating || computerCalibrating || eyeCalibrating, margin, pick: (seq, tile) => {
+      const current = computerShown.current
+      if (!current?.active || current.seq !== seq || current.paused || shown.current.kind !== 'computer') return false
+      return send({ type: 'COMPUTER_POINT', seq, tile, source: 'gaze', found: true, status: 'tracking', t: Date.now()/1000, pick: true })
+    } })
 
   // Onboarding (eyes, headband, a test clench) opens right after "Click to start"; the Dev panel's
   // Run setup opens it again. The shell holds its own calibration prompt back meanwhile.
@@ -344,6 +377,17 @@ export default function BoardPage() {
       {connected && backPrompt && view.kind !== 'help' && (
         <BackPromptView key={backPrompt.at} kind={backPrompt.kind} ms={backPrompt.ms} lang={lang} onStay={tapCancel} />
       )}
+      {connected && view.kind === 'computer' && (
+        <main className="flex flex-1 flex-col items-center justify-center gap-6 px-12 text-center">
+          <h1 className="text-6xl font-semibold">{lang === 'es' ? 'Modo computadora' : 'Computer mode'}</h1>
+          <p className="max-w-3xl text-3xl text-zinc-300">
+            {lang === 'es' ? 'El navegador está abierto. Mantén la mandíbula apretada para pedir ayuda.' :
+              'The browser is open. Hold a clench to call for help.'}
+          </p>
+          <p className="text-2xl text-zinc-400">{lang === 'es' ? 'Menú del navegador → Salir para volver.' :
+            'Browser menu → Exit to return.'}</p>
+        </main>
+      )}
       <ToastStack toasts={toasts} />
       <MusePanel />
       <InputLog />
@@ -351,12 +395,15 @@ export default function BoardPage() {
       {calibrating && (
         <CalibrationOverlay lang={lang} onSaved={setRange} onClose={() => setCalibrating(false)} />
       )}
+      {started && !eyeCalibrating && <EyeSetupOverlay lang={lang} onCalibrate={() => setEyeCalibrating(true)} />}
+      {eyeCalibrating && <EyeCalibrationOverlay lang={lang} onClose={() => setEyeCalibrating(false)} />}
       <DevPanel
         voiceSource={voiceSource}
         headRange={range}
         cameraWanted={camera}
+        onCalibrate={() => setCalibrating(true)}
+        onCalibrateEyes={() => setEyeCalibrating(true)}
         onSetup={() => openSetup(true)}
-          onCalibrate={() => setCalibrating(true)}
       />
       </div>
     </div>

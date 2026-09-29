@@ -76,6 +76,7 @@ from typing import Any, Literal
 
 from core.actions import ActionContext, ActionRegistry, build_registry
 from core.clock import Scheduler, TimerHandle
+from core.computer.service import Computer
 from core.contracts import (
     ActionName,
     AudioDone,
@@ -91,6 +92,8 @@ from core.contracts import (
     WindowName,
     DoubleBlink,
     FaceOk,
+    ComputerPoint,
+    ComputerTelemetry,
     Lang,
     LongClench,
     Message,
@@ -176,6 +179,7 @@ def voice_lines(menu: Menu, profile: Profile) -> list[tuple[str, Lang]]:
 
 
 class SessionState(str, Enum):
+    COMPUTER = "COMPUTER"
     SCANNING = "SCANNING"
     LOADING = "LOADING"  # waiting (at most 4 s) for AI options after a pick; scanning paused
     CONFIRMING = "CONFIRMING"
@@ -320,6 +324,7 @@ class Session:
         learning: bool | None = None,
         ranker: Ranker | None = None,
         jev: JevRanker | None = None,
+        computer_factory: Callable[..., Computer] | None = None,
         car_link: CarLink | None = None,
         geo_trip: GeoTrip | None = None,
     ) -> None:
@@ -403,6 +408,9 @@ class Session:
         self._lookback_s = profile.clench_lookback_ms / 1000
         self.face_ok = False  # last FACE_OK from the board (handed to a new pointer on a mode switch)
         self.pointer = make_pointer(pointing_mode, scheduler, self._on_highlight, scan_ms, self._on_pointer_source)
+        self.computer = (computer_factory or Computer)(scheduler, self._computer_closed, self._echo, self.handle,
+                                                      suggester=self.suggester, history=db, ranker=self.ranker,
+                                                      emit=self._emit, lookback_ms=profile.clench_lookback_ms)
 
     # --- public ---------------------------------------------------------------
 
@@ -450,6 +458,8 @@ class Session:
 
     def current_view(self) -> Message | None:
         """What a newly connected board should show (reply to READY)."""
+        if self.state is SessionState.COMPUTER:
+            return self._computer_screen()
         if self.state in (SessionState.SCANNING, SessionState.LOADING, SessionState.ACTING):
             return self._screen()
         if self.state is SessionState.CONFIRMING:
@@ -490,7 +500,8 @@ class Session:
                 self._on_double_blink()
             case LongClench():
                 if self.state in (
-                    SessionState.SCANNING, SessionState.LOADING, SessionState.CONFIRMING, SessionState.ACTING
+                    SessionState.SCANNING, SessionState.LOADING, SessionState.CONFIRMING, SessionState.ACTING,
+                    SessionState.COMPUTER,
                 ):
                     self._start_help()
                 else:
@@ -509,6 +520,10 @@ class Session:
                     log.debug("POINT for screen %d ignored: the board shows screen %d now", msg.seq, self._seq)
                 elif self.state is SessionState.SCANNING:
                     self.pointer.on_point(msg)
+            case ComputerPoint():
+                self.computer.on_point(msg)
+            case ComputerTelemetry():
+                self.computer.on_telemetry(msg)
             case FaceOk():
                 if msg.ok != self.face_ok:
                     log.info("webcam %s", "sees a face" if msg.ok else "lost the face")
@@ -580,7 +595,9 @@ class Session:
         if now < self._late_until:
             log.info("CLENCH ignored: the go-back prompt just closed")
             return
-        if self.state is SessionState.SCANNING:
+        if self.state is SessionState.COMPUTER:
+            self.computer.pick()
+        elif self.state is SessionState.SCANNING:
             self._effort.select()
             self._pick(index)
         elif self.state is SessionState.CONFIRMING:
@@ -592,7 +609,9 @@ class Session:
         if self._back is not None and self.state is not SessionState.HELP_COUNTDOWN:
             log.info("DOUBLE_BLINK ignored: the go-back prompt is already open")
             return
-        if self.state is SessionState.SCANNING:
+        if self.state is SessionState.COMPUTER:
+            self.computer.back()
+        elif self.state is SessionState.SCANNING:
             if self._depth() > 1:
                 self._open_back("menu")
             else:
@@ -706,6 +725,13 @@ class Session:
             self._confirm(item)  # no echo: the confirm step speaks the whole sentence
             return
         self._echo(item.label(self.lang))  # before the next view shows
+        if item.node is not None and item.node.computer:
+            self.state = SessionState.COMPUTER
+            self.pointer.stop()
+            self._seq += 1
+            self._emit(self._computer_screen())
+            self.computer.start(self.settings())
+            return
         if item.kind == "branch":
             assert item.node is not None
             if item.node.ai_now:
@@ -1273,6 +1299,8 @@ class Session:
             return
         log.info("RESET: back to home (was %s)", self.state.value)
         self._close_back()
+        if self.computer.active:
+            self.computer.exit()
         self._cancel_wait()
         self._cancel_speak_timer()
         self._speaking_id = None
@@ -1289,6 +1317,24 @@ class Session:
         self._trip_path = [self._trip_home()]  # in trip mode: Plan a trip, or the ride controls once under way
         self._effort.reset()  # metrics count from home
         self._enter_frame(first_tile=first_tile)
+
+    def _computer_screen(self) -> Screen:
+        return Screen(screen="computer", seq=self._seq, tiles=[], highlight=None, lang=self.lang, path=[])
+
+    def _computer_closed(self) -> None:
+        if self.state is SessionState.HELP_COUNTDOWN:
+            # Closing the window must never cancel the help alert.
+            self._help_from = SessionState.SCANNING
+        elif self.state is SessionState.COMPUTER:
+            self._go_home(first_tile=True)
+
+    def _resume_computer(self) -> bool:
+        if self._help_from is SessionState.COMPUTER and self.computer.active:
+            self.state = SessionState.COMPUTER
+            self.computer.set_help(None)
+            self._emit(self._computer_screen())
+            return True
+        return False
 
     def _menu_item(self, node: MenuNode, prefix: str) -> Item:
         tile_id = _join(prefix, node.id)
@@ -1785,6 +1831,8 @@ class Session:
         self.state = SessionState.HELP_COUNTDOWN
         self.pointer.stop()
         self._help_left = HELP_COUNTDOWN_S
+        if self.computer.active:
+            self.computer.set_help(self._help_left)
         log.warning("LONG_CLENCH: help alert in %d s unless cancelled with a double blink", HELP_COUNTDOWN_S)
         self._voice.speak(HELP_START[self.lang], self.lang, "system")
         self._emit(self._help_screen())
@@ -1794,6 +1842,8 @@ class Session:
         self._help_timer = None
         self._help_left -= 1
         if self._help_left > 0:
+            if self.computer.active:
+                self.computer.set_help(self._help_left)
             self._emit(self._help_screen())
             self._help_timer = self._scheduler.call_later(1.0, self._help_tick)
         else:
@@ -1803,6 +1853,8 @@ class Session:
         self._cancel_help_timer()
         log.info("help alert cancelled with %d s left", self._help_left)
         self._log_event(node_id="help", path=[HELP_LABEL[self.lang]], action="help_alert", rejected=True)
+        if self._resume_computer():
+            return
         if self._help_from is SessionState.CONFIRMING:
             self.state = SessionState.CONFIRMING
             self._emit(self._confirm_msg())
@@ -1827,7 +1879,8 @@ class Session:
         self._run_action("send_message", ctx)
         self._voice.speak(HELP_SPEECH[self.lang].format(contact=contact.label(self.lang)), self.lang, "system")
         self._shortcut_from = None
-        self._go_home()  # straight home: a system line never holds the session
+        if not self._resume_computer():
+            self._go_home()  # a system line never holds the session
 
     def _help_screen(self) -> Screen:
         return Screen(
@@ -1869,6 +1922,7 @@ class Session:
         if s.trip_layout is not None:
             self.trip_layout = s.trip_layout
         self.pointer.apply_settings(s)
+        self.computer.configure(s)
         lang_changed = s.lang is not None and s.lang != self.lang
         if s.lang is not None:
             self.lang = s.lang

@@ -20,8 +20,11 @@ export type PointSource = 'webcam' | 'gaze' | 'headtilt'
 export type ActivePointer = 'scan' | 'webcam' | 'gaze' | 'headtilt'
 export type BodyStateLevel = 'calm' | 'normal' | 'elevated'
 export type Lang = 'en' | 'es'
-/** support_question = a question from the car's Support team (core/car): its answer options as tiles */
-export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip' | 'support_question'
+/**
+ * support_question = a question from the car's Support team (core/car): its answer options as tiles;
+ * computer = managed Chromium is open (core/computer)
+ */
+export type ScreenName = 'menu' | 'suggestions' | 'help_countdown' | 'paused' | 'calibrating' | 'trip' | 'support_question' | 'computer'
 /** dropoff / route / support_answer: trip requests confirmed and sent to the car (core/car) */
 export type ActionName =
   | 'speak' | 'send_message' | 'place_call' | 'room_control' | 'help_alert' | 'pull_over' | 'support'
@@ -127,6 +130,58 @@ export interface Point {
 export interface FaceOk {
   type: 'FACE_OK'
   ok: boolean
+}
+
+export interface ComputerTile {
+  id: string
+  label: string
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+export interface ComputerState {
+  type: 'COMPUTER_STATE'
+  active: boolean
+  seq: number
+  tiles: ComputerTile[]
+  highlight: number | null
+  paused: boolean
+  pointer: ActivePointer
+}
+
+export interface ComputerPoint {
+  type: 'COMPUTER_POINT'
+  seq: number
+  tile: number | null
+  source: 'webcam' | 'gaze'
+  found: boolean
+  status: 'tracking' | 'no_tracker' | 'lost' | 'camera_error' | 'starting' | 'off'
+  t: number
+  pick?: boolean
+}
+
+export interface ComputerTelemetry {
+  type: 'COMPUTER_TELEMETRY'
+  x: number | null
+  y: number | null
+  show_cursor: boolean
+  dwell: boolean
+  progress: number
+  camera: 'on' | 'off' | 'starting' | 'error'
+  yaw: number | null
+  pitch: number | null
+  eye_connected: boolean
+  head_range: HeadRange | null
+  voice_source: string | null
+}
+
+export interface ComputerControl {
+  type: 'COMPUTER_CONTROL'
+  action: 'cursor' | 'dwell' | 'retry' | 'calibrate' | 'calibration_done' | 'head_range'
+  value?: boolean
+  head_range?: HeadRange
 }
 
 // --- Board -> Core ---
@@ -483,6 +538,10 @@ export type Message =
   | Signal
   | Point
   | FaceOk
+  | ComputerState
+  | ComputerPoint
+  | ComputerTelemetry
+  | ComputerControl
   | Ready
   | Reset
   | AudioDone

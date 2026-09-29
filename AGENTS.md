@@ -47,6 +47,7 @@ messages go through a Telegram bot and calls through Twilio Programmable Voice (
 
 - `core/main.py`: FastAPI app, WebSocket routes, `GET` / `PUT /api/head-range`
 - `core/session.py`: state machine; owns the highlight, SCREEN `seq`, clench look-back, help countdown
+- `core/computer/`: managed Chromium, page bridge and overlay, band/target scanning, navigation policy
 - `core/pointer/`: Pointer interface; `scan.py`, `webcam.py` follows POINT, `gaze.py` follows gaze
   POINTs, `auto.py` gaze or head while the person is seen and scan after 3 s without, `headtilt.py`
   scans until the sensor chunk
@@ -78,6 +79,7 @@ messages go through a Telegram bot and calls through Twilio Programmable Voice (
 ```powershell
 # One-time setup
 uv sync                                   # creates .venv with Python deps (incl. dev: pytest)
+uv run playwright install chromium        # first-time computer-mode browser download
 Copy-Item .env.example .env               # then fill in keys; .env is git-ignored (runs fine left empty)
 npm --prefix web ci                       # also copies the MediaPipe wasm and downloads the face model (~4 MB)
                                           # (npm 10.9's `npm --prefix web install` fails with ENOENT; ci or cd web works)
@@ -339,6 +341,89 @@ Camera troubleshooting (Windows):
 - Use localhost (not the laptop's IP): browsers only allow the camera on localhost or https.
 
 ## Keyboard stand-in (for testing the board)
+
+### Computer mode (part 1)
+
+Home has **Computer / Computadora** in place of Room. Pick it to open the core's maximized
+Chromium window. The board stays connected, displays Computer mode and plays the usual echo/help
+audio. Four horizontal bands group visible page controls; empty bands are omitted and the visible
+choices are numbered Group 1 onward. YouTube video cards stay together in a group. The active
+outline encloses the group's actual controls; selecting it leaves one yellow target highlight.
+The compact control dock moves to the top when it would cover a selected bottom control. Browser menu
+is always the last choice. Clench a band, then clench a target. Eight choices fit on a target page
+(seven targets plus More when needed). Double blink returns to bands. Browser menu contains
+Scroll down/up, history Back, Home and Exit. Picking a search field opens up to five queries,
+Other / Otro, Keyboard / Teclado and Cancel. Picking a query fills that field and presses Enter;
+this pick is the confirmation to search. Back cancels the panel. Hold is always help, never Back.
+
+Search suggestions use Gemini through the existing provider layer (4-second timeout, 10-minute
+cache), with immediate bilingual defaults in `data/computer_suggestions.yaml` when unavailable.
+Navigation prefetches suggestions on recognized search sites, and Other offers three pages before
+looping. Late AI replies never replace the choices currently being scanned. Queries are at most
+40 characters; URLs and the configured blocked action words are rejected. Generic comments,
+chat editors and other non-search fields are not submitted by smart search.
+
+The last-resort keyboard scans a row, then a letter: a-z, ñ, Space, Delete and Done. Up to three
+local word completions appear above the rows. Done submits the draft; Back returns to the search
+panel and keeps the draft until that panel is cancelled. Help pauses and restores the panel or
+keyboard. EN/ES changes rebuild an idle search panel in the selected language.
+
+Confirmed searches live in SQLite's `computer_searches` table, separately from spoken messages.
+The existing rank score uses search frequency, recency and local hour within each site/language.
+Day 1 ignores history for ranking and AI; confirmed searches are still saved for later learning.
+The demo seed now includes simulated evening YouTube searches in both languages. `--reset` also
+clears search history; never run it on the shared database without authorization.
+
+Foreground Chromium supports Scan, Webcam/head, Gaze and Auto with the same clench inputs.
+Press backtick (or click the bottom-left Dev pill) for the same `DevPanel.tsx` as Home: pointing,
+scan speed, language, speak-picks, learning, sticky edges, cursor, gaze dwell and gesture buttons. The panel
+pauses selection; Back closes it, and Help remains available. Head tilt still falls back to scan.
+Keep the started board open on the same display: it owns the camera/eye-tracker connection and
+audio. Webcam uses the board's calibrated head range; Gaze requires an eye tracker feeding the
+existing gaze slot (see `docs/eye-tracking.md`). Calibrate and inspect the camera in the board's
+Dev panel or from Chromium's shared calibration overlay. Chromium receives pointing diagnostics,
+never camera video; its camera preview shows live angles while video stays on the board. Auto returns
+to scanning when tracking stops. The broader grouping/UI redesign remains deferred.
+See [computer search checks](docs/computer-search.md) for the manual flow and isolated demo seed.
+
+Space, hold Space and B work in both the board dev panel and the foreground managed browser.
+The browser keyboard listener runs in a Chromium isolated world so website scripts cannot forge
+help events. No Muse, AI key or cloud voice is needed. Start/unlock the board's audio first.
+
+First-time setup: `uv sync`, then `uv run playwright install chromium`.
+Run `npm --prefix web run build` after changing web controls; it also builds the shared React
+panel bundle that the core injects into Chromium's isolated world (no website WebSocket).
+The managed profile is `data/browser-profile/` (git-ignored; contains login cookies). Use one
+core/browser owner for this profile at a time. For a one-time caregiver Spotify login, first Exit
+computer mode, then run `uv run playwright open --browser chromium --user-data-dir data/browser-profile https://open.spotify.com`.
+Log in manually in that setup window and close it before entering Computer again. The setup
+window allows the login provider's redirects; active patient mode only allows the domains in
+`data/computer.yaml` (accounts.spotify.com is deliberately not allowed). Never commit or share the
+profile. Spotify playback can depend on Chromium's media/DRM support; YouTube is the first demo.
+
+For a separate test core, use an in-memory database and no service keys:
+
+```powershell
+$env:ELEVENLABS_PREWARM = 'false'
+uv run python -c "import uvicorn; from core.main import create_app; uvicorn.run(create_app(env={'ELEVENLABS_PREWARM':'false','COMPUTER_START_URL':'http://127.0.0.1:8001/computer/start'}), host='127.0.0.1', port=8001)"
+# A second terminal:
+$env:CORE_URL = 'http://127.0.0.1:8001'
+npm --prefix web run dev -- --port 5174
+```
+
+`COMPUTER_START_URL` defaults to `http://127.0.0.1:8000/computer/start`; match it to the core's
+port. The allowlist permits exactly that local route plus HTTPS youtube.com / google.com and their
+subdomains, and exactly open.spotify.com. External navigations, popups and downloads are blocked;
+ordinary media/CDN resources can load. Blocked action substrings live in `data/computer.yaml` and
+are checked at discovery and again just before a real click. Room-control action code remains
+available for custom menus but is unused by the default board.
+
+`uv run pytest` runs a headless local browser test on **8001**, with temporary profiles. Stop your
+own 8001 test core before running it; never stop the 8000 demo. Real network tests are skipped by
+default; opt in with `$env:CLENCH_NETWORK_TESTS='1'; uv run pytest tests/test_computer_browser.py`.
+If the browser download is missing or Chromium cannot launch, computer mode logs the failure,
+closes its resources and returns Home. Help is independent of browser work and still runs during
+startup, page timeouts and browser closure.
 
 | Key | Event |
 | --- | --- |

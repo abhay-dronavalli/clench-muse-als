@@ -21,7 +21,10 @@ ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 # support_question = a question from the car's Support team (core/car): its answer options as tiles.
-ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "trip", "support_question"]
+# computer = managed Chromium is open (core/computer).
+ScreenName = Literal[
+    "menu", "suggestions", "help_countdown", "paused", "calibrating", "trip", "support_question", "computer",
+]
 # dropoff / route / support_answer: trip requests confirmed on the confirm screen and sent to the car
 # (core/car, proto clench.rider.v1).
 ActionName = Literal[
@@ -124,6 +127,42 @@ class FaceOk(_Msg):
 
     type: Literal["FACE_OK"] = "FACE_OK"
     ok: bool
+
+
+class ComputerTile(_Msg):
+    id: str = Field(max_length=100)
+    label: str = Field(max_length=100)
+    left: float = Field(ge=0, le=1, allow_inf_nan=False)
+    top: float = Field(ge=0, le=1, allow_inf_nan=False)
+    right: float = Field(ge=0, le=1, allow_inf_nan=False)
+    bottom: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def valid_rect(self):
+        if self.right <= self.left or self.bottom <= self.top:
+            raise ValueError("empty computer target")
+        return self
+
+
+class ComputerState(_Msg):
+    type: Literal["COMPUTER_STATE"] = "COMPUTER_STATE"
+    active: bool
+    seq: int = Field(ge=0)
+    tiles: list[ComputerTile] = Field(max_length=9)
+    highlight: int | None = Field(default=None, ge=0)
+    paused: bool
+    pointer: ActivePointer
+
+
+class ComputerPoint(_Msg):
+    type: Literal["COMPUTER_POINT"] = "COMPUTER_POINT"
+    seq: int = Field(ge=0)
+    tile: int | None = Field(default=None, ge=0, le=8)
+    source: Literal["webcam", "gaze"]
+    found: bool
+    status: Literal["tracking", "no_tracker", "lost", "camera_error", "starting", "off"] = "tracking"
+    t: float = Field(allow_inf_nan=False)
+    pick: bool = False
 
 
 # --- Board -> Core ------------------------------------------------------------
@@ -458,6 +497,29 @@ class HeadRange(_Msg):
 
 # --- Union and helpers --------------------------------------------------------
 
+class ComputerTelemetry(_Msg):
+    type: Literal["COMPUTER_TELEMETRY"] = "COMPUTER_TELEMETRY"
+    x: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    y: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    show_cursor: bool = True
+    dwell: bool = False
+    progress: float = Field(default=0, ge=0, le=1)
+    camera: Literal["on", "off", "starting", "error"] = "off"
+    yaw: float | None = Field(default=None, allow_inf_nan=False)
+    pitch: float | None = Field(default=None, allow_inf_nan=False)
+    eye_connected: bool = False
+    head_range: HeadRange | None = None
+    voice_source: str | None = Field(default=None, max_length=80)
+
+
+class ComputerControl(_Msg):
+    type: Literal["COMPUTER_CONTROL"] = "COMPUTER_CONTROL"
+    action: Literal["cursor", "dwell", "retry", "calibrate", "calibration_done", "head_range"]
+    value: bool = False
+    head_range: HeadRange | None = None
+
+
+
 Message = Annotated[
     Union[
         Clench,
@@ -467,6 +529,10 @@ Message = Annotated[
         Signal,
         Point,
         FaceOk,
+        ComputerState,
+        ComputerPoint,
+        ComputerTelemetry,
+        ComputerControl,
         Ready,
         Reset,
         AudioDone,

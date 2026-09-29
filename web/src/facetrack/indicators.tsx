@@ -1,18 +1,18 @@
 import { useSyncExternalStore } from 'react'
 import type { Lang, PointingMode, Screen } from '../contracts'
 import { STRINGS } from '../board/strings'
-import { nativeGazeActive, subscribeNativeGaze } from './native'
+import { gazeOwnsCamera, subscribeGazeOwner } from './cameraOwner'
 import { cursor, dwell, eyesLost, gazeConnected, showCursor } from './stores'
 import { useTrackerStatus } from './useTrackerStatus'
 
 /**
- * PRD section 11: a light on screen whenever the camera is on: the page's own head tracker, or the
- * tablet shell's eye tracker (which owns the camera while nativeGazeActive() is true).
+ * PRD section 11: a light on screen whenever the camera is on: the page's own head tracker, or an eye
+ * tracker that owns the camera (the tablet shell's, or Eyedid web on a laptop: cameraOwner.ts).
  */
 export function CameraLight({ lang }: { lang: Lang }) {
   const status = useTrackerStatus()
-  const native = useSyncExternalStore(subscribeNativeGaze, nativeGazeActive)
-  if (status.kind !== 'on' && status.kind !== 'starting' && !native) return null
+  const eyeTracker = useSyncExternalStore(subscribeGazeOwner, gazeOwnsCamera)
+  if (status.kind !== 'on' && status.kind !== 'starting' && !eyeTracker) return null
   return (
     <span className="flex items-center gap-2 rounded-full bg-zinc-900/90 px-3 py-1 text-base font-semibold text-zinc-200 ring-1 ring-red-500/60">
       <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" aria-hidden />
@@ -48,12 +48,12 @@ export function CameraNotice({ lang, mode }: { lang: Lang; mode: PointingMode | 
 }
 
 /**
- * No eye tracker feeding the gaze slot while only the gaze can point: Gaze mode, or the tablet
- * shell (which owns the camera, so there is no head) in Auto or Webcam.
+ * No eye tracker feeding the gaze slot while only the gaze can point: Gaze mode, or an eye tracker
+ * that owns the camera (so there is no head) in Auto or Webcam.
  */
 export function GazeNotice({ lang, mode }: { lang: Lang; mode: PointingMode | null }) {
   const live = useSyncExternalStore(gazeConnected.subscribe, gazeConnected.get)
-  const gazeOnly = mode === 'gaze' || (nativeGazeActive() && (mode === 'auto' || mode === 'webcam'))
+  const gazeOnly = mode === 'gaze' || (gazeOwnsCamera() && (mode === 'auto' || mode === 'webcam'))
   if (!gazeOnly || live) return null
   return (
     <p role="alert" className="max-w-xl rounded-2xl bg-amber-950/95 px-4 py-2 text-lg text-amber-100 ring-2 ring-amber-500">

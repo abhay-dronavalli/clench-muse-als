@@ -1009,3 +1009,281 @@ choices below are Taher's.
   help works.
 - Car mode always opens in **Split**; the Car button switches until Car mode is left.
 - The ride controls (Comfort, Trip changes) share the full width.
+
+
+# Computer mode, part 1 (2026-09-27)
+
+- The user's part-1 design replaces PRD B2/B4's task-running AI with direct band/target scanning.
+  Home's Room tile becomes Computer / Computadora. `computer: true` is a menu entry with no
+  action or phrase; it cannot become an AI-confirmed action. Room action code is retained and
+  tested with a custom menu fixture. The demo seed's obsolete TV habit becomes the existing Tired
+  phrase so seed validation still works; old shared databases are not edited.
+- Core-owned Playwright Chromium uses a separate persistent `data/browser-profile/`, maximized
+  with native viewport sizing. Browser work runs on a dedicated event-loop thread because Windows
+  uvicorn's selector loop cannot start Playwright's subprocess. Core gestures, scan timers and help
+  remain on the core loop. Relaunch waits for the old profile owner to close.
+- The viewport's four equal horizontal bands are assigned by each target's center. Only occupied
+  bands scan, followed by Browser menu. Targets read top-to-bottom, with tops within 12 pixels
+  grouped left-to-right. Eight slots include More: seven targets per page when pagination is
+  needed, with the last page looping to the first. This is the user's explicit computer-mode
+  exception to the communication board's six-tile rule; SCREEN still has at most six tiles.
+- Element ids are stable for the life of a DOM element/document. Discovery runs after load,
+  scrolling, resize and throttled DOM changes; a periodic check catches SPA URL changes. A vanished
+  highlighted element returns to bands rather than silently selecting a neighbor. DOM refreshes
+  preserve scan progress. Navigation resets to bands. Text fields focus with a real click and
+  offer the part-2 placeholder and Cancel.
+- Overlay DOM is built with createElement in a Shadow DOM, without innerHTML or a page WebSocket.
+  add_init_script + expose_binding carry target snapshots. The exposed page binding rejects
+  gestures: trusted Space/B/hold input uses a separate Chromium isolated world and native CDP
+  binding, so a site's JavaScript cannot manufacture a help request. Headband/dev-panel events
+  continue through the existing Session handler. Hold always means help; the requested overlay
+  wording "hold = back" conflicts with this safety path, so it says "Hold = help" instead.
+- Help keeps the existing five-second confirmation and system audio. Computer scanning pauses;
+  the overlay shows a red countdown. Firing and cancel both return to the browser selection. A
+  browser closed during help never cancels the countdown and returns Home after it ends. Pick
+  labels use the board's existing echo queue and speak_picks setting. No page content goes to AI.
+- Navigation allows HTTPS youtube.com/google.com (including subdomains), exactly
+  open.spotify.com, and the configured local launcher path/origin. Credentials, unusual ports,
+  other local paths, other protocols, popups and downloads are rejected. CDN/media subresources
+  are allowed so videos can load; service workers are disabled so they cannot bypass routing.
+  Labels use a conservative case-insensitive substring denylist, including Spanish equivalents,
+  both during discovery and immediately before clicking. This is a prototype policy, not a
+  semantic classifier for every possible transaction. Login is a caregiver setup action in the
+  separate persistent profile, outside active patient mode; the active allowlist is not widened
+  for Spotify's account-domain redirects.
+- Contracts add only SCREEN.screen="computer". Targets and scan state stay inside core/computer;
+  the board keeps its socket, dev panel and audio queue mounted. The launcher route is
+  /computer/start; COMPUTER_START_URL defaults to port 8000 and must be 8001 for isolated checks.
+- Local Chromium integration runs by default on 8001 using temporary profiles and a Trusted Types
+  CSP. It captures a trusted click without contacting YouTube, checks blocking/recovery and
+  keyboard input isolation. Actual YouTube smoke tests require CLENCH_NETWORK_TESTS=1.
+
+## Computer overlay usability repair (2026-09-27)
+
+- Playwright MCP inspection reproduced outlines slicing launcher buttons, dimming half a chosen
+  row, a status strip covering YouTube search, duplicate controls, and thumbnail labels of "true".
+  The overlay now uses a single yellow active outline around the actual group or target, muted
+  teal outlines for the current target page's alternatives, and a navy control dock. The dock
+  shows the current label, scan position and gesture hints rather than every long label at once.
+  Browser menu and the text placeholder have their own readable panels.
+- Design tokens: navy #142b38, white #f5fafb, yellow #ffda60, teal #6caea8 and help red #ae1737.
+  Segoe UI keeps the local Windows UI familiar. Yellow identifies the current selectable choice;
+  there are no animated sweeps or pulses. Group/target outlines and the dim cutout use real bounds,
+  not viewport quarter edges. The launcher fits short windows with responsive button heights.
+- Four horizontal buckets remain. Occupied buckets are labelled Group 1 onward without gaps.
+  Controls within one YouTube video card use its thumbnail center for bucket assignment, so a
+  video title, thumbnail and action menu do not fall into different groups. Duplicate links to
+  the same video in that card share one thumbnail target when the thumbnail is visible. YouTube
+  marks these duplicate thumbnail links aria-hidden for screen readers; this specific link is
+  still eligible when visually visible. Hidden ancestors, inert state and hit testing still apply.
+- The dock normally stays at the bottom and moves to the top for a bottom-edge selection. This
+  keeps fixed page/video controls reachable without excluding the bottom of the viewport. Error
+  messages move with it. Menu panels also fit short windows. Help remains the existing countdown.
+- Shadow DOM nodes are created once and updated in an animation frame; scanning no longer tears
+  down the overlay or initiates another full target discovery. DOM/scroll discovery remains
+  throttled. Live target identity survives moving between bands or pagination pages. Navigation
+  and a vanished target get a fresh scan interval; slow actions visibly pause selection.
+- Short video titles are display labels only. All available action labels, including associated
+  video title attributes, are checked at discovery and again before clicking. The injected
+  denylist survives an empty render during navigation. No board event contract changed; group
+  membership and the optional card band position stay internal to the browser adapter.
+- Regression checks cover persistent overlay nodes, complete target outlines, dock avoidance,
+  menu bounds at 1000x650 / 800x480 / 390x650, duplicate video controls, blocked labels hidden by
+  friendly titles, and selection stability after layout shifts. The real YouTube visual checks
+  use Playwright MCP; automated network tests remain opt-in.
+
+## Patient feedback and follow-up order (2026-09-27)
+
+User testing of the managed Chromium browser found these remaining gaps:
+
+- Backtick does not open the Dev panel inside Chromium. Add access to the Dev panel and its
+  settings in the foreground managed browser, including the backtick shortcut.
+- Chromium currently uses scanning only. Extend patient pointing to head/webcam, gaze and
+  eye-tracker input so these modes can select website controls as they do on the board. Preserve
+  clench selection, back and the independent help path. Do not present an unconnected eye tracker
+  as working gaze input.
+- The user dislikes the Group 1 / Group 2 interaction and the current overlay appearance. The
+  earlier visual repair is not accepted as the final UI. Revisit the grouping interaction and
+  redesign the browser UI after the functional work.
+
+Requested order: finish Computer mode Part 2 (smart search suggestions and keyboard; full Part 2
+instructions still pending), then implement the foreground Dev panel and pointing support, then
+the broader UI changes. These are recorded follow-ups, not implemented capabilities. Defer the UI
+redesign now; the immediate request is to retain this feedback for work after Part 2.
+
+## Computer search prerequisite (2026-09-27)
+
+- Updated main did not yet contain Part 1. `feat-computer-search` starts from updated main and
+  merges `feat-computer-mode` as a prerequisite, keeping sensor/tablet changes and the board's
+  new go-back confirmation. Computer Back remains immediate as explicitly requested for this
+  mode. Part 2's full specification has now arrived; the deferred Dev panel, pointing and UI
+  feedback above remains queued after search.
+- Main's sensor tests require the optional dependencies: use `uv sync --extra sensor` before
+  running the full Python suite in a fresh environment.
+
+## Computer search panel (2026-09-27)
+
+- Picking a query is the explicit confirmation to fill and submit it, as requested for Part 2.
+  The adapter retains the chosen field rather than trusting the page's current focus. Detached
+  fields, changed pages, URLs and blocked action labels cannot be submitted.
+- The panel opens with local choices immediately. A pending search is cancelled when help starts
+  or computer mode exits; cancelling help resumes the panel. Suggestions are echoed through the
+  existing session queue and respect speak-picks. No board contract changed.
+- Keyboard entry is exposed here as a reserved panel and completed in the keyboard chunk below.
+
+## Search suggestions and fallback (2026-09-27)
+
+- Added search_suggestions to the existing provider layer. It shares the 4-second timeout,
+  10-minute cache and provider pause behavior. Failed search requests are cached too, to avoid
+  retrying on every navigation. Gemini receives only site, language, local hour, first name,
+  up to five recent searches, top 20 phrases and up to 15 already-shown queries for exclusion.
+- Local bilingual lists contain three pages for YouTube, Spotify and Google. Navigation prefetches
+  the first page; opening a panel prefetches its next page. Pending or failed AI uses local choices
+  immediately. A late result never replaces choices already being scanned. Three pages loop.
+- Search text is normalized and limited to 40 characters. URL-like text, including domains, paths
+  and schemes, is rejected conservatively across provider output and final browser submission.
+  Part 1's configured action denylist also filters every displayed query.
+
+## Search history and review fixes (2026-09-27)
+
+- Successful fill-and-Enter acknowledgements write site, query, language, local hour and time to
+  SQLite's separate computer_searches table. Cancelled or failed submissions do not teach it.
+  Searches never enter spoken-message history, communication shortcuts or action metrics.
+- Suggestions reuse core/rank's recency decay and hour weighting with profile weights, scoped by
+  site/language and the same 30-day window. Safe history queries join AI/local candidates. Day 1
+  ignores history for ranking and AI but still records confirmed searches for later learning.
+- The demo seed adds simulated YouTube searches in both languages, including evening Celia Cruz.
+  Reset clears these searches too and says so before deletion. Tests use temporary databases;
+  the shared patient database was not seeded or changed by this work.
+- Review found that generic editors could be mistaken for search. Only editable controls with
+  search semantics (type/role, search form, search label or conventional query name) accept fill
+  and Enter. Comments and other editors show a message instead. The current label and field are
+  rechecked before both fill and Enter. This narrows the text-field behavior to the smart-search goal.
+- EN/ES changes rebuild an idle search panel in the requested language. Local launcher and Google
+  account/mail pages do not trigger AI prefetch; only recognized search sites do.
+
+## Scanning search keyboard (2026-09-27)
+
+- The keyboard scans six rows, then the keys in the chosen row: a-z, ñ and a controls row with
+  Space, Delete and Done. Each edit returns to row scanning. Done submits the visible draft through
+  the same validated field adapter as a suggestion; an empty or unsafe draft stays in the keyboard.
+- Up to three matching word completions appear before the rows, from the current suggestions and
+  safe search history. A completion replaces only the current word and adds a space when it fits.
+  Drafts are limited to 40 characters. Completion choices stay fixed while a row is being scanned.
+- Back at either keyboard level returns directly to the search panel, as requested. Reopening the
+  keyboard retains the draft; cancelling the entire search discards it. Help preserves both draft
+  and row selection. The internal overlay state needs no new board WebSocket messages.
+- Overlay updates are serialized and coalesced to the newest state so rapid edits or scans cannot
+  leave a queue of stale highlights. The local Chromium test waits for the rendered frame before
+  capturing the suggestion and keyboard panels.
+
+## Computer search completion (2026-09-27)
+
+- AGENTS.md and the runbook now describe search, setup, keyboard use, history and current limits;
+  docs/computer-search.md includes the no-headband walkthrough and isolated seed command.
+- Validation: 508 Python tests passed with the existing real-network test skipped by default;
+  92 web tests, the production build, lint and the Python contract import passed. Local Chromium
+  verified scan-to-field, suggestion fill/Enter, keyboard completion/Done and Cancel. Rendered
+  panel screenshots were inspected. A different-model review found no remaining blocker.
+- No Part 2 core/board event format changed. No shared patient database, .env or protected demo
+  process was modified. Foreground Dev panel, webcam/gaze input and general UI redesign remain
+  explicitly deferred until after this part.
+
+## Foreground Chromium controls and pointing (2026-09-27)
+
+- Continued from completed Part 2 on `feat-computer-controls`. The user requested the deferred
+  Chromium Dev panel and gaze/head input; the wider grouping and visual redesign remains deferred.
+- Backtick and the top-right Dev pill open a caregiver panel in a Chromium isolated world.
+  Trusted keyboard/buttons use the existing core input path; settings use the existing SETTINGS
+  model. The panel pauses selection, Back closes it, and help remains available. Camera preview
+  and calibration remain in the board's existing Dev panel.
+- The started board remains the camera, external eye-tracker and audio owner. It maps calibrated
+  head/gaze samples to Chromium's normalized viewport rectangles with the existing filtering,
+  sticky edges and gaze hold. Keep both windows on the same display. No video goes to sites or
+  the core. This does not introduce a webcam eye tracker or a new hardware driver.
+- Computer mode uses the existing Scan/Webcam/Gaze/Auto pointers. A one-second heartbeat timeout
+  marks tracking lost; Auto then applies its existing three-second scan fallback. Webcam clench
+  lookback uses only the current source/layout's history. Gaze highlights; clench still selects.
+  Head tracking uses a 40 ms timer while Chromium is foreground because an occluded board's
+  animation frames can stop. Loss of samples suppresses tracking picks safely.
+- COMPUTER_STATE and COMPUTER_POINT were added to both contract implementations and docs. Layout
+  sequences are independent of board SCREEN sequences, reject stale points, and reset when the
+  browser choices or rectangles change. Help, busy actions and Dev controls pause pointing.
+- Review found changing highlight font widths, a moving More dock, stale scan history at an Auto
+  switch, and forgeable page-binding layout payloads. Highlight geometry is now stable while
+  pointing; source switches reset lookback; the driver obtains fresh native DOM measurements
+  directly from a frozen bridge function and ignores page-submitted layout events. Tests cover
+  these regressions. The old test requiring scan in Webcam was updated for the requested behavior.
+- Local integration uses two temporary headless browsers, simulated gaze through the real board
+  slot, and an in-memory core on 8001. It checks real trusted clicks and backtick/settings in
+  Chromium without network, service keys or the shared patient database. Real tracker accuracy
+  and the person's head-range calibration still need a hands-on check.
+- Validation: 517 Python tests passed (one real-network test skipped), 95 web tests passed, and
+  build, lint and contract import passed. The Chromium Dev screenshot was inspected. The
+  different-model re-review found no remaining blocker in pointing, layout or lookback.
+
+## Reuse the Home controls in Chromium (2026-09-27)
+
+- The user rejected the separate Chromium Dev design. Removed its hand-written UI. The web build
+  now bundles the actual `DevPanel.tsx`, styles, cursor, gaze notice and `CalibrationOverlay` for
+  Chromium's isolated world. Home retains its existing socket and keyboard behavior; Chromium
+  supplies the same component with a trusted transport and its existing trusted keyboard listener.
+- The previous relay omitted the board's cursor and optional dwell selection. Computer pointing now
+  uses the existing DwellTimer and shared gaze preferences; the same Dev toggles affect both windows.
+  A disconnected gaze slot shows the existing no-eye-tracker notice. Webcam/head and Gaze remain
+  distinct; no artificial eye tracker is inferred from a camera seeing a face.
+- The board remains the camera owner to avoid Windows camera contention. Only cursor coordinates,
+  numeric head pose and control status are mirrored, not video. The shared camera component shows
+  live angles in Chromium and keeps video on the board. Shared head calibration runs in Chromium
+  using those samples, pauses pointing, and uses the board's existing API to save and acknowledge.
+- Added COMPUTER_TELEMETRY and COMPUTER_CONTROL to both contracts and their docs/tests. External
+  pages cannot call controls: only the main frame's isolated input context is accepted. Build the
+  web before launching computer mode so the shared controls bundle exists.
+- Integration checks use simulated gaze through the real board and local Chromium: actual React
+  controls change mode, cursor and dwell; dwell selects a browser choice and pauses with Dev open.
+  Physical eye-tracker accuracy remains a hands-on check. No service keys or patient DB in tests.
+- Review fixes bind dwell picks to COMPUTER_POINT's layout sequence at both board and core, and
+  cancel calibration when help starts so Escape still cancels the countdown. Validation: 522
+  Python tests and 95 web tests passed, with the real-network test skipped; build and lint passed.
+  The final local Chromium test also passed under strict Trusted Types and connect-src CSP,
+  including cursor/dwell toggles and Escape during help. The shared-panel screenshot was inspected.
+
+## Eye tracking on the laptop: Eyedid web
+
+The tablet already points with Eyedid (`kushagra/tablet`, Android only). On the laptop the board now
+runs VisualCamp's browser SDK (npm `seeso` 0.2.4, the pre-rename Eyedid web SDK, engine 2.5.2 from
+cdn.seeso.io) and feeds the same gaze slot. Taher chose it over MediaPipe iris, WebGazer.js and a
+hardware tracker (2026-09-27).
+
+- Runs in Auto and Gaze mode only; Webcam mode stays the head. Needs `VITE_EYEDID_WEB_KEY` in the
+  repo `.env` (Vite's `envDir` is now the repo root; only `VITE_*` names reach the page). Without a
+  key the board behaves exactly as before.
+- It owns the webcam while it runs, and the head tracker stays off, the same rule as the tablet
+  shell (`cameraOwner.ts` now answers for both). Running MediaPipe and Eyedid side by side would
+  double the CPU load for a head fallback that Auto only needs when the eyes are lost.
+- The web dev server now sends COOP / COEP headers: the SDK's engine is threaded WebAssembly and only
+  loads on a cross-origin isolated page. Checked: the board (MediaPipe, the Core socket, audio) works
+  unchanged under isolation.
+- A new internet dependency, optional like the others: the SDK checks the key online and downloads
+  its engine at start. If either fails the camera goes back to the head.
+- Calibration copies the tablet shell's flow, because uncalibrated gaze could not reach one side of
+  the board: at start the board asks for a calibration when none is saved, and checks a saved one
+  with one dot (median gaze on the dot's tile), offering to recalibrate on a miss. Dots settle 1 s
+  before sampling, as on the tablet. A tablet calibration cannot be copied over: it belongs to that
+  camera and screen.
+- Calibration is five points, the SDK's default accuracy, saved in the browser. Gaze only: the SDK's
+  blink, attention and drowsiness signals are off (blinks come from the headband, MNE).
+- The SDK's license says it is granted "solely for commercial purposes"; fine for this prototype,
+  worth reading before anything ships.
+
+## Merging computer mode (PR #10) with Car mode (main, 2026-09-29)
+
+- Both kept: SCREEN `screen` takes `trip`, `support_question` and `computer`; the board route
+  accepts TAP, SETTINGS, COMPUTER_POINT and COMPUTER_TELEMETRY; READY re-sends the computer view
+  and the trip telemetry when each is active. Home keeps the Computer tile; Car mode stays the
+  corner button.
+- A long clench starts help from SCANNING, LOADING, CONFIRMING, ACTING (trip) and COMPUTER.
+- The Dev panel's Run setup is optional (`onSetup`): managed Chromium's panel has no onboarding.
+- The board's pointing pauses during onboarding and either calibration.
+- Open: the Vite dev server's cross-origin isolation (COEP `require-corp`, for Eyedid web) may
+  block the Google Maps trip map (`VITE_GOOGLE_MAPS_API_KEY`); the offline map is unaffected.

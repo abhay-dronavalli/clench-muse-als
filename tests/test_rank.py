@@ -131,8 +131,8 @@ def test_stability_rule_moves_items_on_large_changes():
 
 
 def test_pinned_items_never_move():
-    ids = ["suggested", "need", "people", "feel", "room"]
-    assert stable_order(ids, {"people": 1.0}, pinned=1) == ["suggested", "people", "need", "feel", "room"]
+    ids = ["suggested", "need", "people", "feel", "computer"]
+    assert stable_order(ids, {"people": 1.0}, pinned=1) == ["suggested", "people", "need", "feel", "computer"]
     assert stable_order(ids, {"people": 1.0}, pinned=1)[0] == "suggested"
 
 
@@ -199,11 +199,11 @@ DAYS = [NOW - d * DAY_S for d in range(7)]
 
 def test_home_keeps_suggested_first_and_other_last_with_history(menu, profile, db):
     confirm_many(db, "people.maria.text", MARIA, DAYS * 3, action="send_message", contact="maria")
-    confirm_many(db, "room.tv.on", "Please turn on the TV.", DAYS * 3, action="room_control")
+    confirm_many(db, "feel.tired", "I am tired.", DAYS * 3)
     s, sent = make(menu, profile, db)
     tiles = last_screen(sent).tiles
     assert tiles[0].id == "suggested" and tiles[-1].kind == "other"
-    assert [t.id for t in tiles] == ["suggested", "people", "room", "need", "feel", "other"]
+    assert [t.id for t in tiles] == ["suggested", "people", "feel", "need", "computer", "other"]
 
 
 def test_small_history_does_not_reorder_the_menu(menu, profile, db):
@@ -211,13 +211,13 @@ def test_small_history_does_not_reorder_the_menu(menu, profile, db):
     confirm_many(db, "need.water", "I'd like some water, please.", [NOW - 3660])
     s, sent = make(menu, profile, db)
     # People (one use) does not clearly beat I need (one use): menu.yaml order stays.
-    assert [t.id for t in last_screen(sent).tiles] == ["suggested", "need", "people", "feel", "room", "other"]
+    assert [t.id for t in last_screen(sent).tiles] == ["suggested", "need", "people", "feel", "computer", "other"]
 
 
 def test_day1_mode_ignores_history(menu, profile, db):
     confirm_many(db, "people.maria.text", MARIA, DAYS * 3, action="send_message", contact="maria")
     s, sent = make(menu, profile, db, learning=False)
-    assert [t.id for t in last_screen(sent).tiles] == ["suggested", "need", "people", "feel", "room", "other"]
+    assert [t.id for t in last_screen(sent).tiles] == ["suggested", "need", "people", "feel", "computer", "other"]
     pick(s, sent, "Suggested")
     assert labels(sent) == ["I'm hungry", "Water, please", "Turn me over", "Thank you, I love you", "How are you?", "Other..."]
 

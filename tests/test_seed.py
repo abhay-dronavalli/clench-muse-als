@@ -85,6 +85,22 @@ def test_no_flags_only_prints_help(seed, tmp_path, capsys):
     assert not (tmp_path / "x.db").exists()
 
 
+def test_seed_includes_evening_searches_in_both_languages(seed, tmp_path):
+    path = tmp_path / "search-seed.db"
+    seed.main(["--load", "--db", str(path)])
+    db = Db(path)
+    for lang in ("en", "es"):
+        rows = db.searches("youtube", lang)
+        celia = [row for row in rows if row["query"] == "Celia Cruz"]
+        assert len(celia) >= 6 and all(row["hour"] == 19 for row in celia)
+        assert all(row["t"] <= datetime.now().timestamp() for row in rows)
+    db.close()
+    seed.main(["--reset", "--yes", "--db", str(path)])
+    db = Db(path)
+    assert not db.searches("youtube", "es") and not db.searches("youtube", "en")
+    db.close()
+
+
 def test_patterns_must_match_the_menu(seed, menu, tmp_path):
     data = json.loads(seed.SEED_PATH.read_text(encoding="utf-8"))
     days, patterns = seed.load_patterns(menu)
