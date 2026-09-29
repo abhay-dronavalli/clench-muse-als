@@ -50,12 +50,17 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
                 session.handle(Settings(pointing_mode="gaze",scan_ms=500,speak_picks=False))  # setup ends in Auto
                 await until(lambda: app.state.session.current_view().screen=="menu")
                 await asyncio.sleep(.2)
-                screen=session.current_view()
-                index=next(i for i,tile in enumerate(screen.tiles) if tile.id=="computer")
-                session.handle(FaceOk(ok=True))  # Gaze scans until the eyes are seen
-                session.handle(Point(source="gaze",tile=index,seq=screen.seq,t=time.time()))
-                await asyncio.sleep(.3)
-                session.handle(Clench(t=time.time(),strength=1))
+                # Home > Computer > Web browser (Computer also offers YouTube and Spotify).
+                for tile_id in ("computer","computer.browser"):
+                    await until(lambda: any(t.id==tile_id for t in session.current_view().tiles))
+                    screen=session.current_view()
+                    index=next(i for i,tile in enumerate(screen.tiles) if tile.id==tile_id)
+                    # Gaze scans until the eyes are seen; the headless board (no camera) may report
+                    # them lost, so say they are seen again before each pick.
+                    session.handle(FaceOk(ok=True))
+                    session.handle(Point(source="gaze",tile=index,seq=screen.seq,t=time.time()))
+                    await asyncio.sleep(.5)  # past the clench look-back and the 300 ms clench debounce
+                    session.handle(Clench(t=time.time(),strength=1))
                 await until(lambda: c.ready and bool(c.rects))
                 page=c.browser.page
                 await page.set_viewport_size({"width":1000,"height":700})

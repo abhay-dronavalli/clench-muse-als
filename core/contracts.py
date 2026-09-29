@@ -9,7 +9,7 @@ Tile indexes (`tile`, `highlight`) are 0-based positions in the current SCREEN's
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_serializer, model_validator
 
 PointingMode = Literal["auto", "scan", "webcam", "gaze", "headtilt"]
 # webcam = the board's head pose; gaze = an eye tracker plugged into the board (docs/eye-tracking.md);
@@ -22,9 +22,12 @@ BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
 # support_question = a question from the car's Support team (core/car): its answer options as tiles.
 # computer = managed Chromium is open (core/computer).
+# player = a YouTube video or Spotify playlist playing on the board, its controls as the tiles.
 ScreenName = Literal[
     "menu", "suggestions", "help_countdown", "paused", "calibrating", "trip", "support_question", "computer",
+    "player",
 ]
+MediaProvider = Literal["youtube", "spotify"]
 # dropoff / route / support_answer: trip requests confirmed on the confirm screen and sent to the car
 # (core/car, proto clench.rider.v1).
 ActionName = Literal[
@@ -247,6 +250,16 @@ class Tile(_Msg):
     id: str  # dotted menu path; "ai:..." for AI-made options and sentences
     label: str
     kind: TileKind
+    # A picture for the tile (a video thumbnail, a playlist cover): an https URL. Only media tiles
+    # have one, and a tile without one is sent exactly as before (no "image" key).
+    image: str | None = Field(default=None, max_length=500, pattern=r"^https://")
+
+    @model_serializer(mode="wrap")
+    def _no_empty_image(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("image") is None:
+            data.pop("image", None)
+        return data
 
 
 class Screen(_Msg):
@@ -273,6 +286,24 @@ class Screen(_Msg):
     # elsewhere. It is tile index len(tiles): the highlight, POINT and TAP use that index for it,
     # and the scan reaches it last.
     corner: Tile | None = None
+
+
+class Media(_Msg):
+    """Play, or control, a YouTube video or Spotify playlist on the board (Computer > YouTube /
+    Spotify). The board embeds the provider's own player in this page, in the person's browser, so
+    their YouTube / Spotify login applies. Nothing is said or sent, so there is no confirm step."""
+
+    type: Literal["MEDIA"] = "MEDIA"
+    action: Literal["play", "pause", "resume", "restart", "volume_down", "volume_up", "stop"]
+    provider: MediaProvider | None = None  # play only
+    id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{6,40}$")  # play: video / playlist id
+    title: str | None = Field(default=None, max_length=200)  # play: what is playing
+
+    @model_validator(mode="after")
+    def _play_names_it(self) -> "Media":
+        if (self.action == "play") != (self.provider is not None and self.id is not None):
+            raise ValueError("play needs provider and id; other actions take neither")
+        return self
 
 
 class Confirm(_Msg):
@@ -540,6 +571,7 @@ Message = Annotated[
         Settings,
         Screen,
         Confirm,
+        Media,
         BackPrompt,
         Speak,
         PlayAudio,

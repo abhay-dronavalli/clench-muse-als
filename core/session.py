@@ -83,6 +83,7 @@ from core.contracts import (
     BodyStateLevel,
     Clench,
     Confirm,
+    Media,
     BackPrompt,
     CarAction,
     CarActionName,
@@ -142,6 +143,12 @@ OTHER_PAGES = 3  # "Other..." pages in a row before the next pick loops back to 
 TRAIL_S = 2.0  # how much highlight history the clench look-back keeps
 RIDE_MINUTE_S = 60.0  # the mock ride's clock: arrival and battery move once a minute
 
+CONTROL_LABEL: dict[Lang, dict[str, str]] = {
+    "en": {"pause": "Pause", "resume": "Play", "restart": "Restart", "volume_down": "Volume \u2212",
+           "volume_up": "Volume +", "back": "Back"},
+    "es": {"pause": "Pausa", "resume": "Reproducir", "restart": "Reiniciar", "volume_down": "Volumen \u2212",
+           "volume_up": "Volumen +", "back": "Volver"},
+}
 HELP_LABEL: dict[Lang, str] = {"en": "Help", "es": "Ayuda"}
 HELP_MESSAGE: dict[Lang, str] = {"en": "{name} needs help now", "es": "{name} necesita ayuda ahora"}
 HELP_SPEECH: dict[Lang, str] = {"en": "Calling {contact}", "es": "Llamando a {contact}"}
@@ -227,7 +234,7 @@ class Item:
 class Frame:
     """One screen of the stack: a menu level, an "Other..." batch or a suggestions screen."""
 
-    kind: Literal["menu", "suggestions"]
+    kind: Literal["menu", "suggestions", "player"]
     level: MenuNode  # the menu level this frame belongs to (inherited action / contact, `more`)
     prefix: str  # dotted id prefix for this frame's own tiles ("" at home)
     items: list[Item]  # the tiles, in the order shown
@@ -399,6 +406,8 @@ class Session:
         # opens the Suggested list instead of going home.
         self._shortcut_from: Item | None = None
         self._effort = Tracker()  # clenches and scan steps since home (METRICS)
+        # What plays on the board (Computer > YouTube / Spotify): provider, id, title, playing.
+        self.media: dict[str, Any] | None = None
         self._loading_timer: TimerHandle | None = None
         # SCREEN seq: goes up whenever the tiles change; POINT must name the current one.
         self._seq = 0
@@ -713,6 +722,10 @@ class Session:
         if self.trip:
             self._pick_trip(index)
             return
+        if frame.kind == "player":
+            if 0 <= index < len(frame.items):
+                self._control(frame.items[index].id.rsplit(".", 1)[-1])
+            return
         if index == len(frame.items):
             self._pick_other(frame)
             return
@@ -725,6 +738,9 @@ class Session:
             self._confirm(item)  # no echo: the confirm step speaks the whole sentence
             return
         self._echo(item.label(self.lang))  # before the next view shows
+        if item.node is not None and item.node.media is not None:
+            self._play(item)
+            return
         if item.node is not None and item.node.computer:
             self.state = SessionState.COMPUTER
             self.pointer.stop()
@@ -755,7 +771,7 @@ class Session:
             self._voice.click()  # a short soft click, no word, in order with the echoes
         if frame.others >= OTHER_PAGES:
             self._loop_back(f"after {OTHER_PAGES} pages")
-        elif self.suggester.available:
+        elif self.suggester.available and not frame.level.fixed_only:
             self._wait(self._other_request(frame), lambda result: self._open_other(frame, result))
         else:
             self._open_other(frame, None)
@@ -1206,7 +1222,7 @@ class Session:
 
     def _tile_count(self) -> int:
         """Tiles on the current screen: a Support question's options, the trip level's (Back included),
-        or the frame's items plus "Other...", then the corner button when there is one."""
+        or the frame's items plus "Other..." (none on the player), then the corner button when there is one."""
         return self._grid_count() + (1 if self._corner() is not None else 0)
 
     def _grid_count(self) -> int:
@@ -1214,7 +1230,7 @@ class Session:
             return len(self._question.options)
         if self.trip:
             return len(self._trip_children()) + (1 if len(self._trip_path) > 1 else 0)
-        return len(self.frame.items) + 1
+        return len(self.frame.items) + (0 if self.frame.kind == "player" else 1)  # the player has no "Other..."
 
     def _corner(self) -> Tile | None:
         """The corner button outside the grid: "Home" in Car mode (leaves the screen, not the ride),
@@ -1313,10 +1329,54 @@ class Session:
         return self._menu_frame(self._menu.root, "", None)
 
     def _go_home(self, *, first_tile: bool = False) -> None:
+        self._stop_media()
         self._stack = [self._home()]
         self._trip_path = [self._trip_home()]  # in trip mode: Plan a trip, or the ride controls once under way
         self._effort.reset()  # metrics count from home
         self._enter_frame(first_tile=first_tile)
+
+    # --- media on the board (Computer > YouTube / Spotify) -----------------------------
+
+    def _play(self, item: Item) -> None:
+        """A video or playlist tile: the board plays it, and the tiles become its controls. Nothing
+        is said or sent, so there is no confirm step (hard rule 1 is about Clench's own words)."""
+        assert item.node is not None and item.node.media is not None
+        ref = item.node.media
+        title = item.label(self.lang)
+        self.media = {"provider": ref.provider, "id": ref.id, "title": title, "playing": True}
+        log.info("playing %s %s on the board: %s", ref.provider, ref.id, title)
+        self._emit(Media(action="play", provider=ref.provider, id=ref.id, title=title))
+        prefix = _join(item.id, "player")
+        self._push(Frame(kind="player", level=self.frame.level, prefix=prefix, items=self._player_items(prefix), crumb=item))
+
+    def _player_items(self, prefix: str) -> list[Item]:
+        media = self.media or {"provider": "youtube", "playing": False}
+        keys = ["pause" if media["playing"] else "resume", "restart"]
+        if media["provider"] == "youtube":  # Spotify's player has no volume control
+            keys += ["volume_down", "volume_up"]
+        keys.append("back")
+        return [Item(kind="leaf", id=_join(prefix, k), event_id=_join(prefix, k), ai_label=CONTROL_LABEL[self.lang][k])
+                for k in keys]
+
+    def _control(self, key: str) -> None:
+        """A control tile on the player screen."""
+        if key == "back":
+            self._up_one_level()  # stops the media
+            return
+        if self.media is None:
+            return
+        if key in ("pause", "resume"):
+            self.media["playing"] = key == "resume"
+        elif key == "restart":
+            self.media["playing"] = True
+        self._emit(Media(action=key))  # type: ignore[arg-type]
+        self._emit(self._screen())  # Pause <-> Play
+
+    def _stop_media(self) -> None:
+        if self.media is not None:
+            log.info("stopping %s on the board", self.media["provider"])
+            self.media = None
+            self._emit(Media(action="stop"))
 
     def _computer_screen(self) -> Screen:
         return Screen(screen="computer", seq=self._seq, tiles=[], highlight=None, lang=self.lang, path=[])
@@ -1515,6 +1575,8 @@ class Session:
                 self._trip_path.pop()
             self._enter_frame()
             return
+        if self.frame.kind == "player":
+            self._stop_media()
         while len(self._stack) > 1 and self.frame.via_other:
             self._stack.pop()
         if len(self._stack) > 1:
@@ -1721,6 +1783,8 @@ class Session:
         (RESET) puts every pointer on tile 0."""
         self._close_back()
         self.state = SessionState.SCANNING
+        if self.media is not None and (self.trip or self._question is not None or self.frame.kind != "player"):
+            self._stop_media()  # the player screen is gone (Car mode, a reset stack): so is its sound
         if self.trip or self._question is not None:
             if self.trip:
                 self._stack = [self._home()]  # the menus wait underneath, at home
@@ -1776,6 +1840,8 @@ class Session:
         if not self.suggester.available:
             return
         frame = self.frame
+        if frame.kind == "player" or frame.level.fixed_only:
+            return  # controls, videos and apps: nothing for the AI to write
         if frame.kind == "suggestions":
             if frame.others < OTHER_PAGES:
                 self._other_request(frame)  # more sentences: one request
@@ -1829,6 +1895,9 @@ class Session:
             self.state = SessionState.SCANNING
         self._help_from = self.state
         self.state = SessionState.HELP_COUNTDOWN
+        if self.media is not None and self.media["playing"]:
+            self.media["playing"] = False
+            self._emit(Media(action="pause"))  # so the help line is heard
         self.pointer.stop()
         self._help_left = HELP_COUNTDOWN_S
         if self.computer.active:
@@ -2032,8 +2101,13 @@ class Session:
             elif level.dynamic and level.dynamic.startswith("routes:"):
                 prompt = self._routes_prompt(level.dynamic.removeprefix("routes:"))
         else:
-            tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind) for i in frame.items]
-            tiles.append(self._other_tile(frame))
+            if frame.kind == "player":
+                frame.items = self._player_items(frame.prefix)  # labels follow the language and play / pause
+            tiles = [Tile(id=i.id, label=i.label(self.lang), kind=i.kind,
+                          image=i.node.media.picture if i.node is not None and i.node.media is not None else None)
+                     for i in frame.items]
+            if frame.kind != "player":
+                tiles.append(self._other_tile(frame))
         corner_tile = self._corner()
         key = tuple((t.id, t.label, t.kind) for t in tiles + ([corner_tile] if corner_tile is not None else []))
         if key != self._tiles_key:  # new tiles: a new seq, so a POINT for the old ones is ignored
@@ -2050,7 +2124,10 @@ class Session:
         highlight = self.pointer.highlight
         self._note_highlight(highlight)
         return Screen(
-            screen="support_question" if self._question is not None else "trip" if self.trip else "suggestions" if frame.kind == "suggestions" else "menu",
+            screen=(
+                "support_question" if self._question is not None else "trip" if self.trip
+                else "suggestions" if frame.kind == "suggestions" else "player" if frame.kind == "player" else "menu"
+            ),
             seq=self._seq,
             tiles=tiles,
             highlight=highlight,

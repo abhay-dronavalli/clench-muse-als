@@ -10,9 +10,12 @@ const core = process.env.CORE_URL ?? 'http://127.0.0.1:8000'
 // multithreaded WebAssembly engine, and browsers only allow threads (SharedArrayBuffer) on an isolated
 // page. Everything the board loads is same-origin (the proxied Core, /mediapipe), and the engine's CDN
 // sends Cross-Origin-Resource-Policy: cross-origin, so isolation breaks nothing here.
+//
+// Document-Isolation-Policy isolates this page (SharedArrayBuffer for Eyedid) without COEP's rules for
+// what it may embed: the YouTube and Spotify players (Computer > YouTube / Spotify) load normally, with
+// the person's own logins. Checked in Chrome 153 (crossOriginIsolated true, both embeds load).
 const isolation = {
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Document-Isolation-Policy': 'isolate-and-credentialless',
 }
 
 // https://vite.dev/config/

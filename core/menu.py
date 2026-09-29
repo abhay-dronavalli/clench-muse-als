@@ -37,6 +37,21 @@ class MenuError(ValueError):
     """The menu or contacts file is invalid."""
 
 
+class MediaRef(BaseModel):
+    """What a media tile plays: a YouTube video or a Spotify playlist, on the board's own player."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["youtube", "spotify"]
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{6,40}$")  # the video id / playlist id from its link
+    image: str | None = Field(default=None, pattern=r"^https://")  # a cover; YouTube's is derived
+
+    @property
+    def picture(self) -> str | None:
+        if self.image:
+            return self.image
+        return f"https://i.ytimg.com/vi/{self.id}/hqdefault.jpg" if self.provider == "youtube" else None
+
+
 class MenuNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,6 +64,7 @@ class MenuNode(BaseModel):
     from_contacts: bool = False
     ai_now: bool = False  # the AI's guesses for right now go first (home "Suggested")
     computer: bool = False  # opens the managed browser, no phrase or external action
+    media: MediaRef | None = None  # plays on the board (no phrase, action or confirm)
     phrase_en: Text | None = None
     phrase_es: Text | None = None
     action: MenuAction | None = None
@@ -61,9 +77,11 @@ class MenuNode(BaseModel):
         if self.id in RESERVED_IDS:
             raise ValueError(f"node id '{self.id}' is reserved for the session's own tiles")
         leaf_fields = (self.phrase_en, self.phrase_es, self.action)
-        if self.computer:
+        if self.computer or self.media is not None:
+            if self.computer and self.media is not None:
+                raise ValueError(f"node '{self.id}' cannot be both a computer entry and media")
             if any(f is not None for f in leaf_fields) or self.children is not None or self.more or self.from_contacts or self.ai_now:
-                raise ValueError("computer entry cannot have children, phrases, or actions")
+                raise ValueError(f"node '{self.id}': a computer or media entry cannot have children, phrases, or actions")
             return self
         if self.children is not None or self.from_contacts:
             if any(f is not None for f in leaf_fields):
@@ -87,7 +105,14 @@ class MenuNode(BaseModel):
 
     @property
     def is_leaf(self) -> bool:
-        return self.children is None and not self.computer
+        """An option that leads to a sentence (computer and media entries lead elsewhere)."""
+        return self.children is None and not self.computer and self.media is None
+
+    @property
+    def fixed_only(self) -> bool:
+        """A level of apps or media: its "Other..." pages through `more` only, and the AI writes
+        nothing for it (an AI sentence cannot be a video)."""
+        return any(c.computer or c.media is not None for c in (self.children or []) + (self.more or []))
 
     def label(self, lang: Lang) -> str:
         return self.label_es if lang == "es" else self.label_en

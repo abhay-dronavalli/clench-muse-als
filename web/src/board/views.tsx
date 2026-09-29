@@ -88,7 +88,14 @@ export function TileGrid({ screen, onTap }: { screen: Screen; onTap?: (tile: num
               ].join(' ')}
             >
               {tile.kind === 'other' && <RefreshIcon />}
-              <span>{tile.label}</span>
+              {tile.image ? (
+                <span className="flex h-full w-full flex-col items-center justify-center gap-3">
+                  <img src={tile.image} alt="" className="min-h-0 w-full flex-1 rounded-2xl object-cover" />
+                  <span className="text-3xl leading-tight">{tile.label}</span>
+                </span>
+              ) : (
+                <span>{tile.label}</span>
+              )}
             </div>
           )
         })}

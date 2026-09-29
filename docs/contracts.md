@@ -299,9 +299,9 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` \| `"computer"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top); `computer` = managed Chromium is open |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` \| `"computer"` \| `"player"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top); `computer` = managed Chromium is open; `player` = a video or playlist playing on the board, its controls as the tiles (no "Other...") |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
-| `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
+| `tiles` | `{"id": string, "label": string, "kind": TileKind, "image"?: string}[]` | at most 6 (PRD D8), see below. `image` (an https URL, at most 500 characters) is only on media tiles (a video thumbnail, a playlist cover); every other tile has no `image` key |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
@@ -388,6 +388,48 @@ there is no page WebSocket. It cannot submit gestures. Foreground Space/B/hold i
 Chromium isolated-world binding that accepts only trusted keyboard events and forwards the same
 CLENCH/DOUBLE_BLINK/LONG_CLENCH types to Session.handle. The headband and board dev panel still
 use `/ws/input` unchanged.
+
+### Media on the board: SCREEN player and MEDIA
+
+Home › Computer opens YouTube, Spotify and Web browser (Web browser is computer mode above). The
+YouTube and Spotify levels list videos and playlists from `data/menu.yaml` (`media: {provider, id,
+image?}`); their tiles carry `image`, and their "Other..." pages only through the level's `more`
+list (the AI writes nothing for app or media levels):
+
+```json
+{"type":"SCREEN","screen":"menu","seq":31,"tiles":[{"id":"computer.youtube.lofi","label":"Lofi radio","kind":"branch","image":"https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg"},{"id":"computer.youtube.other","label":"Other...","kind":"other"}],"highlight":0,"lang":"en","path":["Computer","YouTube"],"countdown":null,"loading":false,"pointer":"scan","prompt":null,"corner":null}
+```
+
+Picking a video or playlist sends MEDIA `play` and opens the player screen: the board embeds the
+provider's own player in its page (the person's own logins apply). Nothing is said or sent to
+anyone, so there is no CONFIRM step. The tiles are the controls: Pause (Play when paused), Restart,
+Volume − and Volume + (YouTube only) and Back; no "Other...", no corner button.
+
+```json
+{"type":"SCREEN","screen":"player","seq":32,"tiles":[{"id":"computer.youtube.lofi.player.pause","label":"Pause","kind":"leaf"},{"id":"computer.youtube.lofi.player.restart","label":"Restart","kind":"leaf"},{"id":"computer.youtube.lofi.player.volume_down","label":"Volume −","kind":"leaf"},{"id":"computer.youtube.lofi.player.volume_up","label":"Volume +","kind":"leaf"},{"id":"computer.youtube.lofi.player.back","label":"Back","kind":"leaf"}],"highlight":0,"lang":"en","path":["Computer","YouTube","Lofi radio"],"countdown":null,"loading":false,"pointer":"scan","prompt":null,"corner":null}
+```
+
+MEDIA (Core -> Board) plays or controls it:
+
+| Field | Type | Notes |
+|---|---|---|
+| `action` | `"play"` \| `"pause"` \| `"resume"` \| `"restart"` \| `"volume_down"` \| `"volume_up"` \| `"stop"` | |
+| `provider` | `"youtube"` \| `"spotify"` \| null | `play` only (required there, null otherwise) |
+| `id` | string \| null | `play` only: the video / playlist id, `[A-Za-z0-9_-]{6,40}` |
+| `title` | string \| null | `play` only: what is playing, at most 200 characters |
+
+```json
+{"type":"MEDIA","action":"play","provider":"youtube","id":"jfKfPfyJRdk","title":"Lofi radio"}
+```
+
+```json
+{"type":"MEDIA","action":"pause","provider":null,"id":null,"title":null}
+```
+
+A control tile sends its MEDIA action and a new SCREEN (Pause <-> Play). Back, a double blink
+(up one level), RESET, Home, Car mode or anything else that leaves the player screen sends `stop`.
+A LONG_CLENCH pauses it (`pause`) so the help lines are heard, and the board hides the player
+during the countdown; after a cancel the player screen comes back (the Core marks it paused).
 
 ### CONFIRM (communication board)
 

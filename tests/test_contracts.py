@@ -31,6 +31,8 @@ EXAMPLES: dict[str, tuple[type, dict]] = {
         "highlight":0,"paused":False,"pointer":"gaze"}),
     "COMPUTER_POINT": (contracts.ComputerPoint, {"type":"COMPUTER_POINT","seq":3,"tile":0,
         "source":"gaze","found":True,"status":"tracking","t":1727300011.2,"pick":False}),
+    "MEDIA": (contracts.Media, {"type": "MEDIA", "action": "play", "provider": "youtube", "id": "jfKfPfyJRdk",
+                                "title": "Lofi radio"}),
     "CLENCH": (contracts.Clench, {"type": "CLENCH", "t": 1727300000.12, "strength": 0.83}),
     "DOUBLE_BLINK": (contracts.DoubleBlink, {"type": "DOUBLE_BLINK", "t": 1727300003.4}),
     "LONG_CLENCH": (

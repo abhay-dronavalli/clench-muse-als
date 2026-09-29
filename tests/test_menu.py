@@ -40,7 +40,7 @@ def test_home_level(menu):
 def test_every_level_has_at_most_five_items(menu):
     assert MAX_ITEMS == 5  # the session adds "Other..." as the sixth tile (PRD D8)
     for node in all_nodes_and_more(menu.root):
-        if not node.is_leaf and not node.computer:
+        if not node.is_leaf and not node.computer and node.media is None:  # apps and media have no children
             assert 1 <= len(node.children) <= MAX_ITEMS, node.id
             assert node.more is None or 1 <= len(node.more) <= MAX_ITEMS, node.id
 
@@ -56,8 +56,8 @@ def test_ai_options_inherit_action_and_contact_from_the_path(menu):
     # Room actions remain supported for custom menus, though Home now opens Computer.
     room = MenuNode.model_validate(yaml.safe_load((Path(__file__).parent / "room_fixture.yaml").read_text(encoding="utf-8")))
     assert room.inherited() == ("room_control", None)
-    assert find(menu.root, "computer").computer
-    assert find(menu.root, "computer").leaves() == []
+    assert find(menu.root, "computer", "browser").computer
+    assert find(menu.root, "computer", "browser").leaves() == []
     assert find(menu.root, "people").inherited() == ("speak", None)
     assert menu.root.inherited() == ("speak", None)
 

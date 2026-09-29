@@ -1287,3 +1287,23 @@ hardware tracker (2026-09-27).
 - The board's pointing pauses during onboarding and either calibration.
 - Open: the Vite dev server's cross-origin isolation (COEP `require-corp`, for Eyedid web) may
   block the Google Maps trip map (`VITE_GOOGLE_MAPS_API_KEY`); the offline map is unaffected.
+
+## Media on the board: YouTube and Spotify (PR #11, merged with Car mode 2026-09-29)
+
+- Home › Computer opens YouTube, Spotify and Web browser (the managed Chromium). Videos and
+  playlists are menu entries (`media: {provider, id, image?}` in `data/menu.yaml`); a YouTube tile's
+  picture is its thumbnail, a Spotify tile's is its `image`.
+- Playing needs no confirm step: nothing is said and nothing leaves the laptop (hard rule 1 is about
+  Clench speaking or sending). The provider's own player runs in the board's page, in the person's
+  browser, so their own YouTube / Spotify logins apply.
+- The player screen's tiles are its controls (Pause/Play, Restart, Volume −/+ on YouTube, Back);
+  no "Other..." and no corner button. App and media levels ask the AI for nothing (an AI sentence
+  cannot be a video); their "Other..." pages only through `more`.
+- Leaving the player screen always stops it: Back, a double blink, RESET, Home, and Car mode (the
+  Core stops media whenever the screen it enters is not the player). A long clench pauses it so the
+  help lines are heard; help works from the player exactly as from any menu.
+- The board isolates itself with `Document-Isolation-Policy: isolate-and-credentialless` instead of
+  COOP + COEP: Eyedid web still gets SharedArrayBuffer, and cross-origin embeds (YouTube, Spotify,
+  and the Google Maps trip map) are no longer blocked.
+- Known issue: the board hides the player during the help countdown, so after a cancel the embed
+  reloads and starts again while the Core shows it as paused ("Play"); one Pause pick resyncs it.

@@ -142,7 +142,9 @@ def make(browser=FakeBrowser):
                       computer_factory=partial(Computer, browser_factory=browser))
     session.start()
     clock.advance(4)
-    session.handle(Clench(t=0, strength=1))
+    session.handle(Clench(t=0, strength=1))  # Home > Computer (now YouTube, Spotify, Web browser)
+    clock.advance(2.35)
+    session.handle(Clench(t=0, strength=1))  # > Web browser
     return session, clock, sent
 
 
