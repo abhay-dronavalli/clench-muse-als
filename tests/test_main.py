@@ -136,7 +136,7 @@ def test_settings_are_announced_on_connect_and_after_every_change():
         ):
             current = {
                 "type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 600_000, "lang": "en", "speak_picks": True,
-                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": False,
+                "learning": True, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": False, "onboarding": False, "trip": False, "trip_layout": "car",
             }
             for ws in (board, console, inp):
                 assert ws.receive_json() == current
@@ -216,3 +216,15 @@ def test_api_time_is_the_cores_clock_for_a_sensor_on_another_device():
         before = time.time()
         t = client.get("/api/time").json()["t"]
         assert before <= t <= time.time()
+
+
+def test_setup_gate_is_released_when_the_last_board_disconnects():
+    app = create_app(scan_ms=600_000)
+    with TestClient(app) as client:
+        with client.websocket_connect('/ws/board') as board:
+            board.receive_json()
+            board.send_json({'type': 'SETTINGS', 'pointing_mode': 'auto', 'scan_ms': 600000, 'onboarding': True})
+            assert board.receive_json()['onboarding'] is True
+            assert app.state.session.onboarding
+        assert app.state.session.onboarding is False
+        assert app.state.session.muse_enabled is False

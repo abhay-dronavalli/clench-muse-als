@@ -1,0 +1,1551 @@
+{
+ "generated_at": "2026-09-27T13:29:35+00:00",
+ "attribution": [
+  "© OpenStreetMap contributors (ODbL)",
+  "USGS 3D Elevation Program (public domain)"
+ ],
+ "duration_note": "Drive times are OSRM free-flow estimates from OpenStreetMap road speeds, without live traffic.",
+ "dropoff": {
+  "destination": "Miami Cancer Institute",
+  "destination_point": {
+   "latitude": 25.6851342,
+   "longitude": -80.338609
+  },
+  "radius_m": 150.0,
+  "candidates": [
+   {
+    "id": "447c5701",
+    "rank": 1,
+    "score": 72.7,
+    "stop": {
+     "latitude": 25.685865,
+     "longitude": -80.3376895
+    },
+    "entrance": {
+     "latitude": 25.6861051,
+     "longitude": -80.337618
+    },
+    "heading_to_entrance_deg": 15.0,
+    "entrance_osm_id": 10164894714,
+    "entrance_kind": "yes",
+    "road_osm_id": 1469352009,
+    "road_class": "unclassified",
+    "road_name": null,
+    "walk_m": 29.8,
+    "walk_kind": "step-free path",
+    "walk_polyline": "sww{Cp}iiNAAKAAAC?C?ACECCAC?C?E@??",
+    "slope": {
+     "max_grade_pct": 3.4,
+     "avg_grade_pct": 2.1,
+     "climb_m": 0.63,
+     "length_m": 28.8,
+     "samples": 7,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894714 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 3.4% / avg 2.1% over 28.8 m of the walk (7 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 10164894475, 6 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "sidewalk=left on the road (one side only)"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.8,
+      "used": 0.8,
+      "weight": 2.0,
+      "evidence": "highway=unclassified"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.82,
+      "used": 0.82,
+      "weight": 2.0,
+      "evidence": "30 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access"
+    ],
+    "description": "Entrance, Miami Cancer Institute from unclassified road",
+    "reason": "Gentle slope (max 3.4%), step-free path, lowered curb, sidewalk, quiet road, short walk; unknown: wheelchair access"
+   },
+   {
+    "id": "eb31bc1b",
+    "rank": 2,
+    "score": 71.9,
+    "stop": {
+     "latitude": 25.6851327,
+     "longitude": -80.337194
+    },
+    "entrance": {
+     "latitude": 25.6851299,
+     "longitude": -80.3372893
+    },
+    "heading_to_entrance_deg": 268.2,
+    "entrance_osm_id": 10164894593,
+    "entrance_kind": "yes",
+    "road_osm_id": 1110957435,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 9.7,
+    "walk_kind": "step-free path",
+    "walk_polyline": "asw{ClziiN???B?@?L??",
+    "slope": {
+     "max_grade_pct": 6.5,
+     "avg_grade_pct": 6.5,
+     "climb_m": 0.65,
+     "length_m": 10.0,
+     "samples": 3,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894593 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.4,
+      "used": 0.4,
+      "weight": 3.0,
+      "evidence": "max 6.5% / avg 6.5% over a 10.0 m line centred on the walk (the walk is shorter) (3 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 10164894590, 2 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "sidewalk=right on the road (one side only)"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "10 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access"
+    ],
+    "description": "Entrance from service road",
+    "reason": "Step-free path, lowered curb, sidewalk, quiet road, short walk, steep slope (max 6.5%); unknown: wheelchair access"
+   },
+   {
+    "id": "0d733fbf",
+    "rank": 3,
+    "score": 71.2,
+    "stop": {
+     "latitude": 25.6855175,
+     "longitude": -80.3372848
+    },
+    "entrance": {
+     "latitude": 25.6851299,
+     "longitude": -80.3372893
+    },
+    "heading_to_entrance_deg": 180.6,
+    "entrance_osm_id": 10164894593,
+    "entrance_kind": "yes",
+    "road_osm_id": 1340661483,
+    "road_class": "unclassified",
+    "road_name": "Southwest 88th Avenue",
+    "walk_m": 51.5,
+    "walk_kind": "step-free path",
+    "walk_polyline": "ouw{C~ziiN??F?@@@C@A@ABAH?FA@?H?ZA?L??",
+    "slope": {
+     "max_grade_pct": 4.4,
+     "avg_grade_pct": 1.7,
+     "climb_m": 0.98,
+     "length_m": 49.4,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894593 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 4.4% / avg 1.7% over 49.4 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 10164894523, 4 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1110957430) 0 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.8,
+      "used": 0.8,
+      "weight": 2.0,
+      "evidence": "highway=unclassified (Southwest 88th Avenue)"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.55,
+      "used": 0.55,
+      "weight": 2.0,
+      "evidence": "52 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access"
+    ],
+    "description": "Entrance from Southwest 88th Avenue",
+    "reason": "Gentle slope (max 4.4%), step-free path, lowered curb, sidewalk, quiet road; unknown: wheelchair access"
+   },
+   {
+    "id": "f96d0072",
+    "rank": 4,
+    "score": 70.1,
+    "stop": {
+     "latitude": 25.6856665,
+     "longitude": -80.3378078
+    },
+    "entrance": {
+     "latitude": 25.6861051,
+     "longitude": -80.337618
+    },
+    "heading_to_entrance_deg": 21.3,
+    "entrance_osm_id": 10164894714,
+    "entrance_kind": "yes",
+    "road_osm_id": 1110957428,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 75.2,
+    "walk_kind": "step-free path",
+    "walk_polyline": "mvw{Ch~iiN@JE?M@?A?K?M??ACAACA?AA?KAKAAAC?C?ACECCAC?C?E@??",
+    "slope": {
+     "max_grade_pct": 3.5,
+     "avg_grade_pct": 1.3,
+     "climb_m": 0.8,
+     "length_m": 70.9,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894714 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 3.5% / avg 1.3% over 70.9 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "kerb=lowered on OSM node 10164894478, 12 m away"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1110957427) 7 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.26,
+      "used": 0.26,
+      "weight": 2.0,
+      "evidence": "75 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access"
+    ],
+    "description": "Entrance, Miami Cancer Institute from service road",
+    "reason": "Gentle slope (max 3.5%), step-free path, lowered curb, sidewalk, quiet road, long walk; unknown: wheelchair access"
+   },
+   {
+    "id": "4c8cbbba",
+    "rank": 5,
+    "score": 63.6,
+    "stop": {
+     "latitude": 25.6861004,
+     "longitude": -80.3378206
+    },
+    "entrance": {
+     "latitude": 25.6861051,
+     "longitude": -80.337618
+    },
+    "heading_to_entrance_deg": 88.5,
+    "entrance_osm_id": 10164894714,
+    "entrance_kind": "yes",
+    "road_osm_id": 1551178730,
+    "road_class": "unclassified",
+    "road_name": "Southwest 88th Avenue",
+    "walk_m": 44.4,
+    "walk_kind": "step-free path",
+    "walk_polyline": "cyw{Cj~iiNPM@?DC@C@C@EC?C?ACECCAC?C?E@??",
+    "slope": {
+     "max_grade_pct": 3.5,
+     "avg_grade_pct": 1.5,
+     "climb_m": 0.73,
+     "length_m": 43.9,
+     "samples": 10,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894714 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 3.5% / avg 1.5% over 43.9 m of the walk (10 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1110957470) 6 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 0.8,
+      "used": 0.8,
+      "weight": 2.0,
+      "evidence": "highway=unclassified (Southwest 88th Avenue)"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.64,
+      "used": 0.64,
+      "weight": 2.0,
+      "evidence": "44 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access",
+     "curb"
+    ],
+    "description": "Entrance, Miami Cancer Institute from Southwest 88th Avenue",
+    "reason": "Gentle slope (max 3.5%), step-free path, sidewalk, quiet road; unknown: wheelchair access, curb"
+   },
+   {
+    "id": "2127ef50",
+    "rank": 6,
+    "score": 62.4,
+    "stop": {
+     "latitude": 25.6853632,
+     "longitude": -80.3374752
+    },
+    "entrance": {
+     "latitude": 25.6851299,
+     "longitude": -80.3372893
+    },
+    "heading_to_entrance_deg": 144.3,
+    "entrance_osm_id": 10164894593,
+    "entrance_kind": "yes",
+    "road_osm_id": 1110957415,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 56.2,
+    "walk_kind": "step-free path",
+    "walk_polyline": "otw{Cf|iiNHAAE?i@H?ZA?L??",
+    "slope": {
+     "max_grade_pct": 4.1,
+     "avg_grade_pct": 2.0,
+     "climb_m": 1.12,
+     "length_m": 53.4,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894593 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 4.1% / avg 2.0% over 53.4 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "sidewalk=right on the road (one side only)"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.49,
+      "used": 0.49,
+      "weight": 2.0,
+      "evidence": "56 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access",
+     "curb"
+    ],
+    "description": "Entrance from service road",
+    "reason": "Gentle slope (max 4.1%), step-free path, sidewalk, quiet road; unknown: wheelchair access, curb"
+   },
+   {
+    "id": "4ef688e2",
+    "rank": 7,
+    "score": 56.9,
+    "stop": {
+     "latitude": 25.6848064,
+     "longitude": -80.3371824
+    },
+    "entrance": {
+     "latitude": 25.6851299,
+     "longitude": -80.3372893
+    },
+    "heading_to_entrance_deg": 343.4,
+    "entrance_osm_id": 10164894593,
+    "entrance_kind": "yes",
+    "road_osm_id": 1110957449,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 68.0,
+    "walk_kind": "step-free path",
+    "walk_polyline": "aqw{CjziiN?UG?y@@?@?B?D?D@B?B?@?L??",
+    "slope": {
+     "max_grade_pct": 5.6,
+     "avg_grade_pct": 2.4,
+     "climb_m": 1.02,
+     "length_m": 65.4,
+     "samples": 12,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894593 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.4,
+      "used": 0.4,
+      "weight": 3.0,
+      "evidence": "max 5.6% / avg 2.4% over 65.4 m of the walk (12 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "step-free path on mapped footways"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 1.0,
+      "evidence": "mapped footway (OSM way 1110957429) 3 m from the stopping point"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.35,
+      "used": 0.35,
+      "weight": 2.0,
+      "evidence": "68 m along mapped footways"
+     }
+    ],
+    "unknown": [
+     "wheelchair access",
+     "curb"
+    ],
+    "description": "Entrance from service road",
+    "reason": "Step-free path, sidewalk, quiet road, steep slope (max 5.6%), long walk; unknown: wheelchair access, curb"
+   },
+   {
+    "id": "bed16dee",
+    "rank": 8,
+    "score": 52.5,
+    "stop": {
+     "latitude": 25.6859397,
+     "longitude": -80.3380568
+    },
+    "entrance": {
+     "latitude": 25.6861051,
+     "longitude": -80.337618
+    },
+    "heading_to_entrance_deg": 67.3,
+    "entrance_osm_id": 10164894714,
+    "entrance_kind": "yes",
+    "road_osm_id": 1469714706,
+    "road_class": "service",
+    "road_name": null,
+    "walk_m": 47.7,
+    "walk_kind": "straight line",
+    "walk_polyline": "cxw{Cz_jiNa@wA",
+    "slope": {
+     "max_grade_pct": 4.1,
+     "avg_grade_pct": 1.6,
+     "climb_m": 0.91,
+     "length_m": 47.7,
+     "samples": 11,
+     "source": "USGS 3DEP 1 m (EPQS)",
+     "resolution_m": 1.0
+    },
+    "factors": [
+     {
+      "name": "entrance_access",
+      "label": "wheelchair access",
+      "value": null,
+      "used": 0.3,
+      "weight": 3.0,
+      "evidence": "OSM node 10164894714 has no wheelchair tag"
+     },
+     {
+      "name": "entrance_type",
+      "label": "entrance type",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 1.0,
+      "evidence": "entrance=yes"
+     },
+     {
+      "name": "slope",
+      "label": "slope",
+      "value": 0.7,
+      "used": 0.7,
+      "weight": 3.0,
+      "evidence": "max 4.1% / avg 1.6% over 47.7 m of the walk (11 samples, USGS 3DEP 1 m (EPQS))"
+     },
+     {
+      "name": "steps",
+      "label": "steps/ramp",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no mapped footpath connects the stop and the entrance, and no steps or ramps are mapped near the straight line (absence in OSM is not proof)"
+     },
+     {
+      "name": "kerb",
+      "label": "curb",
+      "value": null,
+      "used": 0.3,
+      "weight": 2.0,
+      "evidence": "no kerb mapped within 20 m"
+     },
+     {
+      "name": "sidewalk",
+      "label": "sidewalk",
+      "value": null,
+      "used": 0.3,
+      "weight": 1.0,
+      "evidence": "road has no sidewalk tag and no footway is mapped nearby"
+     },
+     {
+      "name": "road",
+      "label": "road",
+      "value": 1.0,
+      "used": 1.0,
+      "weight": 2.0,
+      "evidence": "highway=service"
+     },
+     {
+      "name": "walk",
+      "label": "walk",
+      "value": 0.6,
+      "used": 0.6,
+      "weight": 2.0,
+      "evidence": "48 m straight line (no mapped footpath connects)"
+     }
+    ],
+    "unknown": [
+     "wheelchair access",
+     "steps/ramp",
+     "curb",
+     "sidewalk"
+    ],
+    "description": "Entrance, Miami Cancer Institute from service road",
+    "reason": "Gentle slope (max 4.1%), quiet road; unknown: wheelchair access, steps/ramp, curb, sidewalk"
+   }
+  ],
+  "request": {
+   "request_id": "dropoff-447c5701",
+   "point": {
+    "latitude": 25.685865,
+    "longitude": -80.3376895
+   },
+   "description": "Entrance, Miami Cancer Institute from unclassified road",
+   "reason": "Gentle slope (max 3.4%), step-free path, lowered curb, sidewalk, quiet road, short walk; unknown: wheelchair access",
+   "fallback_point": {
+    "latitude": 25.6851327,
+    "longitude": -80.337194
+   }
+  },
+  "osm_fetched_at": "2026-09-27T12:58:09+00:00",
+  "notes": []
+ },
+ "ride": {
+  "pickup": "FIU Modesto A. Maidique Campus, 11200 SW 8th St, Miami, FL 33199",
+  "destination": "Miami Cancer Institute (drop-off: Entrance, Miami Cancer Institute from unclassified road)",
+  "pickup_point": {
+   "latitude": 25.7553898,
+   "longitude": -80.3762833
+  },
+  "destination_point": {
+   "latitude": 25.685865,
+   "longitude": -80.3376895
+  },
+  "routes": [
+   {
+    "id": "route-1",
+    "label": "Fastest and smoothest",
+    "duration_s": 1056.1,
+    "distance_m": 11986.9,
+    "summary": "Southwest 107th Avenue, Southwest 88th Street",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??M?I?C?SBU@MBM@KPy@F]HGBGDGDC@AFEFCHCDCB?DMDCDEBGDI@I@G@G?EA_CAqAAgB?c@?KAMAMAKCKAIEMAEEK_@aAa@}@O]GQEICMCMCQCK?MAO@S@M@MFWBOHWHWFQDW@QBQ?Q?QASCQESEOGQIOKQIKKMMIWUJQd@q@^q@J_@BCHSJe@Fa@BS@S@sB@g@@OlDK~@Cj@Cj@C`AGVAlAEzEKlCGfCGtCG`ACFAV?ZOJ?D?j@@B?L?P?V?D?P?`@?l@?f@?N?r@?`@?R?L?dA?bA@H?lC@lA?z@ApC?jA?j@?P?H?R?r@?b@?V?fA?L?n@?T@T?dG@lA?fA@j@?P?F?`A?v@?X?hA?dB?fA?t@?d@@B?P?hA?r@?R?\\?b@?p@?J?X?J?x@?P?F?V?^?J?FAT?xACx@CF?ZARAn@A~ACfAChEIzBEl@Cd@AlBE@?J?f@Ad@An@AfAAlBEhAClBExAC`AC\\AdACh@Ah@AnAAxBGvBEhAEvAAvAErBC~@Cv@AhCGbACbACbAAdACdAC`ACj@A`@AH?ZAR?DAR?TAPH@?lCE|DI~DIvACz@AlCIjFIx@CpCE|BGD?TAZ?\\AlHOtACp@ApBEhCGtACx@CtAAv@Ct@C|ACP?D?PA`@AB?dACP?r@CF?J?VAJ?H?bA?r@AzBCL?V?vBC~CCxCAVAT?jIEpA?H?x@AbAA^?p@?v@AtCEP?z@?|@Ar@A`BAN?N?fAAjAATAV?@?tA?f@Ad@?|@ArAAtB?`@?ZAJ?n@?pAAD?TA^??WAQ?UAmAAiAEsB?_AGuDCiB?WCiCCcAAoAC{CG{DC_DAs@AkACgAAc@?MAcAAu@EgD?a@AQAuAAk@?G?GAS?c@Ae@A{ACiA?a@AW?WEwC?]?GAo@?UAw@CuBAM?WAc@?YC_B?E?Q?U?YCwBC_AAs@?[CqBAmACiBEoEEsDA_@CiCGyEEyD?_@AS?[C}ACuBGqGAYA_BCoAAeBGqD?GRBH@JDJFHFFHHJBDp@pAJFP\\HHHJFFJFJHNFJBJBV@L?nAAXA?W",
+    "sharp_turns": 8,
+    "climb_m": 8.9,
+    "steepest_grade_pct": 1.6,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 21,
+    "stop_signs": 4,
+    "traffic_calming": 4,
+    "traffic_calming_kinds": {
+     "hump": 4
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 99.7,
+    "bridge_m": 40.0,
+    "comfort_cost": 28.5,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533841,
+       "longitude": -80.3779016
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7536736,
+       "longitude": -80.3704918
+      },
+      "detail": "88° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7529827,
+       "longitude": -80.3682105
+      },
+      "detail": "79° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6868821,
+       "longitude": -80.3659119
+      },
+      "detail": "89° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6878291,
+       "longitude": -80.3366262
+      },
+      "detail": "114° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6859018,
+       "longitude": -80.337815
+      },
+      "detail": "69° left"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533618,
+       "longitude": -80.3775602
+      },
+      "detail": "traffic_calming=hump (OSM node 99208952)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7534028,
+       "longitude": -80.3724227
+      },
+      "detail": "traffic_calming=hump (OSM node 99208963)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.6859866,
+       "longitude": -80.3378174
+      },
+      "detail": "OSM node 1556110295"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533835,
+       "longitude": -80.3729633
+      },
+      "detail": "traffic_calming=hump (OSM node 4176910166)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7531386,
+       "longitude": -80.3696161
+      },
+      "detail": "traffic_calming=hump (OSM node 4777156734)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535565,
+       "longitude": -80.3705955
+      },
+      "detail": "OSM node 4777156739"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7469394,
+       "longitude": -80.367797
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7465457,
+       "longitude": -80.367714
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7395756,
+       "longitude": -80.367735
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7325644,
+       "longitude": -80.367773
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7321457,
+       "longitude": -80.3677639
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7227049,
+       "longitude": -80.3672859
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7156464,
+       "longitude": -80.3669149
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7152772,
+       "longitude": -80.3669506
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7084102,
+       "longitude": -80.3666018
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7022694,
+       "longitude": -80.3662887
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7012538,
+       "longitude": -80.3662318
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6972275,
+       "longitude": -80.3661329
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6904624,
+       "longitude": -80.365985
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6871798,
+       "longitude": -80.365928
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6872612,
+       "longitude": -80.3547767
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6873472,
+       "longitude": -80.3522677
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6873612,
+       "longitude": -80.3518371
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6873963,
+       "longitude": -80.3507813
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6874263,
+       "longitude": -80.3498789
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6874578,
+       "longitude": -80.3488088
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6876863,
+       "longitude": -80.3418978
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   },
+   {
+    "id": "route-2",
+    "label": "Alternative",
+    "duration_s": 1116.6,
+    "distance_m": 12600.0,
+    "summary": "Southwest 40th Street, Southwest 87th Avenue",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??M?I?C?SBU@MBM@KPy@F]HGBGDGDC@AFEFCHCDCB?DMDCDEBGDI@I@G@G?EA_CAqAAgB?c@?KAMAMAKCKAIEMAEEK_@aAa@}@O]GQEICMCMCQCK?MAO@S@M@MFWBOHWHWFQDW@QBQ?Q?QASCQESEOGQIOKQIKKMMIWUJQd@q@^q@J_@BCHSJe@Fa@BS@S@sB@g@@OlDK~@Cj@Cj@C`AGVAlAEzEKlCGfCGtCG`ACFAV?ZOJ?D?j@@B?L?P?V?D?P?`@?l@?f@?N?r@?`@?R?L?dA?bA@H?lC@lA?z@ApC?jA?j@?P?H?R?r@?b@?V?fA?L?n@?T@T?dG@lA?fA@j@?P?F?`A?v@?X?hA?dB?fA?t@?d@@B?P?hA?r@?R?\\?b@?p@?J?X?J?x@?P?F?V?^?A]A_BA{@AyA?]C{CAsAAiBCoCCgEE_FCkDCwC?Y?KAY?S?s@Ai@AyB?OAoAAcAAeAAm@?i@A_@A{AAm@?MAY?I?U?_@Aw@CcFAgA?k@A{@?E?W?YAcAAcAAiA?G?_@Aa@?YCwAA_AAqAA_A?i@Aw@?YA}@As@?_@A}@?m@AQ?m@Ak@AiBAiAAo@?a@?{@Ae@AaBAaAAm@?a@CoB?C?I?[?]AcAAW?iAAeAC_CAaB?g@A{@?EAe@AwB?I?WAw@AeAAW?I?o@AoA?E?WAa@?kAAm@?iA?m@Am@AkB?G?UN?p@C\\Af@A\\?NAx@C~@ALAv@AnAEt@ApAEp@ApACr@CbCGhBEj@AzAEp@AtGOdACjAEl@ClAER?VAVC|BGzEKrBEfAClDGrAC`BErDGt@Ap@An@?z@AvBED?N?XANAv@A^?jAClDIzDIxBEx@AbACj@A^APAvCEbDIp@A|AEtACXAl@AD?`@AnDGf@Cb@AlDGXA~CI|DIzBMn@AnDIzACr@CF?PAX?P?N?Z?b@?NAvAClBC`@AvACtBCtCEz@C`@AhAED?dACpBEJ?tBCn@AH?f@AFAh@???`@Aj@An@ArACp@At@Az@AZAV?x@AjGGp@A~@Ah@A`@AvFKxCEtBCDAR?ZKN@D@P@RBLBLBJBH@HBLDB@HBHDHDNFTLPLTLTPNNLHLLh@f@PNJJLLJHLJJHD@HFJFJFNHRHJDLFPFJDFBERCBABA@CBCBCBC@C@C?A@C?G?g@?M@a@@B|A?TF~C?T?P?B?N?DAHAHADAFGJCFADAF?D?F?@",
+    "sharp_turns": 9,
+    "climb_m": 17.1,
+    "steepest_grade_pct": 13.1,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 20,
+    "stop_signs": 4,
+    "traffic_calming": 6,
+    "traffic_calming_kinds": {
+     "hump": 4,
+     "bump": 2
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 99.7,
+    "bridge_m": 30.0,
+    "comfort_cost": 35.81,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533841,
+       "longitude": -80.3779016
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7536736,
+       "longitude": -80.3704918
+      },
+      "detail": "88° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7529827,
+       "longitude": -80.3682105
+      },
+      "detail": "79° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7322501,
+       "longitude": -80.3677663
+      },
+      "detail": "90° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.732997,
+       "longitude": -80.3358895
+      },
+      "detail": "85° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6851615,
+       "longitude": -80.3354434
+      },
+      "detail": "150° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6858017,
+       "longitude": -80.335564
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533618,
+       "longitude": -80.3775602
+      },
+      "detail": "traffic_calming=hump (OSM node 99208952)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7534028,
+       "longitude": -80.3724227
+      },
+      "detail": "traffic_calming=hump (OSM node 99208963)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7533835,
+       "longitude": -80.3729633
+      },
+      "detail": "traffic_calming=hump (OSM node 4176910166)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7531386,
+       "longitude": -80.3696161
+      },
+      "detail": "traffic_calming=hump (OSM node 4777156734)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535565,
+       "longitude": -80.3705955
+      },
+      "detail": "OSM node 4777156739"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.685864,
+       "longitude": -80.337645
+      },
+      "detail": "OSM node 6073935494"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6857412,
+       "longitude": -80.33724
+      },
+      "detail": "traffic_calming=bump (OSM node 10164894471)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.6857408,
+       "longitude": -80.3370543
+      },
+      "detail": "traffic_calming=bump (OSM node 10164894539)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7469394,
+       "longitude": -80.367797
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7465457,
+       "longitude": -80.367714
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7395756,
+       "longitude": -80.367735
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7325644,
+       "longitude": -80.367773
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.732442,
+       "longitude": -80.3599129
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7325461,
+       "longitude": -80.3558873
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.732599,
+       "longitude": -80.3532708
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.73263,
+       "longitude": -80.3519373
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7328351,
+       "longitude": -80.3439216
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.733006,
+       "longitude": -80.3360337
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7240538,
+       "longitude": -80.3353546
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7169227,
+       "longitude": -80.3350036
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7123509,
+       "longitude": -80.3347676
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7068399,
+       "longitude": -80.3344765
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7024966,
+       "longitude": -80.3342014
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6960484,
+       "longitude": -80.3339172
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6955473,
+       "longitude": -80.3338966
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6935358,
+       "longitude": -80.3338096
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6882317,
+       "longitude": -80.3336049
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6878512,
+       "longitude": -80.3335596
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   }
+  ],
+  "fastest_id": "route-1",
+  "smoothest_id": "route-1",
+  "tiles": [
+   {
+    "route_id": "route-1",
+    "kind": "fastest_and_smoothest",
+    "label": "Fastest and smoothest, 18 min",
+    "detail": "8 sharp turns, 21 traffic lights, 4 stop signs, 4 speed bumps",
+    "ride_profile": {
+     "route_preference": "ROUTE_PREFERENCE_SMOOTHEST",
+     "uses_wheelchair": true,
+     "needs_extra_boarding_time": true
+    }
+   },
+   {
+    "route_id": "route-2",
+    "kind": "alternative",
+    "label": "Via Southwest 87th Avenue, 19 min",
+    "detail": "1 fewer traffic light, but 2 more speed bumps, 1 more sharp turn, 8.2 m more climbing",
+    "ride_profile": null
+   }
+  ],
+  "osm_fetched_at": "2026-09-27T13:05:26+00:00",
+  "notes": []
+ },
+ "notes": []
+}

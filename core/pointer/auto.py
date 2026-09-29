@@ -16,7 +16,8 @@ from __future__ import annotations
 import logging
 
 from core.clock import Scheduler, TimerHandle
-from core.contracts import ActivePointer, Point, Settings
+from core.contracts import ActivePointer, Point, PointSource, Settings
+from collections.abc import Collection
 from core.pointer.base import OnHighlight, OnSource, Pointer
 from core.pointer.scan import DEFAULT_SCAN_MS, ScanPointer
 from core.pointer.webcam import WebcamPointer
@@ -34,12 +35,13 @@ class AutoPointer(Pointer):
         scan_ms: int = DEFAULT_SCAN_MS,
         on_source: OnSource | None = None,
         face_lost_s: float = FACE_LOST_S,
+        accepts: Collection[PointSource] = ("webcam", "gaze"),
     ) -> None:
         super().__init__(on_highlight, on_source)
         self._scheduler = scheduler
         self.face_lost_s = face_lost_s
         self._scan = ScanPointer(scheduler, on_highlight, scan_ms)
-        self._webcam = WebcamPointer(on_highlight, accepts=("webcam", "gaze"))
+        self._webcam = WebcamPointer(on_highlight, accepts=accepts)
         self._active: Pointer = self._scan
         self.source = "scan"
         self._face = False

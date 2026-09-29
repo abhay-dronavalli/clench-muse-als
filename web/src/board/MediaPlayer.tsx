@@ -51,7 +51,7 @@ function loadSpotifyApi(): Promise<SpotifyIFrameAPI> {
 }
 
 /** A YouTube embed command, for the iframe's postMessage (enablejsapi=1). */
-export function youtubeCommand(func: string, args: unknown[] = []): string {
+function youtubeCommand(func: string, args: unknown[] = []): string {
   return JSON.stringify({ event: 'command', func, args })
 }
 
@@ -130,7 +130,7 @@ export function MediaPlayer({ media, command }: { media: NowPlaying; command: { 
 }
 
 /** The player's control tiles: one big row, measured by pointing like any tiles (data-tile-index). */
-export function ControlRow({ screen }: { screen: Screen }) {
+export function ControlRow({ screen, onTap }: { screen: Screen; onTap?: (tile: number) => void }) {
   return (
     <div className="grid h-56 shrink-0 gap-6 px-8 pb-10 pt-4" style={{ gridTemplateColumns: `repeat(${screen.tiles.length}, minmax(0, 1fr))` }}>
       {screen.tiles.map((tile, i) => {
@@ -140,7 +140,10 @@ export function ControlRow({ screen }: { screen: Screen }) {
             key={tile.id}
             data-tile-index={i}
             aria-current={on}
+            // A touch or click picks this control (TAP), like the menu tiles.
+            onClick={onTap ? () => onTap(i) : undefined}
             className={[
+              onTap ? 'cursor-pointer select-none' : '',
               'flex items-center justify-center rounded-3xl p-4 text-center text-5xl font-bold transition-transform duration-150',
               on ? 'scale-105 bg-yellow-300 text-zinc-900 ring-8 ring-yellow-100' : 'bg-zinc-800 text-white ring-2 ring-zinc-600',
             ].join(' ')}

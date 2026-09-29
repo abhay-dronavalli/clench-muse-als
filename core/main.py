@@ -5,6 +5,7 @@ Run:  uv run uvicorn core.main:app --reload --port 8000
   /ws/board    patient board: READY, RESET, AUDIO_DONE, POINT, FACE_OK in; SETTINGS, SCREEN, CONFIRM, SPEAK,
                PLAY_AUDIO, ACTION_RESULT out
   /ws/console  caregiver console: SETTINGS in; SETTINGS plus a mirror of what the board gets out
+  /ws/car-sim  the car simulator page (/car-sim): CAR_SIM in; CAR_STATE, CAR_RESULT, CAR_LOG out (core/car)
   /ws/input    sensor service or web dev panel: CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL,
                POINT, SETTINGS, RESET in; SETTINGS out
 
@@ -38,9 +39,12 @@ from core.actions import build_registry
 from core.clock import AsyncioScheduler, Scheduler
 from core.computer.service import Computer
 from core.config import dry_run_enabled, load_env, prewarm_enabled
-from core.contracts import (Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
+from core.contracts import (CarSim, Clench, DoubleBlink, FaceOk, HeadRange, InputEvent, Lang, LongClench,
                             Message, Ready, Signal, Settings, parse_message)
 from core.db import DB_PATH, Db
+from core.car.mock import MockCar
+from core.geo.api import build_geo_router
+from core.geo.trip import load_trip
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
@@ -59,16 +63,22 @@ log = logging.getLogger("clench.core")
 
 # Which message types each route accepts. Anything else is logged and ignored.
 ACCEPTS: dict[Role, frozenset[str]] = {
-    "board": frozenset({"READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK", "COMPUTER_POINT", "COMPUTER_TELEMETRY"}),
+    # SETTINGS: the trip screen's layout switch (Car / Split / Map) sits on the board.
+    "board": frozenset({
+        "READY", "RESET", "AUDIO_DONE", "POINT", "FACE_OK", "TAP", "SETTINGS",
+        "COMPUTER_POINT", "COMPUTER_TELEMETRY",
+    }),
     "console": frozenset({"SETTINGS"}),
     "input": frozenset({"CLENCH", "DOUBLE_BLINK", "LONG_CLENCH", "STATE", "SIGNAL", "POINT", "SETTINGS", "RESET"}),
     "sensor": frozenset({'CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK', 'SIGNAL'}),
+    "carsim": frozenset({"CAR_SIM", "READY"}),
 }
 
 # How long the headband may be missing before Muse input is paused. A Bluetooth reconnect takes a
 # few seconds and the command gate below already refuses anything that arrives meanwhile, so pausing
 # on the first dropped sample only flapped the switch between Paused and Ready every few seconds.
 MUSE_LOSS_GRACE_S = 10.0
+CAR_LATENCY_S = 0.12  # the mock car's simulated round trip (a real link over the network)
 GESTURES = ('CLENCH', 'LONG_CLENCH', 'DOUBLE_BLINK')
 
 
@@ -178,11 +188,20 @@ def create_app(
         app.state.suggester = suggester
         ranker_jev, jev_off = (jev, "") if jev is not None else build_jev(env)
         app.state.jev = ranker_jev
+        sched = scheduler or AsyncioScheduler()
+        geo_trip = load_trip()
+        # The car (core/car): the in-process mock, with a simulated round trip. /car-sim plays its side.
+        car = MockCar(sched, latency_s=CAR_LATENCY_S,
+                      routes={t.route_id: t.label for t in geo_trip.ride.tiles} if geo_trip and geo_trip.ride else {})
+        car.on_log(hub.broadcast)
+        app.state.car = car
         session = Session(
             menu,
             hub.broadcast,
-            scheduler or AsyncioScheduler(),
+            sched,
             profile=profile,
+            car_link=car,
+            geo_trip=geo_trip,
             actions=build_registry(voice, env, dry_run=dry_run),
             voice=voice,
             suggester=suggester,
@@ -193,6 +212,7 @@ def create_app(
             computer_factory=partial(Computer, start_url=env.get("COMPUTER_START_URL", "http://127.0.0.1:8000/computer/start")),
         )
         app.state.session = session
+        session.input_connected = lambda: hub.count("board") > 0
         session.start()
         log.info("core ready: scanning home, %d ms per tile, lang %s, patient %s", scan_ms, session.lang, profile.name)
         if dry_run:
@@ -220,6 +240,8 @@ def create_app(
         db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
+    # /api/geo/*: trip planning from public map data; /api/geo/trip serves the Core's current trip
+    app.include_router(build_geo_router(env, current=lambda: app.state.session.geo_trip if hasattr(app.state, "session") else None))
     app.state.hub = hub
     app.state.sensor_signal = Signal(t=time.time(), ch=[], connected=False, blocked='Muse service not connected')
     app.state.sensor_seen = 0.0
@@ -278,6 +300,12 @@ def create_app(
                         if reason is not None:
                             log.info('Muse %s suppressed: %s', msg.type, reason)
                             continue
+                    if role == "carsim":
+                        if isinstance(msg, CarSim):
+                            car_sim(app.state.car, msg, session)
+                        else:  # READY: the car's state now
+                            hub.send_to(client, app.state.car.state())
+                        continue
                     if role == 'input' and msg.type in GESTURES:
                         hub.broadcast(input_event(msg, 'dev', None))
                     if isinstance(msg, Ready):
@@ -286,6 +314,8 @@ def create_app(
                             hub.send_to(client, view)
                         if session.computer.active:
                             hub.send_to(client, session.computer.view())
+                        if session.trip:
+                            hub.send_to(client, session.car.message())  # the trip screen's telemetry
                     else:
                         session.handle(msg)
                 except Exception:
@@ -300,8 +330,8 @@ def create_app(
                     profile=app.state.sensor_signal.profile, blocked='Muse service disconnected')
                 hub.broadcast(app.state.sensor_signal)
                 session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
-            if role == 'board' and hub.count('board') == 0 and session.muse_enabled:
-                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False)))
+            if role == 'board' and hub.count('board') == 0 and (session.muse_enabled or session.onboarding):
+                session.handle(Settings(**dict(session.settings().model_dump(), muse_enabled=False, onboarding=False)))
             if role == "board" and hub.count("board") == 0 and session.face_ok:
                 log.info("last board disconnected: no webcam face any more")
                 session.handle(FaceOk(ok=False))
@@ -317,6 +347,10 @@ def create_app(
     @app.websocket("/ws/input")
     async def ws_input(ws: WebSocket) -> None:
         await serve(ws, "input")
+
+    @app.websocket("/ws/car-sim")
+    async def ws_car_sim(ws: WebSocket) -> None:
+        await serve(ws, "carsim")
 
     @app.websocket('/ws/sensor')
     async def ws_sensor(ws: WebSocket) -> None:
@@ -407,6 +441,21 @@ def create_app(
         }
 
     return app
+
+
+def car_sim(car: MockCar, msg: CarSim, session: Session) -> None:
+    """/car-sim plays the car's side: ask the rider a Support question, change the situation, or plan
+    a trip to an address a caregiver typed."""
+    if msg.command == "plan" and msg.text:
+        session.plan_trip(msg.text.strip(), msg.text.strip())
+    elif msg.command == "start_ride":
+        session.car_start_ride()
+    elif msg.command == "end_ride":
+        session.car_end_ride()
+    elif msg.command == "ask" and msg.text:
+        car.ask(msg.text, msg.options, msg.timeout_s, msg.urgent)
+    elif msg.command == "set":
+        car.set_situation(on_highway=msg.on_highway, phase=msg.phase)
 
 
 def contact_names(menu: Menu) -> dict[Lang, tuple[str, ...]]:

@@ -107,7 +107,7 @@ The core loads `data/menu.yaml`, `data/contacts.yaml`, and `data/profile.yaml` a
 to start on a bad file. A menu level holds at most 5 items; the core adds "Other..." as the sixth
 tile on every level. `--reload` only watches `.py` files; restart the core after editing the YAML.
 Every pick, confirmed send, cancelled confirm, and help alert is written to `data/clench.db` (delete
-the file to start fresh). The board starts in the profile's language (English; switch with EN/ES in the dev panel).
+the file to start fresh). The board starts in the profile's language (English; `lang` in `data/profile.yaml`, EN/ES switchable live).
 
 Without internet at `npm ci` time, run `npm --prefix web run assets` later; until then the board
 says face tracking could not start and Auto scans.

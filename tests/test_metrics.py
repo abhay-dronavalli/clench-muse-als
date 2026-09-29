@@ -139,13 +139,13 @@ def test_mistakes_and_waiting_count(menu, profile, db):
     s, sent, _ = make(menu, profile, db, learning=False)
     pick(s, sent, "I need")  # wrong branch
     go_back(s)
-    s._scheduler.advance(6 * SCAN_S)  # a full lap missed
+    s._scheduler.advance(7 * SCAN_S)  # a full lap missed (six tiles and the Car mode corner)
     pick(s, sent, "People")
     for tile in ["Maria", "Text"]:
         pick(s, sent, tile)
     confirm(s)
     (m,) = metrics(sent)
-    assert m.selections == 5 and m.scan_steps == 1 + 6 + 2 + 0 + 1
+    assert m.selections == 5 and m.scan_steps == 1 + 7 + 2 + 0 + 1
     assert (m.day1_selections, m.day1_scan_steps) == (4, 3)
 
 

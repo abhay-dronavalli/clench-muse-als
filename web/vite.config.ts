@@ -21,8 +21,8 @@ const isolation = {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // The repo's .env (next to core/). Vite only hands VITE_* names to the page (VITE_EYEDID_WEB_KEY);
-  // the Core's secrets in the same file never reach the browser.
+  // One .env for the whole repository: the page gets only the VITE_-prefixed values (the Google Maps
+  // key, the trip's origin and destination, VITE_EYEDID_WEB_KEY), never the Core's secrets.
   envDir: '..',
   preview: { headers: isolation },
   server: {

@@ -10,6 +10,7 @@ coroutines = "1.9.0"
 eyedid = "1.0.0-beta5"
 junit = "4.13.2"
 okhttp = "4.12.0"
+sceneview = "2.3.0"
 json = "20240303"
 
 [libraries]
@@ -30,6 +31,7 @@ coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutin
 eyedid-gazetracker = { group = "camp.visual.eyedid.android.gazetracker", name = "eyedid-gazetracker", version.ref = "eyedid" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+sceneview = { group = "io.github.sceneview", name = "sceneview", version.ref = "sceneview" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]

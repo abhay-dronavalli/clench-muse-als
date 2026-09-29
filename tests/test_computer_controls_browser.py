@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from playwright.async_api import async_playwright
 
 from core.computer.browser import Browser
-from core.contracts import Clench, Point, Settings
+from core.contracts import Clench, FaceOk, Point, Settings
 from core.main import create_app
 from tests.test_computer_browser import until
 
@@ -42,14 +42,25 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
                 board_browser=await pw.chromium.launch(headless=True)
                 board=await board_browser.new_page()
                 await board.goto("http://127.0.0.1:8001")
-                await board.get_by_role("button",name="Clench Click to start Turns on speech. Haga clic para empezar.").click()
+                await board.get_by_role("button",name="Start",exact=True).click()
+                # The onboarding opens after Start and owns input: skip each step (no eyes, no headband).
+                for label in ("Begin","Skip for now","Continue without the headband","Go"):
+                    await board.get_by_role("button",name=label,exact=True).click()
+                await until(lambda: not session.onboarding)
+                session.handle(Settings(pointing_mode="gaze",scan_ms=500,speak_picks=False))  # setup ends in Auto
                 await until(lambda: app.state.session.current_view().screen=="menu")
                 await asyncio.sleep(.2)
-                screen=session.current_view()
-                index=next(i for i,tile in enumerate(screen.tiles) if tile.id=="computer")
-                session.handle(Point(source="gaze",tile=index,seq=screen.seq,t=time.time()))
-                await asyncio.sleep(.3)
-                session.handle(Clench(t=time.time(),strength=1))
+                # Home > Computer > Web browser (Computer also offers YouTube and Spotify).
+                for tile_id in ("computer","computer.browser"):
+                    await until(lambda: any(t.id==tile_id for t in session.current_view().tiles))
+                    screen=session.current_view()
+                    index=next(i for i,tile in enumerate(screen.tiles) if tile.id==tile_id)
+                    # Gaze scans until the eyes are seen; the headless board (no camera) may report
+                    # them lost, so say they are seen again before each pick.
+                    session.handle(FaceOk(ok=True))
+                    session.handle(Point(source="gaze",tile=index,seq=screen.seq,t=time.time()))
+                    await asyncio.sleep(.5)  # past the clench look-back and the 300 ms clench debounce
+                    session.handle(Clench(t=time.time(),strength=1))
                 await until(lambda: c.ready and bool(c.rects))
                 page=c.browser.page
                 await page.set_viewport_size({"width":1000,"height":700})
@@ -80,7 +91,11 @@ def test_board_gaze_reaches_chromium_and_backtick_panel(tmp_path):
                 youtube=next(t for t in c.selection.bands[c.selection.band] if t.label=="YouTube")
                 await gaze_at(youtube.id)
                 await page.keyboard.press("Space")
-                await page.wait_for_function("window.picked===true")
+                # Poll with evaluate (CDP): wait_for_function's string predicate needs eval, which the
+                # page's Trusted Types CSP forbids.
+                async with asyncio.timeout(10):
+                    while await page.evaluate("window.picked") is not True:
+                        await asyncio.sleep(.05)
                 assert c.pointer.source=="gaze"
 
                 # Trusted keyboard toggles the actual isolated-world Dev panel.

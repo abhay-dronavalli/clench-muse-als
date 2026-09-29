@@ -178,13 +178,14 @@ export function usePointing({ mode, started, connected, screen, send, range, pau
         stopDwell()
         return
       }
+      const expected = screen ? screen.tiles.length + (screen.corner ? 1 : 0) : 0 // the corner button is the last index
       if (paused || face.reported !== true || !screen || screen.tiles.length === 0) {
         cursor.set(s.point)
         stopDwell()
         return
       }
       const rects = measureTiles()
-      if (rects.length !== screen.tiles.length) return // the new tiles are not drawn yet
+      if (rects.length !== expected) return // the new tiles are not drawn yet
       const step = p.update(s.point, s.t, rects)
       cursor.set(step.point)
       const next = step.tile

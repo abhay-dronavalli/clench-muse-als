@@ -22,7 +22,7 @@ The web dev server proxies `/ws/*` to the Core, so the browser connects to `ws:/
 
 | Endpoint | Who connects | Accepted messages | Receives |
 |---|---|---|---|
-| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, ACTION_RESULT |
+| `/ws/board` | Patient board | READY, RESET, AUDIO_DONE, POINT, FACE_OK, TAP, SETTINGS (the trip layout switch) | SETTINGS, SCREEN, CONFIRM, SPEAK, PLAY_AUDIO, CLICK, CAR_ACTION, CAR_STATE, ACTION_RESULT |
 | `/ws/console` | Caregiver console | SETTINGS | SETTINGS, METRICS, SHORTCUT_DEBUG and the same Core -> Board messages (mirror) |
 | `/ws/input` | Sensor Service, web dev panel | CLENCH, DOUBLE_BLINK, LONG_CLENCH, STATE, SIGNAL, POINT, SETTINGS and RESET (dev panel) | SETTINGS, METRICS, SHORTCUT_DEBUG |
 
@@ -50,12 +50,15 @@ REST (not WebSocket messages; the web dev server proxies `/api` and `/audio` to 
 | READY | Board | Core | Board connected; Core replies with the current view |
 | RESET | Board ("Click to start"), web dev panel ("Reset to Home") | Core | Back to Home, highlight on the first tile |
 | AUDIO_DONE | Board | Core | A phrase or system line finished (or failed, or was interrupted) |
+| TAP | Board (touch or mouse) | Core | Pick this tile, or confirm the "Say this?" card, like a CLENCH |
 | SETTINGS | Console, web dev panel / Core | Core / every client | Pointing mode, scan speed, language, speak picks, learning; the Core announces the current values |
 | SCREEN | Core | Board, Console | What to draw and which tile is highlighted |
 | CONFIRM | Core | Board, Console | "Send this?" screen before anything is spoken or sent |
 | SPEAK | Core | Board, Console | Say something with browser speech (no cloud audio for it) |
 | PLAY_AUDIO | Core | Board, Console | Play cloud TTS audio (ElevenLabs, cached on the laptop) |
 | CLICK | Core | Board, Console | Play the short soft click for a picked "Other..." (in order with the echoes) |
+| CAR_ACTION | Core | Board, Console | A trip control acts (or Pull over was confirmed): play its animation, input locked meanwhile |
+| CAR_STATE | Core | Board, Console | The mock car's telemetry for the trip screen (speed, arrival, battery, temperature, windows, volume) |
 | ACTION_RESULT | Core | Board, Console | A confirmed message, call or room action succeeded or failed |
 | METRICS | Core | Console, web dev panel | What a confirmed message cost in clenches and scan steps, and what it would have cost in Day 1 mode |
 | SHORTCUT_DEBUG | Core | Console, web dev panel | Why the one-clench Suggested shortcut is on or off, after every Home render |
@@ -219,6 +222,39 @@ matching AUDIO_DONE wins and later ones are ignored.
 {"type": "AUDIO_DONE", "id": "3f9c2a71b0de"}
 ```
 
+### TAP
+
+A touch or mouse press on the board: a caregiver helping, or testing without a headband (the tablet
+has no keyboard for the stand-in). On a tile it picks that tile, exactly as a CLENCH would with that
+tile highlighted (no clench look-back: the finger says which tile). On the "Say this?" sentence it
+confirms, exactly as a CLENCH would; with `cancel` (a Cancel button on that screen, e.g. Pull over's)
+it cancels the confirm screen at once. Everything else about a CLENCH applies (the 300 ms debounce,
+the confirm step: a tap on a tile never speaks or sends).
+
+The Core ignores a TAP whose `seq` is not the current screen's, a tile TAP when the board is not
+scanning, a card TAP when nothing is waiting for confirmation, and any TAP while the go-back prompt
+is open or the help countdown runs (a stray touch can neither answer the prompt nor stop a call for
+help).
+
+| Field | Type | Notes |
+|---|---|---|
+| `tile` | int or null | 0-based tile index on SCREEN `seq`; null = the "Say this?" card |
+| `seq` | int or null | the SCREEN `seq` the tile belongs to; null with a null `tile` (both or neither) |
+| `cancel` | bool | the Cancel button of the confirm screen (tile and seq null); default false |
+| `t` | float | epoch seconds when tapped |
+
+```json
+{"type": "TAP", "tile": 3, "seq": 42, "cancel": false, "t": 1727300011.2}
+```
+
+```json
+{"type": "TAP", "tile": null, "seq": null, "cancel": false, "t": 1727300015.0}
+```
+
+```json
+{"type": "TAP", "tile": null, "seq": null, "cancel": true, "t": 1727300016.0}
+```
+
 ## Console -> Core, and Core -> every client
 
 ### SETTINGS
@@ -239,10 +275,18 @@ included). Screens show these values instead of assuming defaults.
 | `speak_picks` | bool (optional) | say each picked tile aloud as it is picked (an `echo`); omit to keep the current value; default from `data/profile.yaml` (true) |
 | `long_clench_ms` | int (optional) | how long a clench must be held to count as a LONG_CLENCH, 1000 to 5000 ms; omit to keep the current value; default from `data/profile.yaml` (2500). The Sensor Service and the dev panel's hold-Space use it |
 | `tile_switch_margin` | float (optional) | webcam / gaze pointing: how far the point must be inside a new tile before the highlight moves there, as a share of that tile's width / height, 0 to 0.2; omit to keep the current value; default from `data/profile.yaml` (0.05). The board applies it; the dev panel has a slider |
+| `trip` | bool (optional) | trip mode (`core/trip.py`): the board shows the trip screen (car controls, SCREEN `screen: "trip"`) instead of the menus. Session-only, default false; the dev panel's Start trip / End trip. A change while scanning switches at once, on the first tile |
+| `trip_layout` | `"car"` \| `"split"` \| `"map"` (optional) | the trip screen's layout: the 3D car; the route map on the left half with the car and the tiles on the right (the trip menu's top level then shows only Windows, Pull over and Support); or the map above the tiles. Session-only, default `"car"`; the board's Car / Split / Map switch sends it on `/ws/board` |
 | `learning` | bool (optional) | rank by the patient's history (PRD section 9). `false` = "Day 1 mode": menu.yaml order, the fixed Suggested list, no one-clench shortcut, no Jev, no history for the AI. Omit to keep the current value; default from `data/profile.yaml` (true). A change while scanning goes back to home |
+| `onboarding` | bool (optional) | setup owns ordinary input: CLENCH, TAP and DOUBLE_BLINK cannot operate the hidden board. LONG_CLENCH remains available and DOUBLE_BLINK can still cancel help. Default false; cleared when the last board disconnects. Omit to keep it |
+
+`trip_layout` is the preferred layout. While SCREEN `pointer` is `"scan"`, the trip uses the Car
+layout and all six top-level controls, including when the preference is Split or Map. The Core
+expands the actual tile list, preserves the highlighted control by id, and advances `seq` when the
+tiles change. Once pointing resumes, the preferred layout returns at the current menu depth.
 
 ```json
-{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false}
+{"type": "SETTINGS", "pointing_mode": "auto", "scan_ms": 1000, "lang": "es", "speak_picks": true, "learning": true, "long_clench_ms": 2500, "tile_switch_margin": 0.05, "muse_enabled": false, "onboarding": false, "trip": false, "trip_layout": "car"}
 ```
 
 ## Core -> Board
@@ -255,15 +299,15 @@ pointing mode change), and once a second during the help countdown.
 
 | Field | Type | Notes |
 |---|---|---|
-| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"computer"` | `suggestions` = the sentences for a picked leaf; `computer` = managed Chromium is open |
+| `screen` | `"menu"` \| `"suggestions"` \| `"help_countdown"` \| `"paused"` \| `"calibrating"` \| `"trip"` \| `"computer"` \| `"player"` | `suggestions` = the sentences for a picked leaf; `trip` = the trip menu (trip mode): up to 6 tiles, no "Other...", `path` = the trip levels opened (empty at its top); `computer` = managed Chromium is open; `player` = a video or playlist playing on the board, its controls as the tiles (no "Other...") |
 | `seq` | int | >= 0. Goes up every time the tiles change (ids, labels or kinds), not when only the highlight moves. POINT echoes it |
-| `tiles` | `{"id": string, "label": string, "kind": TileKind}[]` | at most 6 (PRD D8), see below |
+| `tiles` | `{"id": string, "label": string, "kind": TileKind, "image"?: string}[]` | at most 6 (PRD D8), see below. `image` (an https URL, at most 500 characters) is only on media tiles (a video thumbnail, a playlist cover); every other tile has no `image` key |
 | `highlight` | int \| null | 0-based index into `tiles`, null = nothing highlighted |
 | `lang` | `"en"` \| `"es"` | |
 | `path` | string[] | breadcrumb labels (current language) from home down to this level; `[]` at home. A step through "Other..." shows as `"Other"` / `"Otro"` |
 | `countdown` | int \| null | optional, >= 0. Seconds left before the help alert fires; only set when `screen` is `"help_countdown"`, null (or absent) otherwise |
 | `loading` | bool | optional, default false. True while the Core waits for AI options after a pick (at most 4 s); scanning is paused and the board shows "Finding options..." / "Buscando opciones..." |
-| `pointer` | `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
+| `pointer` | `"scan"` \| `"webcam"` \| `"gaze"` \| `"headtilt"` \| null | optional. Where the highlight comes from right now; null on the help countdown. `"scan"` while the pointing mode is Auto, Gaze or Head tilt means the fallback is on, and the board shows a small "Scanning" / "Escaneando" badge |
 
 Tiles:
 
@@ -272,6 +316,8 @@ Tiles:
 | `branch` | a menu category | opens the next level (the home "Suggested" opens the AI's sentences for right now, then its fixed phrases) |
 | `leaf` | an option that leads to a sentence, from `data/menu.yaml` or made by the AI | opens the suggestions screen, or the CONFIRM screen with the fixed phrase when there is no AI |
 | `suggestion` | a full sentence; `label` is the exact text | opens the CONFIRM screen with exactly that sentence |
+| `car` | a trip menu level or control, trip screen only (`trip.windows`, `trip.windows.down.front_left`, `trip.temperature.warmer`, ...; the tree is in `core/trip.py`) | a level opens; a routine control acts at once (CAR_ACTION, input locked for its `ms`, same level after); `pull_over` and `support` open the CONFIRM screen |
+| `back` | the trip menu's Back tile, last on every level below the top | up one level |
 | `other` | always the last tile: "Other..." / "Otro..." | the next page of new options for the same path (AI, else the level's fixed `more` list). After 3 pages, or when there is nothing new (or no AI), the next pick loops back to the level's own options |
 
 `id` is the dotted menu path (`need.pain.back`). The Core's own tile ends in `.other`
@@ -281,14 +327,14 @@ suggestions screen keeps its leaf's id. The AI never chooses the action or the c
 takes them from its level, an AI sentence from its leaf.
 
 ```json
-{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam"}
+{"type": "SCREEN", "screen": "menu", "seq": 7, "tiles": [{"id": "need.pain.back.a_little", "label": "Un poco", "kind": "leaf"}, {"id": "need.pain.back.a_lot", "label": "Mucho", "kind": "leaf"}, {"id": "need.pain.back.other", "label": "Otro...", "kind": "other"}], "highlight": 1, "lang": "es", "path": ["Necesito", "Dolor", "Espalda"], "countdown": null, "loading": false, "pointer": "webcam", "prompt": null, "corner": null}
 ```
 
 **Suggestions screen** (PRD section 5 step 6). Up to 3 AI sentences, then the leaf's fixed phrase
 (when the AI did not already write it), then "Other..." (more sentences):
 
 ```json
-{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan"}
+{"type": "SCREEN", "screen": "suggestions", "seq": 12, "tiles": [{"id": "ai:people.maria.text.s1", "label": "Mija, estoy bien. Llámame a las seis.", "kind": "suggestion"}, {"id": "ai:people.maria.text.s2", "label": "Mija, todo bien por aquí. Te quiero.", "kind": "suggestion"}, {"id": "people.maria.text", "label": "Mija, estoy bien, llámame a las seis.", "kind": "suggestion"}, {"id": "people.maria.text.other", "label": "Otro...", "kind": "other"}], "highlight": 0, "lang": "es", "path": ["Personas", "María", "Mensaje"], "countdown": null, "loading": false, "pointer": "scan", "prompt": null, "corner": null}
 ```
 
 **Help countdown** (PRD D3, section 5 step 8). A LONG_CLENCH while scanning or on the confirm
@@ -301,7 +347,7 @@ Core also says "Calling for help. Double blink to cancel." / "Pidiendo ayuda. Pa
 para cancelar." (kind `system`). System lines never change the session state.
 
 ```json
-{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null}
+{"type": "SCREEN", "screen": "help_countdown", "seq": 12, "tiles": [], "highlight": null, "lang": "es", "path": [], "countdown": 5, "loading": false, "pointer": null, "prompt": null, "corner": null}
 ```
 
 **Pointing** (PRD D2, A3.3a). The Core has one pointer slot, set live by SETTINGS `pointing_mode`:
@@ -310,7 +356,7 @@ para cancelar." (kind `system`). System lines never change the session state.
 |---|---|---|
 | `scan` | the Core's scan timer, one tile every `scan_ms` | `"scan"` |
 | `webcam` | the board's POINT messages (head turns); no timer. On new tiles the highlight stays at the same index until the board's POINT for the new `seq` arrives | `"webcam"` |
-| `gaze` | the board's POINT messages from an eye tracker (`docs/eye-tracking.md`); otherwise like `webcam` | `"gaze"` |
+| `gaze` | starts scanning, follows only gaze POINTs once FACE_OK is true; returns to scanning after 3 s without eyes | `"gaze"` or `"scan"` |
 | `auto` | starts scanning; follows the board when FACE_OK is true and a POINT arrives; back to scanning after 3 s without a face. The board sends gaze POINTs while an eye tracker sees the eyes, head (webcam) POINTs otherwise: gaze if available, else head, else scan | `"scan"`, `"gaze"` or `"webcam"` |
 | `headtilt` | not built yet (needs the headband motion data): scans, and logs that it does | `"scan"` |
 
@@ -326,7 +372,7 @@ dev input panel. READY returns this screen and COMPUTER_STATE while Chromium is 
 relays viewport rectangles so the board's existing head/eye tracker can point at browser choices.
 
 ```json
-{"type":"SCREEN","screen":"computer","seq":20,"tiles":[],"highlight":null,"lang":"en","path":[],"countdown":null,"loading":false,"pointer":null}
+{"type":"SCREEN","screen":"computer","seq":20,"tiles":[],"highlight":null,"lang":"en","path":[],"countdown":null,"loading":false,"pointer":null,"prompt":null,"corner":null}
 ```
 
 In computer mode CLENCH selects a band, target or browser-menu item. DOUBLE_BLINK goes from
@@ -343,6 +389,48 @@ Chromium isolated-world binding that accepts only trusted keyboard events and fo
 CLENCH/DOUBLE_BLINK/LONG_CLENCH types to Session.handle. The headband and board dev panel still
 use `/ws/input` unchanged.
 
+### Media on the board: SCREEN player and MEDIA
+
+Home › Computer opens YouTube, Spotify and Web browser (Web browser is computer mode above). The
+YouTube and Spotify levels list videos and playlists from `data/menu.yaml` (`media: {provider, id,
+image?}`); their tiles carry `image`, and their "Other..." pages only through the level's `more`
+list (the AI writes nothing for app or media levels):
+
+```json
+{"type":"SCREEN","screen":"menu","seq":31,"tiles":[{"id":"computer.youtube.lofi","label":"Lofi radio","kind":"branch","image":"https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg"},{"id":"computer.youtube.other","label":"Other...","kind":"other"}],"highlight":0,"lang":"en","path":["Computer","YouTube"],"countdown":null,"loading":false,"pointer":"scan","prompt":null,"corner":null}
+```
+
+Picking a video or playlist sends MEDIA `play` and opens the player screen: the board embeds the
+provider's own player in its page (the person's own logins apply). Nothing is said or sent to
+anyone, so there is no CONFIRM step. The tiles are the controls: Pause (Play when paused), Restart,
+Volume − and Volume + (YouTube only) and Back; no "Other...", no corner button.
+
+```json
+{"type":"SCREEN","screen":"player","seq":32,"tiles":[{"id":"computer.youtube.lofi.player.pause","label":"Pause","kind":"leaf"},{"id":"computer.youtube.lofi.player.restart","label":"Restart","kind":"leaf"},{"id":"computer.youtube.lofi.player.volume_down","label":"Volume −","kind":"leaf"},{"id":"computer.youtube.lofi.player.volume_up","label":"Volume +","kind":"leaf"},{"id":"computer.youtube.lofi.player.back","label":"Back","kind":"leaf"}],"highlight":0,"lang":"en","path":["Computer","YouTube","Lofi radio"],"countdown":null,"loading":false,"pointer":"scan","prompt":null,"corner":null}
+```
+
+MEDIA (Core -> Board) plays or controls it:
+
+| Field | Type | Notes |
+|---|---|---|
+| `action` | `"play"` \| `"pause"` \| `"resume"` \| `"restart"` \| `"volume_down"` \| `"volume_up"` \| `"stop"` | |
+| `provider` | `"youtube"` \| `"spotify"` \| null | `play` only (required there, null otherwise) |
+| `id` | string \| null | `play` only: the video / playlist id, `[A-Za-z0-9_-]{6,40}` |
+| `title` | string \| null | `play` only: what is playing, at most 200 characters |
+
+```json
+{"type":"MEDIA","action":"play","provider":"youtube","id":"jfKfPfyJRdk","title":"Lofi radio"}
+```
+
+```json
+{"type":"MEDIA","action":"pause","provider":null,"id":null,"title":null}
+```
+
+A control tile sends its MEDIA action and a new SCREEN (Pause <-> Play). Back, a double blink
+(up one level), RESET, Home, Car mode or anything else that leaves the player screen sends `stop`.
+A LONG_CLENCH pauses it (`pause`) so the help lines are heard, and the board hides the player
+during the countdown; after a cancel the player screen comes back (the Core marks it paused).
+
 ### CONFIRM (communication board)
 
 The "Send this?" screen. Nothing is spoken or sent until the person clenches here; a
@@ -351,7 +439,7 @@ DOUBLE_BLINK cancels (PRD D5).
 | Field | Type | Notes |
 |---|---|---|
 | `text` | string | the exact sentence that will be spoken or sent |
-| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` | from the action registry |
+| `action` | `"speak"` \| `"send_message"` \| `"place_call"` \| `"room_control"` \| `"help_alert"` \| `"pull_over"` \| `"support"` | from the action registry (`pull_over`: the trip screen's Pull over, "Pull over here?"; `support`: its Support, "Call rider support?") |
 
 ```json
 {"type": "CONFIRM", "text": "Mija, estoy bien, llámame a las seis.", "action": "send_message"}
@@ -468,6 +556,79 @@ away; the same for up and down.
 For example `{"center_yaw": 0.5, "center_pitch": -2.0, "left_yaw": -18.0, "right_yaw": 17.0,
 "up_pitch": 9.0, "down_pitch": -12.0}`.
 
+### CAR_ACTION
+
+A trip control acted (Windows > Up / Down > a window, Temperature > Warmer / Cooler, Music > Louder /
+Softer, Slow down), or Pull over was confirmed. The board plays that control's confirm animation for
+`ms` (the other tiles fade, the picked one stays and grows a little, the tablet's 3D car shows the
+control's line particles; Pull over: the drive eases to a stop and the screen takes a warm tint, no
+particles). For a routine control the Core locks input for the same `ms`: CLENCH, TAP and POINT are
+ignored, the highlight stays put, and the same screen comes back when it ends (so a control can be
+repeated). LONG_CLENCH still starts the help countdown. Pull over's is sent with its confirm, before
+the confirmed sentence is spoken. The controls are mocks: nothing leaves the laptop for a routine one.
+
+| Field | Type | Notes |
+|---|---|---|
+| `action` | `"window_up"` \| `"window_down"` \| `"warmer"` \| `"cooler"` \| `"louder"` \| `"softer"` \| `"slow_down"` \| `"pull_over"` \| `"support"` | which control (`support` is never sent: it only confirms and calls) |
+| `window` | `"front_left"` \| `"front_right"` \| `"rear_left"` \| `"rear_right"` \| `"all"` \| null | which window, for `window_up` / `window_down`; null otherwise |
+| `ms` | int | how long the animation (and, for routine controls, the input lock) lasts, > 0 |
+
+```json
+{"type": "CAR_ACTION", "action": "window_down", "window": "front_left", "ms": 900}
+```
+
+### CAR_STATE
+
+The (mock) car's telemetry for the trip screen's status strip: sent when trip mode starts, after
+every control that changes it, once a minute as the ride goes on (arrival, battery), and to a board
+that connects during a trip. The tablet's 3D scene drives at `speed_mph` (0 after Pull over).
+
+| Field | Type | Notes |
+|---|---|---|
+| `speed_mph` | int | >= 0; Slow down takes 5 off (never below 10), Pull over stops the car |
+| `eta_min` | int | minutes to arrival, >= 0 |
+| `battery_pct` | int | 0 to 100 |
+| `cabin_temp_f` | int | °F, 60 to 85; Warmer / Cooler move it by 1 |
+| `windows` | object | `front_left`, `front_right`, `rear_left`, `rear_right`: % open, 0 (up) to 100 (down), 25 per Up / Down |
+| `volume` | int | music volume 0 to 10; Louder / Softer move it by 1 |
+
+```json
+{"type": "CAR_STATE", "speed_mph": 32, "eta_min": 14, "battery_pct": 78, "cabin_temp_f": 72, "windows": {"front_left": 25, "front_right": 0, "rear_left": 0, "rear_right": 0}, "volume": 4, "phase": "EN_ROUTE", "music_playing": true, "on_highway": false}
+```
+
+### SCREEN: the corner button (Car mode)
+
+On Home the Core adds a corner button outside the six-tile grid, "Car mode" (`corner`, kind `corner`,
+tile index `len(tiles)`). Gaze, head, taps and the scan reach it like any tile; picking it opens the
+confirm screen (`action` `car_mode`, "Start Car mode?"). In Car mode the corner is "Home": it leaves the
+car screen without confirm and without ending the ride; the Car mode button brings the rider back to it.
+
+```json
+{"type": "SCREEN", "screen": "menu", "seq": 3, "tiles": [{"id": "suggested", "label": "Suggested", "kind": "branch"}], "highlight": 1, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "gaze", "prompt": null, "corner": {"id": "corner.car_mode", "label": "Car mode", "kind": "corner"}}
+```
+
+### SCREEN: a Support question
+
+When the car's Support team asks the rider something (core/car, proto `SupportQuestion`), the trip
+screen gives way to `support_question`: the question in `prompt`, its options as `answer` tiles. Picking
+one opens the confirm screen (`action` `support_answer`); nothing is sent before the confirm. With no
+answer before the question's timeout the Core sends `SupportAnswer.no_response`. Help works as usual.
+
+```json
+{"type": "SCREEN", "screen": "support_question", "seq": 40, "tiles": [{"id": "support.q1.yes", "label": "Yes", "kind": "answer"}, {"id": "support.q1.no", "label": "No", "kind": "answer"}, {"id": "support.q1.not_sure", "label": "Not sure", "kind": "answer"}], "highlight": 0, "lang": "en", "path": [], "countdown": null, "loading": false, "pointer": "scan", "prompt": "Support asks: Are you hurt?", "corner": null}
+```
+
+### CAR_RESULT
+
+The car's answer to a trip request (proto `ActionResult`), to boards, consoles and `/car-sim`. Low-safety
+comfort controls (temperature, music, volume, windows) are sent without a confirm screen, as in
+decisions #21; the Core says `message` only when such a control is `DELAYED` or `REJECTED`. For
+confirmed high-safety requests (pull over, Support, drop-off, route) every answer is said.
+
+```json
+{"type": "CAR_RESULT", "request_id": "r-12", "action_id": "pull_over", "status": "DELAYED", "message": "We're on the highway. Pulling over at the next safe spot, in about 2 minutes.", "expected_in_seconds": 120, "rtt_ms": 152}
+```
+
 ### ACTION_RESULT
 
 Sent when a confirmed action that leaves the laptop finishes: `send_message` (Telegram),
@@ -484,6 +645,32 @@ board shows it as a toast for 4 s.
 
 ```json
 {"type": "ACTION_RESULT", "action": "send_message", "ok": true, "detail": "sent", "contact": "María"}
+```
+
+## Core <-> car simulator (`/ws/car-sim`)
+
+`/car-sim` (a page for a second laptop) shows the mock car (core/car) and plays the car's side. It
+receives `CAR_STATE`, `CAR_RESULT` and `CAR_LOG`, and sends `CAR_SIM`.
+
+### CAR_LOG
+
+One request or answer crossing the car link, with the round trip for answers.
+
+```json
+{"type": "CAR_LOG", "t": 1790000000.5, "direction": "to_car", "kind": "ActionRequest", "summary": "pull_over (confirmed, clench)", "request_id": "r-12", "rtt_ms": null}
+```
+
+### CAR_SIM
+
+`ask` sends a Support question to the rider; `set` changes the mock car's situation (on the highway,
+the ride's phase); `plan` plans a trip to the address in `text` (a caregiver typing any destination):
+layers 1 and 2 are computed live, or the demo trip stays after 20 s or a failure. `start_ride` starts
+a ride and shows Car mode on the board (the car's action, not a rider request, so no confirm);
+`end_ride` ends the ride and returns the board to Home. A new ride is `BOARDING` (parked, 0 mph) until
+the rider confirms a route; then `EN_ROUTE`.
+
+```json
+{"type": "CAR_SIM", "command": "ask", "text": "Are you hurt?", "options": ["Yes", "No", "Not sure"], "timeout_s": 30, "urgent": true, "on_highway": null, "phase": null}
 ```
 
 ## Core -> Console and web dev panel

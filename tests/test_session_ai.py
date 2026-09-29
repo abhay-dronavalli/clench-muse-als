@@ -283,7 +283,7 @@ def test_other_loops_back_when_the_ai_has_nothing_new(menu, profile, sched, sent
 def test_prefetch_does_not_block_scanning(session, sched, sent, loop, fake):
     assert loop.jobs  # home asked for Suggested and for "Other..." in the background
     assert fake.calls == []  # ...but nothing has run: the AI is slow
-    for step in [1, 2, 3, 4, 5, 0]:
+    for step in [1, 2, 3, 4, 5, 6, 0]:  # 6 = the Car mode corner, after the grid
         sched.advance(SCAN_S)
         assert last_screen(sent).highlight == step  # the highlight moves on regardless
     pick(session, sched, sent, "I need")

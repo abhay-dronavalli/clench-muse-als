@@ -5,7 +5,7 @@
 // board then points with it exactly as it does with the head: the tile under the point (sticky
 // edges), POINT with source "gaze", FACE_OK from `found`. Nothing here touches a camera.
 //
-//   Gaze mode   follows the gaze only; no fresh gaze = "face lost" (the highlight stays put).
+//   Gaze mode   follows gaze only; no fresh gaze = "face lost" (the Core scans after 3 seconds).
 //   Auto mode   gaze while it is available (fresh, found, confident enough), else the head, else scan.
 
 import type { ScreenPoint } from './pose'

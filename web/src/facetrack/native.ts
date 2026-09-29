@@ -13,6 +13,8 @@
 export interface ClenchNativeBridge {
   /** the shell's eye tracker is running (or starting) and owns the front camera */
   gazeActive(): boolean
+  /** Ready to calibrate (active alone also includes SDK initialization). */
+  gazeReady?(): boolean
   /**
    * The page's pointing mode, or "off" (not started, or a page that does not point). The shell runs
    * its tracker only in camera modes (auto, webcam, gaze) and claims the camera before returning.
@@ -20,6 +22,12 @@ export interface ClenchNativeBridge {
   setPointingMode(mode: string): void
   /** open the shell's calibration screen for this person; it saves the result under that name */
   calibrate(person: string): void
+  /** the page's onboarding is running: the shell skips its own startup calibration prompt */
+  setOnboarding?(on: boolean): void
+  /** Setup-only parked car, camera orbit controlled horizontally by the native gaze. */
+  carPreview?(on: boolean): void
+  /** Stop calibration and remove its targets (including when setup times out). */
+  cancelCalibration?(): void
   /** whose calibration is loaded ("" = none) */
   person(): string
   /** the SDK's own gaze filter (on by default) */
@@ -39,9 +47,18 @@ export interface ClenchNativeBridge {
   /** start or stop the shell's sensor; both answer with museStatus() */
   museConnect?(): string
   museDisconnect?(): string
+  /** show (true) or hide the 3D car the shell draws behind this page (trip screen) */
+  carScene?(on: boolean): void
+  /** play a trip control's effect on the 3D car for `ms` (CAR_ACTION); `window` "" when none */
+  carEffect?(action: string, ms: number, window: string): void
+  /** the car's speed (CAR_STATE): the 3D scene drives at it, 0 = stopped */
+  carSpeed?(mph: number): void
+  /** the trip screen's layout ("car", "split", "map"): the 3D car recentres in the right half for split */
+  carLayout?(mode: string): void
 }
 
 export type NativeEvent =
+  | { type: 'calibration_progress'; progress: number }
   | { type: 'blink'; t: number; left: boolean; right: boolean }
   | { type: 'tracker'; state: 'starting' | 'on' | 'off' | 'error'; detail?: string }
   | {
@@ -108,4 +125,45 @@ export function subscribeNativeGaze(fn: () => void) {
 
 if (typeof window !== 'undefined') {
   window.clenchNativeEvent = (e: NativeEvent) => listeners.forEach((fn) => fn(e))
+}
+
+/** The shell draws the trip screen's 3D car behind the page (the page must be see-through there). */
+export function nativeCarAvailable(): boolean {
+  return typeof nativeBridge()?.carScene === 'function'
+}
+
+/** Show or hide the shell's 3D car. No-op in a normal browser. */
+export function showNativeCar(on: boolean): void {
+  try {
+    nativeBridge()?.carScene?.(on)
+  } catch (e) {
+    console.warn('tablet shell: carScene failed', e)
+  }
+}
+
+/** Play a trip control's effect on the shell's 3D car. No-op in a normal browser. */
+export function playNativeCarEffect(action: string, ms: number, window: string | null = null): void {
+  try {
+    nativeBridge()?.carEffect?.(action, ms, window ?? '')
+  } catch (e) {
+    console.warn('tablet shell: carEffect failed', e)
+  }
+}
+
+/** Tell the shell's 3D scene how fast the car goes. No-op in a normal browser. */
+export function setNativeCarSpeed(mph: number): void {
+  try {
+    nativeBridge()?.carSpeed?.(mph)
+  } catch (e) {
+    console.warn('tablet shell: carSpeed failed', e)
+  }
+}
+
+/** Tell the shell's 3D scene the trip layout (the car moves into the right half for "split"). */
+export function setNativeCarLayout(mode: string): void {
+  try {
+    nativeBridge()?.carLayout?.(mode)
+  } catch (e) {
+    console.warn('tablet shell: carLayout failed', e)
+  }
 }
