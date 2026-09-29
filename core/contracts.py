@@ -20,14 +20,36 @@ PointSource = Literal["webcam", "gaze", "headtilt"]
 ActivePointer = Literal["scan", "webcam", "gaze", "headtilt"]
 BodyStateLevel = Literal["calm", "normal", "elevated"]
 Lang = Literal["en", "es"]
-ScreenName = Literal["menu", "suggestions", "help_countdown", "paused", "calibrating", "computer"]
-ActionName = Literal["speak", "send_message", "place_call", "room_control", "help_alert"]
+# support_question = a question from the car's Support team (core/car): its answer options as tiles.
+# computer = managed Chromium is open (core/computer).
+ScreenName = Literal[
+    "menu", "suggestions", "help_countdown", "paused", "calibrating", "trip", "support_question", "computer",
+]
+# dropoff / route / support_answer: trip requests confirmed on the confirm screen and sent to the car
+# (core/car, proto clench.rider.v1).
+ActionName = Literal[
+    "speak", "send_message", "place_call", "room_control", "help_alert", "pull_over", "support",
+    "dropoff", "route", "support_answer", "car_mode",
+]
 # phrase = a confirmed sentence (the session waits for its AUDIO_DONE); echo = a picked tile's label
 # said as it is picked; system = a fixed line from the Core (help alert). Only phrases change state.
 UtteranceKind = Literal["phrase", "echo", "system"]
 # branch = opens a smaller menu; leaf = an option that leads to a sentence (menu or AI-made);
-# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options).
-TileKind = Literal["branch", "leaf", "suggestion", "other"]
+# suggestion = a full sentence, picking it opens the confirm screen; other = "Other..." (the next page of new options);
+# car = a trip control or a trip menu level (core/trip.py); back = the trip menu's Back tile;
+# answer = an answer option to a Support question; corner = the corner button outside the grid
+# (Car mode on Home, back to Home in Car mode).
+TileKind = Literal["branch", "leaf", "suggestion", "other", "car", "back", "answer", "corner"]
+# How the car answered a request (proto ActionResult.Status).
+CarStatus = Literal["ACCEPTED", "COMPLETED", "DELAYED", "REJECTED"]
+# The ride's phase (proto RideState.Phase, the ones the mock car uses).
+RidePhase = Literal["BOARDING", "EN_ROUTE", "PULLED_OVER", "ARRIVED"]
+# What a trip control does (core/trip.py).
+CarActionName = Literal[
+    "window_up", "window_down", "warmer", "cooler", "louder", "softer", "slow_down", "pull_over", "support"
+]
+WindowName = Literal["front_left", "front_right", "rear_left", "rear_right", "all"]
+TripLayout = Literal["car", "split", "map"]
 
 
 class _Msg(BaseModel):
@@ -166,6 +188,28 @@ class AudioDone(_Msg):
     id: str = Field(min_length=1)  # the SPEAK / PLAY_AUDIO id
 
 
+class Tap(_Msg):
+    """A touch or mouse press on the board (a caregiver, or testing without a headband). On a tile:
+    pick tile `tile` of the SCREEN numbered `seq`, as a CLENCH would with that tile highlighted. On the
+    "Say this?" card (`tile` and `seq` None): confirm, as a CLENCH would; with `cancel`, a Cancel
+    button there: cancel the confirm screen at once. The Core ignores a TAP for an older screen, one
+    while the go-back prompt is open, and one on the help countdown."""
+
+    type: Literal["TAP"] = "TAP"
+    tile: int | None = Field(ge=0)
+    seq: int | None = Field(ge=0)
+    cancel: bool = False
+    t: float
+
+    @model_validator(mode="after")
+    def _card_or_tile(self) -> "Tap":
+        if (self.tile is None) != (self.seq is None):
+            raise ValueError("TAP: tile and seq are both set (a tile) or both null (the confirm card)")
+        if self.cancel and self.tile is not None:
+            raise ValueError("TAP: cancel is for the confirm screen (tile and seq null)")
+        return self
+
+
 # --- Console -> Core, and Core -> every client ----------------------------------
 
 
@@ -186,6 +230,14 @@ class Settings(_Msg):
     # before the highlight moves there, 0 to 0.2. Omit to keep it.
     tile_switch_margin: float | None = Field(default=None, ge=0.0, le=0.2)
     muse_enabled: bool | None = None  # session-only; startup is paused
+    onboarding: bool | None = None  # block ordinary board picks while setup owns input
+    # Trip mode: the board shows the trip screen (car controls) instead of the menus. Session-only;
+    # omit to keep it.
+    trip: bool | None = None
+    # How the trip screen uses the tablet (core/trip.py): the 3D car, the route map beside the car
+    # (the trip menu's top level drops to its three most important controls), or the map alone.
+    # Session-only; omit to keep it.
+    trip_layout: TripLayout | None = None
 
 
 # --- Core -> Board ------------------------------------------------------------
@@ -215,6 +267,12 @@ class Screen(_Msg):
     # Where the highlight comes from right now (None on the help countdown). "scan" in Auto or Head
     # tilt mode means the fallback is on: the board shows a small "Scanning" badge.
     pointer: ActivePointer | None = None
+    # The question on a support_question screen ("Support asks: Are you hurt?"); None elsewhere.
+    prompt: str | None = None
+    # The corner button outside the six-tile grid: "Car mode" on Home, "Home" in Car mode; None
+    # elsewhere. It is tile index len(tiles): the highlight, POINT and TAP use that index for it,
+    # and the scan reaches it last.
+    corner: Tile | None = None
 
 
 class Confirm(_Msg):
@@ -266,6 +324,86 @@ class Click(_Msg):
     board's sound queue in order with the echoes. Only sent when speak picks is on."""
 
     type: Literal["CLICK"] = "CLICK"
+
+
+class CarAction(_Msg):
+    """A trip control was picked (routine) or Pull over was confirmed: the board and the tablet play
+    that control's confirm animation for `ms`. For a routine control the Core ignores clenches, taps
+    and pointing for the same `ms` (LONG_CLENCH still starts the help countdown)."""
+
+    type: Literal["CAR_ACTION"] = "CAR_ACTION"
+    action: CarActionName
+    window: WindowName | None = None  # which window, for window_up / window_down
+    ms: int = Field(gt=0)
+
+
+class WindowsOpen(_Msg):
+    """How far each window is open, 0 (fully up) to 100 (fully down)."""
+
+    front_left: int = Field(ge=0, le=100)
+    front_right: int = Field(ge=0, le=100)
+    rear_left: int = Field(ge=0, le=100)
+    rear_right: int = Field(ge=0, le=100)
+
+
+class CarState(_Msg):
+    """The (mock) car's telemetry for the trip screen: sent when trip mode starts, after every control,
+    and as the ride goes on. The tablet's 3D scene drives at `speed_mph`."""
+
+    type: Literal["CAR_STATE"] = "CAR_STATE"
+    speed_mph: int = Field(ge=0)
+    eta_min: int = Field(ge=0)
+    battery_pct: int = Field(ge=0, le=100)
+    cabin_temp_f: int
+    windows: WindowsOpen
+    volume: int = Field(ge=0, le=10)
+    # From the car link (core/car); None from older senders.
+    phase: RidePhase | None = None
+    music_playing: bool | None = None
+    on_highway: bool | None = None
+
+
+class CarResult(_Msg):
+    """The car's answer to a trip request (proto ActionResult). The board shows it and the Core says
+    `message` for DELAYED / REJECTED answers and for every answer to a confirmed request."""
+
+    type: Literal["CAR_RESULT"] = "CAR_RESULT"
+    request_id: str
+    action_id: str
+    status: CarStatus
+    message: str
+    expected_in_seconds: int = Field(default=0, ge=0)
+    rtt_ms: int | None = Field(default=None, ge=0)  # request sent -> this answer (None for an unrequested update)
+
+
+# --- Core <-> car simulator (/ws/car-sim) ---------------------------------------
+
+
+class CarLog(_Msg):
+    """One line of the car link's log, for /car-sim: a request or answer crossing the link."""
+
+    type: Literal["CAR_LOG"] = "CAR_LOG"
+    t: float
+    direction: Literal["to_car", "to_rider"]
+    kind: str  # ActionRequest / DropoffRequest / RideProfile / ActionResult / SupportQuestion / SupportAnswer
+    summary: str
+    request_id: str | None = None
+    rtt_ms: int | None = Field(default=None, ge=0)
+
+
+class CarSim(_Msg):
+    """/car-sim -> Core: ask the rider a Support question, change the mock car's situation, or plan a
+    trip to any address (a caregiver typing the destination)."""
+
+    type: Literal["CAR_SIM"] = "CAR_SIM"
+    # start_ride / end_ride: the car starts the ride (the board shows Car mode) or ends it (back to Home).
+    command: Literal["ask", "set", "plan", "start_ride", "end_ride"]
+    text: str | None = None  # ask: the question; plan: the destination address
+    options: list[str] = Field(default_factory=list, max_length=5)  # ask: answer labels
+    timeout_s: int = Field(default=30, ge=5, le=300)
+    urgent: bool = False
+    on_highway: bool | None = None  # set
+    phase: RidePhase | None = None  # set
 
 
 class ActionResult(_Msg):
@@ -398,6 +536,7 @@ Message = Annotated[
         Ready,
         Reset,
         AudioDone,
+        Tap,
         Settings,
         Screen,
         Confirm,
@@ -405,6 +544,11 @@ Message = Annotated[
         Speak,
         PlayAudio,
         Click,
+        CarAction,
+        CarState,
+        CarResult,
+        CarLog,
+        CarSim,
         ActionResult,
         Metrics,
         ShortcutDebug,

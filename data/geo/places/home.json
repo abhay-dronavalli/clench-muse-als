@@ -1,0 +1,518 @@
+{
+ "generated_at": "2026-09-27T13:29:34+00:00",
+ "attribution": [
+  "© OpenStreetMap contributors (ODbL)",
+  "USGS 3D Elevation Program (public domain)"
+ ],
+ "duration_note": "Drive times are OSRM free-flow estimates from OpenStreetMap road speeds, without live traffic.",
+ "dropoff": {
+  "destination": "Home (demo)",
+  "destination_point": {
+   "latitude": 25.6501042,
+   "longitude": -80.40811
+  },
+  "radius_m": 150.0,
+  "candidates": [],
+  "request": null,
+  "osm_fetched_at": "2026-09-27T13:14:50+00:00",
+  "notes": [
+   "No entrance or building is mapped in OpenStreetMap within the radius; candidates aim at the destination point.",
+   "No drivable road within reach of an entrance; no drop-off candidates."
+  ]
+ },
+ "ride": {
+  "pickup": "FIU Modesto A. Maidique Campus, 11200 SW 8th St, Miami, FL 33199",
+  "destination": "Home (demo)",
+  "pickup_point": {
+   "latitude": 25.7553898,
+   "longitude": -80.3762833
+  },
+  "destination_point": {
+   "latitude": 25.6501042,
+   "longitude": -80.40811
+  },
+  "routes": [
+   {
+    "id": "route-1",
+    "label": "Fastest and smoothest",
+    "duration_s": 1087.4,
+    "distance_m": 15477.4,
+    "summary": "Southwest 117th Avenue, Homestead Extension of Florida's Turnpike",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLLGBAJGJCJELEJCJAHCJ?HAT?P?L?F@D?F@HBJDHDJBFDJDF@H@F?H@N??L?F?B@L@L@JBNDRPx@Pv@BT@F@P@N?R?PATCTCRETGRGPYv@O\\ENYr@GNGRGRCNCNAJAJ?LAL@N?Z?Z?VA`@?Z?NAN?T@r@?r@@zD?D?Rd@ArBEtDGpLO`CEnCED?rC?xDKT?tCEtCAnAEp@A~IKjHKR?b@ArIMVAV?zDGRAlFItAAvEMrACV?n@AbFGb@AH?hACtBEF?R??R?H@~@?tC?rA?dAOr@CFCFCDEDEFGDGDIDGBIBU?M?KAIAKCIEIEIGIIIIGKEKEKCKAIAKAI?M@M@K@KBKDKDIFIFKHIFGHEHGHCHCJCJALAv@Av@O`AA`IMdAA~IK~@?`AA`A?`A?hK@`A?`A@`AA`A?`AA`AA`ACbAA`AC~@Eb@An@Cd@ApGW~@C`AC`AE~@A`ACdAC~JOfCE~PU~@AbIGdAA`A?bA?`A?~@?`A?`A?`A@~@@|TP`A?`A?`A@bA?~@@j@?j@@r@B^B\\B\\B\\BVBh@Fh@Hh@Jj@Jh@Lh@Lh@Nh@Nh@Pf@Rf@Rf@Rd@Tf@Xd@Vd@Xd@Xd@XdS~LnBnAd@Xd@Xf@Vf@Tr@Vp@Vv@Tz@Tr@N^Fj@Hl@Hj@Dj@Dl@Bl@@l@@j@Al@AtLSzBCnMQ`SSbJKjDEvAItc@s@`AA~@A`A?~@@`A@bAB|@B`AD`AB~@F`AB~@D`A@bAB`A?~@?~@?~@A~@C|@C~@C`AC~@E`AE`ACdAE`AEh@Yd@G~BWz@Kh@G|BYhBSxBWZCRCVERCTCTCTCTCRATCTCRCRCH?FAF?DAD?D?FAJ?L?H?F?L?FAJA?rBAp@AzC@p@@p@Bf@Bd@D\\Fp@Hp@F`@J`@Jh@XfABDFTDRt@bCPn@H\\FTD\\Hh@Dd@Bf@Bp@?f@?d@E|@KbACVOt@YnAMb@[rAERQz@OdAKjAGnDD|EXJpBEd@CpCI^ARARAP?bCIfBGn@CjAEb@SrFOp@DhGU^Ob@A~BE`@A@TB|B?L?b@D|C@l@@fAFpFBhBBbB?N@v@BxA@|A@z@@\\@x@?NDjC?d@@|@@n@@l@@~@@~@",
+    "sharp_turns": 8,
+    "climb_m": 40.1,
+    "steepest_grade_pct": 4.8,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 11,
+    "stop_signs": 3,
+    "traffic_calming": 3,
+    "traffic_calming_kinds": {
+     "hump": 3
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 94.4,
+    "bridge_m": 420.0,
+    "comfort_cost": 29.61,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "94° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7533837,
+       "longitude": -80.3779204
+      },
+      "detail": "80° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7537759,
+       "longitude": -80.3842359
+      },
+      "detail": "91° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7321291,
+       "longitude": -80.3833686
+      },
+      "detail": "87° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6572367,
+       "longitude": -80.3876218
+      },
+      "detail": "95° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6568726,
+       "longitude": -80.3996397
+      },
+      "detail": "87° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6488924,
+       "longitude": -80.3990365
+      },
+      "detail": "87° right"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.753214,
+       "longitude": -80.3787071
+      },
+      "detail": "traffic_calming=hump (OSM node 5022513450)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7537814,
+       "longitude": -80.3820726
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585765)"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.75379,
+       "longitude": -80.3823801
+      },
+      "detail": "traffic_calming=hump (OSM node 5664585766)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7535091,
+       "longitude": -80.3779043
+      },
+      "detail": "OSM node 12457303495"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7537875,
+       "longitude": -80.3815888
+      },
+      "detail": "OSM node 12535191670"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.753779,
+       "longitude": -80.3841127
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7468636,
+       "longitude": -80.383963
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7393546,
+       "longitude": -80.383679
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7348392,
+       "longitude": -80.383466
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7322686,
+       "longitude": -80.38336
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6573242,
+       "longitude": -80.3876401
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6567716,
+       "longitude": -80.391688
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6561786,
+       "longitude": -80.3951323
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6568828,
+       "longitude": -80.3996354
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6528283,
+       "longitude": -80.3993233
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6488922,
+       "longitude": -80.3990394
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   },
+   {
+    "id": "route-2",
+    "label": "Alternative",
+    "duration_s": 1193.9,
+    "distance_m": 17068.7,
+    "summary": "East Campus Circle, Homestead Extension of Florida's Turnpike",
+    "polyline": "_je|CroqiNGBOD@HDLFPDJDFDLR\\HNDLBHBJ@J@J@J?F?J@L?H@H@HBF@D@DDLKHCBIJGFEHGLGLGHEHIHEDEDIFIDKDIDIDI@IBKBK@UBSBS@[@O@Q@O@[?sA?g@@I?K@K?K@MB[FA@A?SDKMAEISGKWg@Ue@Ue@GMKYGQESCSCU?e@?UACAAEAEAo@@]?E?E@CBCDAPCPMEEAQEBQBM@O@O?M@KDM?e@?IAK?I@EBE@KB?DGDI@K?IAKEGGGECGAG?G@GBA@GAS?EA_@?O?M@QBOBUJKBK@M?]?_A@I?Q?e@@?VDfG@xB@l@DtFBtCDnI?h@@|L?z@?dF@nF?@JN?@@B?@@B?@@B@@@@@@@@B?BBB?@?B@@?D?N?vAAvA?J?H?HAJ?JAJAHAHCJAHCHAJCHCHEHEHCHEHEPKPMRMPMt@i@RKNMRMPMPKFEJEPKHEHCHEHEHCHEFCJERGRGHEHATGHCHCHAJCHAJCHAHAHAJAHAJAHAJAHAJ?TCT?RAbACj@ATATAT?l@Cj@At@Ct@Cr@Ar@Cr@Cv@Cf@Ch@Ax@Ef@ErCOd@CZAVAVARAz@QdBC~@AvACnBCtAC`AA`AA`AAbAAtACT?l@Ch@Al@Al\\c@zFId@A`AC`AA`AA`AC`AAbAAtLS`AA`AA`AA`AA`AA`AA`AAv@Av@A`AA`IMdAA~IK~@?`AA`A?`A?hK@`A?`A@`AA`A?`AA`AA`ACbAA`AC~@Eb@An@Cd@ApGW~@C`AC`AE~@A`ACdAC~JOfCE~PU~@AbIGdAA`A?bA?`A?~@?`A?`A?`A@~@@|TP`A?`A?`A@bA?~@@j@?j@@r@B^B\\B\\B\\BVBh@Fh@Hh@Jj@Jh@Lh@Lh@Nh@Nh@Pf@Rf@Rf@Rd@Tf@Xd@Vd@Xd@Xd@XdS~LnBnAd@Xd@Xf@Vf@Tr@Vp@Vv@Tz@Tr@N^Fj@Hl@Hj@Dj@Dl@Bl@@l@@j@Al@AtLSzBCnMQ`SSbJKjDEvAItc@s@`AA~@A`A?~@@`A@bAB|@B`AD`AB~@F`AB~@D`A@bAB`A?~@?~@?~@A~@C|@C~@C`AC~@E`AE`ACdAE`AEh@Yd@G~BWz@Kh@G|BYhBSxBWZCRCVERCTCTCTCTCRATCTCRCRCH?FAF?DAD?D?FAJ?L?H?F?L?FAJA?rBAp@AzC@p@@p@Bf@Bd@D\\Fp@Hp@F`@J`@Jh@XfABDFTDRt@bCPn@H\\FTD\\Hh@Dd@Bf@Bp@?f@?d@E|@KbACVOt@YnAMb@[rAERQz@OdAKjAGnDD|EXJpBEd@CpCI^ARARAP?bCIfBGn@CjAEb@SrFOp@DhGU^Ob@A~BE`@A@TB|B?L?b@D|C@l@@fAFpFBhBBbB?N@v@BxA@|A@z@@\\@x@?NDjC?d@@|@@n@@l@@~@@~@",
+    "sharp_turns": 11,
+    "climb_m": 44.0,
+    "steepest_grade_pct": 4.7,
+    "elevation_source": "USGS NED 10 m (OpenTopoData)",
+    "traffic_signals": 11,
+    "stop_signs": 3,
+    "traffic_calming": 1,
+    "traffic_calming_kinds": {
+     "table": 1
+    },
+    "rough_m": 0.0,
+    "surface_known_pct": 94.4,
+    "bridge_m": 420.0,
+    "comfort_cost": 30.43,
+    "features": [
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7554836,
+       "longitude": -80.3764707
+      },
+      "detail": "75° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7549606,
+       "longitude": -80.3779285
+      },
+      "detail": "71° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7579006,
+       "longitude": -80.378934
+      },
+      "detail": "70° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7586363,
+       "longitude": -80.3771817
+      },
+      "detail": "87° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7591651,
+       "longitude": -80.3771735
+      },
+      "detail": "68° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.759322,
+       "longitude": -80.3773652
+      },
+      "detail": "175° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.7592232,
+       "longitude": -80.3760658
+      },
+      "detail": "131° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.76123,
+       "longitude": -80.3761509
+      },
+      "detail": "89° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.657233,
+       "longitude": -80.3876242
+      },
+      "detail": "96° right"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6568665,
+       "longitude": -80.3996423
+      },
+      "detail": "88° left"
+     },
+     {
+      "kind": "sharp_turn",
+      "point": {
+       "latitude": 25.6488919,
+       "longitude": -80.3990438
+      },
+      "detail": "85° right"
+     },
+     {
+      "kind": "traffic_calming",
+      "point": {
+       "latitude": 25.7564302,
+       "longitude": -80.3787911
+      },
+      "detail": "traffic_calming=table (OSM node 1280286532)"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7592837,
+       "longitude": -80.3759039
+      },
+      "detail": "OSM node 4176875412"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7549964,
+       "longitude": -80.3778299
+      },
+      "detail": "OSM node 12457303488"
+     },
+     {
+      "kind": "stop_sign",
+      "point": {
+       "latitude": 25.7593319,
+       "longitude": -80.377362
+      },
+      "detail": "OSM node 12607830704"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.757798,
+       "longitude": -80.378905
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7610386,
+       "longitude": -80.376144
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.761187,
+       "longitude": -80.3782012
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.7611,
+       "longitude": -80.3820872
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.761081,
+       "longitude": -80.3871778
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6573186,
+       "longitude": -80.3876389
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6567694,
+       "longitude": -80.3916938
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6561796,
+       "longitude": -80.3951385
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6568775,
+       "longitude": -80.3996377
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6528224,
+       "longitude": -80.3993229
+      },
+      "detail": "traffic signals"
+     },
+     {
+      "kind": "traffic_signal",
+      "point": {
+       "latitude": 25.6488917,
+       "longitude": -80.399046
+      },
+      "detail": "traffic signals"
+     }
+    ]
+   }
+  ],
+  "fastest_id": "route-1",
+  "smoothest_id": "route-1",
+  "tiles": [
+   {
+    "route_id": "route-1",
+    "kind": "fastest_and_smoothest",
+    "label": "Fastest and smoothest, 18 min",
+    "detail": "8 sharp turns, 11 traffic lights, 3 stop signs, 3 speed bumps",
+    "ride_profile": {
+     "route_preference": "ROUTE_PREFERENCE_SMOOTHEST",
+     "uses_wheelchair": true,
+     "needs_extra_boarding_time": true
+    }
+   },
+   {
+    "route_id": "route-2",
+    "kind": "alternative",
+    "label": "Via East Campus Circle, 20 min",
+    "detail": "2 fewer speed bumps, but 3 more sharp turns, 3.9 m more climbing",
+    "ride_profile": null
+   }
+  ],
+  "osm_fetched_at": "2026-09-27T13:22:17+00:00",
+  "notes": []
+ },
+ "notes": []
+}

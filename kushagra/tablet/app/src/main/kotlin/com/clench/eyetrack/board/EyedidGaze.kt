@@ -168,7 +168,12 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
         generation++
         main.removeCallbacksAndMessages(retryToken) // only the retry: state posts must still reach the page
         tracker?.let {
-            it.removeCallbacks()
+            // Swap in callbacks that ignore everything rather than removing them: the SDK's gaze thread
+            // can still deliver a frame it had queued, and a null callback crashes it (NPE in
+            // GazeTrackerCore, seen when switching the pointing mode to Scan mid-tracking).
+            it.setTrackingCallback(TrackingFor(-1)) // generation is never -1: nothing gets through
+            it.setStatusCallback(ignoreStatus)
+            it.setCalibrationCallback(ignoreCalibration)
             GazeTracker.releaseGazeTracker(it)
         }
         tracker = null
@@ -242,6 +247,19 @@ class EyedidGaze(private val context: Context, private val listener: Listener) {
         }
 
         override fun onDrop(timestamp: Long) = Unit
+    }
+
+    /** For a released tracker: whatever it still says is ignored. */
+    private val ignoreStatus = object : StatusCallback {
+        override fun onStarted() {}
+        override fun onStopped(error: StatusErrorType) {}
+    }
+
+    private val ignoreCalibration = object : CalibrationCallback {
+        override fun onCalibrationProgress(progress: Float) {}
+        override fun onCalibrationNextPoint(x: Float, y: Float) {}
+        override fun onCalibrationFinished(data: DoubleArray) {}
+        override fun onCalibrationCanceled(data: DoubleArray?) {}
     }
 
     private val calibrationCallback = object : CalibrationCallback {

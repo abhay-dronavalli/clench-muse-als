@@ -244,7 +244,7 @@ class Db:
         alert is left out: its text is a fixed line, not the patient's words."""
         rows = self._conn.execute(
             """SELECT text FROM events
-               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help'
+               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help' AND node_id NOT LIKE 'trip.%'
                ORDER BY t DESC, id DESC LIMIT ?""",
             (PROFILE_ID, lang, limit),
         ).fetchall()
@@ -264,7 +264,7 @@ class Db:
         """(t, text) of the last confirmed sentences in `lang`, newest first, help alert left out."""
         rows = self._conn.execute(
             """SELECT t, text FROM events
-               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help'
+               WHERE profile_id = ? AND lang = ? AND confirmed = 1 AND text IS NOT NULL AND node_id != 'help' AND node_id NOT LIKE 'trip.%'
                ORDER BY t DESC, id DESC LIMIT ?""",
             (PROFILE_ID, lang, limit),
         ).fetchall()
@@ -285,7 +285,7 @@ class Db:
         The help alert is left out: it is not a choice on the menu."""
         return self._conn.execute(
             """SELECT id, t, node_id, text, lang, confirmed, rejected FROM events
-               WHERE profile_id = ? AND t >= ? AND (confirmed = 1 OR rejected = 1) AND node_id != 'help'
+               WHERE profile_id = ? AND t >= ? AND (confirmed = 1 OR rejected = 1) AND node_id != 'help' AND node_id NOT LIKE 'trip.%'
                ORDER BY t, id""",
             (PROFILE_ID, since),
         ).fetchall()

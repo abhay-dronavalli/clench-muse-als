@@ -1,0 +1,94 @@
+# Trip planning from public map data (core/geo). Loaded by core/geo/config.py; a bad file fails loudly.
+#
+# Data sources (docs/decisions.md #25): everything that is scored, stored, or could be spoken comes
+# from open data (OpenStreetMap via Nominatim, Overpass and OSRM; USGS elevation). Google Places and
+# Street View are only fetched live, shown on /trip/live, never stored and never scored.
+
+demo_trip:
+  pickup: "FIU Modesto A. Maidique Campus, 11200 SW 8th St, Miami, FL 33199"
+  destination: "Miami-Dade College Kendall Campus, Jack Kassewitz Building, 11011 SW 104th St, Miami, FL 33176"
+  # Nominatim search strings for the two ends (free text; the labels above are what is shown).
+  pickup_query: "11200 SW 8th St, Miami, FL 33199"
+  destination_query: "Miami Dade College Kendall Campus"
+  # The destination building's OSM way: its centre is the drop-off search centre (more exact than
+  # the campus point Nominatim gives). Chosen for its entrance tagging (docs/decisions.md #25).
+  destination_osm_way: 106965112
+
+# Car mode > Trip > Plan a trip: destinations planned live from the pickup (core/geo/plan.py).
+# "Home" is a demo stand-in (a public place), not a real person's address: the caregiver sets it.
+places:
+  - {key: home, label_en: "Home (demo)", label_es: "Casa (demo)", query: "Tamiami Park, Miami, FL"}
+  # The Baptist campus search lands on the Miami Cancer Institute's mapped entrance, so it is named for it.
+  - {key: hospital, label_en: "Miami Cancer Institute", label_es: "Miami Cancer Institute", query: "Baptist Hospital of Miami, 8900 N Kendall Dr, Miami, FL"}
+  - {key: pharmacy, label_en: "Pharmacy", label_es: "Farmacia", query: "Walgreens, 15705 SW 72nd St, Miami, FL"}
+  - {key: mdc, label_en: "MDC Kendall", label_es: "MDC Kendall", query: "Miami Dade College Kendall Campus"}
+
+# The rider (RideProfile.uses_wheelchair / needs_extra_boarding_time). Rider settings, not map data.
+rider:
+  uses_wheelchair: true
+  needs_extra_boarding_time: true
+
+# Every value the data does not give counts as this (0 = worst, 1 = best), never as good, and is
+# named as unknown in the reason.
+unknown_penalty: 0.3
+
+dropoff:
+  radius_m: 150          # candidates (entrances and stopping points) within this of the destination
+  max_walk_m: 80         # a stopping point farther than this (straight line) from its entrance is dropped
+  max_candidates: 8
+  dedupe_m: 25           # stopping points closer than this to a better one are the same spot
+  elevation_step_m: 5    # slope samples along the walk (USGS 1 m lidar where available)
+  max_elevation_samples: 12  # per walk; EPQS is one request per point
+  slope_min_run_m: 10    # steepest grade over at least this run (lidar is ~10 cm accurate: 2% over 5 m);
+                         # a shorter walk is measured over this length centred on it
+  kerb_search_m: 20      # kerb=* nodes this close to the stopping point describe its curb
+  steps_search_m: 10     # highway=steps within this of the walk line mean steps on the way
+  sidewalk_search_m: 15  # a mapped footway=sidewalk this close counts as a sidewalk
+  weights:
+    entrance_access: 3   # wheelchair=* on the entrance node
+    entrance_type: 1     # main / generic / service ...
+    slope: 3             # steepest grade on the walk
+    steps: 2             # highway=steps / ramp tags on the walk
+    kerb: 2              # kerb=* at the stopping point
+    sidewalk: 1          # sidewalk=* on the road, or a mapped sidewalk
+    road: 2              # quieter road types are safer to stop on
+    walk: 2              # straight-line distance, and whether it crosses a building or a major road
+
+comfort:
+  sharp_turn_deg: 60            # a turn changes heading by at least this much...
+  turn_rate_deg_per_m: 1.0      # ...while turning at least this fast (radius under ~57 m)
+  route_elevation_step_m: 20    # elevation sample spacing along a route
+  grade_min_run_m: 60           # steepest grade is measured over at least this distance
+  match_m: 12                   # an OSM node this close to the route (on a way running with it) is on the route
+  parallel_deg: 35              # ...where "running with it" means within this angle
+  signal_cluster_m: 40          # traffic_signals nodes this close together are one intersection
+  rough_smoothness: [bad, very_bad, horrible, very_horrible, impassable]
+  rough_surface: [unpaved, gravel, fine_gravel, dirt, earth, ground, grass, sand, mud, compacted, pebblestone, cobblestone, sett, unhewn_cobblestone, rock]
+  # Comfort cost = sum of weight x count. Lower is smoother.
+  weights:
+    sharp_turn: 1.0
+    traffic_signal: 0.5
+    stop_sign: 0.7
+    traffic_calming: 1.5
+    rough_100m: 1.0        # per 100 m on a rough surface
+    climb_10m: 0.5         # per 10 m climbed
+    steep_pct: 0.3         # per percent of steepest grade
+
+http:
+  user_agent: "Clench/0.1 (ShellHacks 2026 accessibility prototype; +https://github.com/abhay-dronavalli/clench-muse-als)"
+  connect_timeout_s: 5
+  read_timeout_s: 30
+  overpass_read_timeout_s: 90  # queries queue for a slot, then run up to their [timeout:]
+  # Minimum seconds between requests to each service (their published usage policies).
+  min_interval_s:
+    nominatim: 1.1
+    overpass: 2.0
+    osrm: 1.1
+    opentopodata: 1.1
+    epqs: 1.0
+  endpoints:
+    nominatim: "https://nominatim.openstreetmap.org/search"
+    overpass: ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
+    osrm: "https://routing.openstreetmap.de/routed-car/route/v1/driving"
+    opentopodata: "https://api.opentopodata.org/v1/ned10m"
+    epqs: "https://epqs.nationalmap.gov/v1/json"

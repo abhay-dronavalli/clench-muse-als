@@ -1,0 +1,39 @@
+"""The trip screen's confirmed controls (core/trip.py): pull_over (a safety action) and support (a call
+to rider support). Mocks: they log and succeed, like room_control. Only ever run after their confirm
+screen."""
+
+from __future__ import annotations
+
+import logging
+
+from core.actions.base import Action, ActionContext, ActionResult
+
+log = logging.getLogger("clench.actions")
+
+
+class PullOverAction(Action):
+    name = "pull_over"
+
+    def __init__(self, *, dry_run: bool = True) -> None:
+        self.dry_run = dry_run
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        if self.dry_run:
+            log.info("DRY RUN pull_over: %r", ctx.text)
+            return ActionResult(True, "dry run")
+        log.info("pull_over (mock): %r", ctx.text)
+        return ActionResult(True, "done (mock)")
+
+
+class SupportCallAction(Action):
+    name = "support"
+
+    def __init__(self, *, dry_run: bool = True) -> None:
+        self.dry_run = dry_run
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        if self.dry_run:
+            log.info("DRY RUN support call: %r", ctx.text)
+            return ActionResult(True, "dry run")
+        log.info("support call (mock): %r", ctx.text)
+        return ActionResult(True, "done (mock)")

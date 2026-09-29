@@ -34,7 +34,7 @@ def make_pointer(
         case "webcam":
             return WebcamPointer(on_highlight, on_source)
         case "gaze":
-            return GazePointer(on_highlight, on_source)
+            return GazePointer(scheduler, on_highlight, scan_ms, on_source)
         case "auto":
             return AutoPointer(scheduler, on_highlight, scan_ms, on_source)
         case "headtilt":
