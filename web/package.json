@@ -9,17 +9,18 @@
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview",
-    "assets": "node scripts/mediapipe-assets.mjs",
-    "postinstall": "node scripts/mediapipe-assets.mjs",
-    "predev": "node scripts/mediapipe-assets.mjs",
-    "prebuild": "node scripts/mediapipe-assets.mjs"
+    "assets": "node scripts/mediapipe-assets.mjs && node scripts/car-model.mjs",
+    "postinstall": "node scripts/mediapipe-assets.mjs && node scripts/car-model.mjs",
+    "predev": "node scripts/mediapipe-assets.mjs && node scripts/car-model.mjs",
+    "prebuild": "node scripts/mediapipe-assets.mjs && node scripts/car-model.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
     "leaflet": "1.9.4",
     "lucide-react": "1.48.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -27,6 +28,7 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",

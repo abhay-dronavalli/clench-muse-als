@@ -25,3 +25,6 @@ dist-ssr
 
 # MediaPipe wasm and model, copied / downloaded by scripts/mediapipe-assets.mjs
 public/mediapipe/
+
+# The Jaguar model the browser car draws, copied by scripts/car-model.mjs from the tablet assets
+public/models/
