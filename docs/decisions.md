@@ -1057,3 +1057,29 @@ choices below are Taher's.
   reset with it: the head range (Core) and the tablet's eye calibration (tablet app). The Muse jaw
   profile is not touched: the tablet's is built into the app (MUSE_PROFILE), the laptop's are files
   made at the Muse bench.
+
+## 34. The 3D car in a normal browser (three.js), same scene as the tablet
+
+- The board in a browser draws the same 3D car as the tablet: the trip screen and Car mode's setup
+  show the Jaguar I-Pace on the same road, grass, trees, houses, hills, clouds and sun, with the same
+  camera circle, lens shift (split), speed, Pull over stillness and control effects. Before, a browser
+  only showed a soft backdrop and "the car is here".
+- The renderer is three.js (`web/src/carscene/`): `motion.ts`, `worldPlan.ts` and `motion`/`worldPlan`
+  maths are ports of the tablet's `CarMotion.kt` and `WorldPlan.kt` (the same numbers, unit tested);
+  `world.ts` and `CarScene.ts` are ports of `CarWorld.kt` and `CarScene.kt`. The tablet keeps its own
+  SceneView renderer; the two are kept in step by hand.
+- The page calls the same functions either way (`facetrack/native.ts`): with the tablet shell's
+  `carScene` they go to the shell as before; otherwise to `carHub.ts`, which remembers the last state
+  and replays it when the renderer attaches. `carSceneAvailable()` (was `nativeCarAvailable()`) is true
+  when the shell or WebGL can draw the car; without WebGL the page keeps its backdrop.
+- The model is the tablet's copy of `jaguar_i-pace.glb`. `web/scripts/car-model.mjs` copies it to
+  `web/public/models/` (git-ignored, like the MediaPipe files) when the tablet's assets have it; without
+  it the browser draws the road alone, as the tablet does without its model.
+- Assumptions, not measured on a tablet: the camera's vertical field of view (45 degrees), the sky
+  colour read as sRGB, and the lights. The lens shift is converted from the tablet's measurement (0.3
+  moves the car a quarter of the width). Checked here in headless Edge: the car sits at about 13-35% down
+  the screen, above the tiles, and the split layout moves it right. Compare with the tablet and adjust
+  `FOV_V` and the lights in `CarScene.ts` if they differ.
+- Not in this change: the trip screen's own telemetry and tiles look the same as before (they were
+  already drawn in HTML). The three.js code adds to the web bundle (not measured); the build warns about
+  chunk size. A later change can load the car with a dynamic import.
