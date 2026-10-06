@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Lang, Signal } from '../contracts'
 import { gaze } from '../facetrack/gaze'
-import { nativeBridge, nativeEvents } from '../facetrack/native'
+import { carSceneAvailable, nativeBridge, nativeEvents, setNativeCarPreview } from '../facetrack/native'
 import { useSocket } from '../lib/useSocket'
 import { museFresh } from '../sensor/status'
 import { GazeCheck, type GazeCheckResult } from './GazeCheck'
@@ -68,11 +68,11 @@ export function CarOnboarding({ lang, paused, onDone }: { lang: Lang; paused: bo
     connectedAt.current = null
   }, [finish])
 
-  // The 3D car revolves behind this screen on the tablet.
+  // The 3D car revolves behind this screen (the tablet's, or the browser's).
   useEffect(() => {
-    native?.carPreview?.(true)
-    return () => native?.carPreview?.(false)
-  }, [native])
+    setNativeCarPreview(true)
+    return () => setNativeCarPreview(false)
+  }, [])
 
   useSocket('/ws/console', {
     onMessage: (msg) => {
@@ -142,9 +142,9 @@ export function CarOnboarding({ lang, paused, onDone }: { lang: Lang; paused: bo
   }
 
   return (
-    // On the tablet the page is see-through: the 3D car revolves behind. Elsewhere, a white backdrop.
+    // With a 3D car the page is see-through: the car revolves behind. Without one, a white backdrop.
     <div style={{ display: paused ? 'none' : undefined }}
-      className={`fixed inset-0 z-40 flex flex-col items-center justify-between p-6 text-zinc-900 ${typeof native?.carPreview === 'function' ? '' : 'bg-[linear-gradient(to_bottom,#ffffff_0%,#eef3f8_100%)]'}`}>
+      className={`fixed inset-0 z-40 flex flex-col items-center justify-between p-6 text-zinc-900 ${carSceneAvailable() ? '' : 'bg-[linear-gradient(to_bottom,#ffffff_0%,#eef3f8_100%)]'}`}>
       <header className="w-full max-w-5xl rounded-3xl bg-white/95 px-8 py-6 text-center shadow-lg">
         <h1 className="text-5xl font-bold">{titles[step]}</h1>
         {step === 'intro' && <p className="mt-3 text-3xl text-zinc-600">{t.introText}</p>}

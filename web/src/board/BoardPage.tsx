@@ -16,8 +16,8 @@ import {
 } from '../facetrack/indicators'
 import { DEFAULT_RANGE } from '../facetrack/pose'
 import {
+  carSceneAvailable,
   nativeBridge,
-  nativeCarAvailable,
   nativeGazeActive,
   playNativeCarEffect,
   setNativeCarLayout,
@@ -36,6 +36,7 @@ import { STRINGS } from './strings'
 import { toastFor, useToasts } from './toast'
 import { useCarAnimation } from './carAnimation'
 import { CarOnboarding } from './CarOnboarding'
+import { CarStage } from '../carscene/CarStage'
 import { Onboarding } from './Onboarding'
 import { effectiveTripLayout } from './onboardingFlow'
 import { TripConfirm, TripSpeaking, TripView } from './trip'
@@ -94,7 +95,7 @@ export default function BoardPage() {
   const [carState, setCarState] = useState<CarState | null>(null) // CAR_STATE: the trip telemetry
   const [layout, setLayout] = useState<TripLayout>('car') // SETTINGS trip_layout
   const lastSettings = useRef<Settings | null>(null) // the layout switch sends it back with the new layout
-  const nativeCar = nativeCarAvailable()
+  const nativeCar = carSceneAvailable() // the tablet's or the browser's 3D car: the page is see-through then
   // "Click to start" sends RESET once (Home, first tile); a later reconnect only sends READY.
   const resetPending = useRef(false)
 
@@ -287,6 +288,7 @@ export default function BoardPage() {
 
   return (
     <div className={`flex h-screen flex-col overflow-hidden text-white ${seeThrough ? 'bg-transparent' : 'bg-black'}`}>
+      <CarStage />
       {!started && <StartOverlay onStart={start} lang={lang} />}
       {started && !onboarding && carSetup && trip && (
         <CarOnboarding lang={lang} paused={!connected || view.kind === 'help'} onDone={() => setCarSetup(false)} />

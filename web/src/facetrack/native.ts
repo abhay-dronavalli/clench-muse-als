@@ -10,6 +10,9 @@
 // Only one owner of the camera: while the shell's tracker is active the page never opens it for
 // MediaPipe (usePointing's head camera is off, Auto uses the gaze or scans).
 
+import { browserCar } from '../carscene/carHub'
+import { webglAvailable } from '../carscene/CarScene'
+
 export interface ClenchNativeBridge {
   /** the shell's eye tracker is running (or starting) and owns the front camera */
   gazeActive(): boolean
@@ -129,13 +132,29 @@ if (typeof window !== 'undefined') {
   window.clenchNativeEvent = (e: NativeEvent) => listeners.forEach((fn) => fn(e))
 }
 
-/** The shell draws the trip screen's 3D car behind the page (the page must be see-through there). */
-export function nativeCarAvailable(): boolean {
+// The 3D car is drawn by the tablet shell (SceneView, behind the page) when the shell has it, and by the
+// browser (web/src/carscene, three.js) otherwise. The page's calls below go to whichever draws it.
+
+/** The shell itself draws the 3D car (older shells without carScene leave it to the browser). */
+function shellDrawsCar(): boolean {
   return typeof nativeBridge()?.carScene === 'function'
 }
 
-/** Show or hide the shell's 3D car. No-op in a normal browser. */
+let browserCanDraw: boolean | null = null
+
+/**
+ * The 3D car is drawn here: by the tablet shell, or by this browser (WebGL). The page must be
+ * see-through there (the car is behind it); without it the page shows its own backdrop.
+ */
+export function carSceneAvailable(): boolean {
+  if (shellDrawsCar()) return true
+  if (browserCanDraw === null) browserCanDraw = webglAvailable()
+  return browserCanDraw
+}
+
+/** Show or hide the 3D car. */
 export function showNativeCar(on: boolean): void {
+  if (!shellDrawsCar()) return browserCar.show(on)
   try {
     nativeBridge()?.carScene?.(on)
   } catch (e) {
@@ -143,8 +162,9 @@ export function showNativeCar(on: boolean): void {
   }
 }
 
-/** Play a trip control's effect on the shell's 3D car. No-op in a normal browser. */
+/** Play a trip control's effect on the 3D car. */
 export function playNativeCarEffect(action: string, ms: number, window: string | null = null): void {
+  if (!shellDrawsCar()) return browserCar.play(action, ms, window ?? '')
   try {
     nativeBridge()?.carEffect?.(action, ms, window ?? '')
   } catch (e) {
@@ -152,8 +172,9 @@ export function playNativeCarEffect(action: string, ms: number, window: string |
   }
 }
 
-/** Tell the shell's 3D scene how fast the car goes. No-op in a normal browser. */
+/** Tell the 3D scene how fast the car goes (0 = stopped). */
 export function setNativeCarSpeed(mph: number): void {
+  if (!shellDrawsCar()) return browserCar.setSpeed(mph)
   try {
     nativeBridge()?.carSpeed?.(mph)
   } catch (e) {
@@ -161,11 +182,22 @@ export function setNativeCarSpeed(mph: number): void {
   }
 }
 
-/** Tell the shell's 3D scene the trip layout (the car moves into the right half for "split"). */
+/** Tell the 3D scene the trip layout (the car moves into the right half for "split"). */
 export function setNativeCarLayout(mode: string): void {
+  if (!shellDrawsCar()) return browserCar.setLayout(mode)
   try {
     nativeBridge()?.carLayout?.(mode)
   } catch (e) {
     console.warn('tablet shell: carLayout failed', e)
+  }
+}
+
+/** The car setup's preview: the car alone on a platform, revolving (no-op without a 3D car). */
+export function setNativeCarPreview(on: boolean): void {
+  if (!shellDrawsCar()) return browserCar.setPreview(on)
+  try {
+    nativeBridge()?.carPreview?.(on)
+  } catch (e) {
+    console.warn('tablet shell: carPreview failed', e)
   }
 }
