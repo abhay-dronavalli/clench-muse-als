@@ -1307,3 +1307,19 @@ hardware tracker (2026-09-27).
   and the Google Maps trip map) are no longer blocked.
 - Known issue: the board hides the player during the help countdown, so after a cancel the embed
   reloads and starts again while the Core shows it as paused ("Play"); one Pause pick resyncs it.
+
+## Partner MCP prototype (2026-10-20)
+
+- Added an optional stdio MCP adapter and opt-in `/api/partner` endpoints. The adapter explicitly
+  configures core aliases and per-core partner credentials; one core still means one patient
+  session, not individually enrolled tablets. No tenant model or device fleet is claimed.
+- Four tools list cores, report board connection count, read limited settings, and propose an
+  English/Spanish switch using existing bilingual content. No speech, gestures, calls, raw
+  signals, patient history or arbitrary menu/action editing is exposed.
+- A separate caregiver credential reviews, approves or rejects through REST; approval is not an
+  MCP tool. Live application uses existing SETTINGS and is allowed only in ordinary scanning,
+  outside onboarding, Car mode and back prompts. Help and patient confirmations are untouched.
+- Proposals are in memory, limited to 100, expire after ten minutes, and reject stale language.
+  Language changes remain session-only as with the existing dev panel. This prototype requires a
+  trusted local deployment; production tenancy, durable audit, enrollment and review UI are future
+  work. See docs/mcp.md for setup and the exact limitations. No WebSocket contract changed.

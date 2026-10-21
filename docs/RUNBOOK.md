@@ -297,3 +297,9 @@ own test core first. Real network smoke tests are skipped unless `CLENCH_NETWORK
 If Computer immediately returns Home, inspect the core's `clench.computer` log, install Chromium
 if missing, and check that no other process owns the profile. The foreground browser accepts
 Space/B/hold using an isolated keyboard listener; the board dev panel and headband still work.
+## Optional partner MCP
+
+See [the MCP setup and demonstration](mcp.md) for the local stdio integration. It can inspect
+configured core connections and propose an English/Spanish board switch. A separate caregiver
+credential must review and apply it; no patient actions or emergency controls are exposed.
+This prototype does not provide company accounts, device enrollment or a dashboard review UI.
