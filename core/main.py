@@ -48,6 +48,7 @@ from core.geo.trip import load_trip
 from core.hub import Client, Hub, Role
 from core.menu import Menu, load_menu
 from core.pointer import DEFAULT_SCAN_MS
+from core.partner import build_partner_router
 from core.profile import Profile, load_profile
 from core.rank.jev import JevRanker, build_jev
 from core.sensor_service import SensorService
@@ -240,6 +241,7 @@ def create_app(
         db.close()
 
     app = FastAPI(title="Clench Core", lifespan=lifespan)
+    app.include_router(build_partner_router(env))
     # /api/geo/*: trip planning from public map data; /api/geo/trip serves the Core's current trip
     app.include_router(build_geo_router(env, current=lambda: app.state.session.geo_trip if hasattr(app.state, "session") else None))
     app.state.hub = hub

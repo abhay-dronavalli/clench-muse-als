@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mcp>=1.26,<2",
     "pytest",
 ]
 
@@ -25,6 +26,9 @@ sensor = [
     "mne==1.13.2",
     "numpy>=2.1",
     "websockets>=16,<17",
+]
+mcp = [
+    "mcp>=1.26,<2",
 ]
 
 [tool.uv]
